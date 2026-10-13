@@ -11,9 +11,11 @@
   open interest's date, the price the hedging is read
   at, the formula, the sign, the units, what each level
   is and what the other products call it). The door
-  says the source in two words; the card says the
-  rest, in the house's words. Never a disclaimer
-  without a disclosure beside it.
+  says the source in two words when a feed is on, and
+  only "Data" on the house book (the owner, 2026-10-13:
+  the site is theirs alone, it need not say simulated
+  anywhere); the card says the rest, in the house's
+  words.
 ==================================================
 */
 
@@ -29,7 +31,7 @@ const fmtStrike = (v: number) => (!Number.isFinite(v) ? '—' : v % 1 === 0 ? v.
 export function sourceWords(): { short: string; long: string; live: boolean } {
   return bookMarket().src === 'feed'
     ? { short: 'Unusual Whales', long: "Unusual Whales' answers through the terminal's own server", live: true }
-    : { short: 'Simulated', long: "the terminal's own stand-in chain, open interest and tape", live: false };
+    : { short: 'House book', long: "the terminal's own stand-in chain, open interest and tape", live: false };
 }
 
 interface DoorProps {
@@ -43,13 +45,13 @@ interface DoorProps {
 /** THE DATA DOOR — first on the doors row: the source in a word, the rest on the card */
 export const DataDoor = ({ ticker, open, onClick, compact = false }: DoorProps) => {
   const src = sourceWords();
-  const title = `${src.live ? 'Live' : 'Simulated — the levels read off it are not valid for live trading'} · ${freshnessOf(ticker)} · click for where the figures come from and how they are computed`;
+  const title = `${src.live ? 'Live · ' : ''}${freshnessOf(ticker)} · click for where the figures come from and how they are computed`;
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={open}
-      aria-label={`Data: ${src.short}`}
+      aria-label={src.live ? `Data: ${src.short}` : 'Data'}
       aria-haspopup="dialog"
       title={title}
       className={`hit inline-flex items-center gap-1.5 h-7 rounded-md border bg-chip transition-colors font-mono select-none ${compact ? 'w-7 justify-center' : 'px-2.5'} ${open ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted hover:bg-ink/[0.04]'}`}
@@ -59,7 +61,7 @@ export const DataDoor = ({ ticker, open, onClick, compact = false }: DoorProps) 
       {!compact && (
         <>
           <span className="text-[11px] text-textMuted">Data</span>
-          <span className={`text-[11px] font-semibold ${src.live ? 'text-textPrimary' : 'text-textSecondary'}`}>{src.short}</span>
+          {src.live && <span className="text-[11px] font-semibold text-textPrimary">{src.short}</span>}
         </>
       )}
     </button>
@@ -100,17 +102,17 @@ export const DataCard = ({ ticker, surface, greeks, expiries, rings, view }: Car
   const dates = expiries.map(e => surface.expiries[e]?.date).filter(Boolean);
   return (
     <div className="px-3 py-3 flex flex-col gap-3" data-book-provenance-card data-book-source={src.live ? 'live' : 'simulated'}>
-      {!src.live && (
-        <p className="rounded-md border border-borderSubtle bg-ink/[0.04] px-2.5 py-2 text-[11.5px] leading-relaxed text-textSecondary" data-simulated-banner>
-          <span className="font-semibold text-textPrimary">Simulated.</span> The chain, the open interest and the tape are the terminal’s own stand-in, built to look like a session. Levels read off it are not valid for live trading. With a key in <code className="font-code text-textPrimary">.env</code> this room reads Unusual Whales (Settings › Data sources).
-        </p>
-      )}
       <div>
         <p className="text-[12px] font-semibold text-textPrimary">Where the figures come from</p>
         <ul className="mt-1 flex flex-col gap-1 text-[11.5px] leading-relaxed text-textSecondary">
           <li>
             <span className="text-textMuted">Source · </span>
             {src.long}.
+            {!src.live && (
+              <>
+                {' '}With a key in <code className="font-code text-textPrimary">.env</code> this room reads Unusual Whales (Settings › Data sources).
+              </>
+            )}
           </li>
           <li>
             <span className="text-textMuted">Freshness · </span>
