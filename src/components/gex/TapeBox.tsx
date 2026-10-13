@@ -29,7 +29,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { Bell, BellRing, ChevronDown } from 'lucide-react';
 import { roomLevels } from '../../data/roomLevels';
 import { sessionBars } from '../../data/levelview';
-import { bookMarket, isFeedSnap } from '../../data/bookMarket';
+import { bookMarket } from '../../data/bookMarket';
 import { pickFlip } from '../../core/walls';
 import { readSessionClock } from '../../data/moc';
 import { YEAR_MINUTES } from '../../data/measure';
@@ -133,7 +133,6 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
       return { min: nyMinutes(b.time * 1000), flip: s ? pickFlip(s.levels, b.close, l => l.value) : null };
     });
   }, [snapshot.ticker, bars]);
-  const simulated = !isFeedSnap(snapshot);
   const alerts = useAlerts(snapshot.ticker);
   const watched = (key: Level['key']) => alerts.find(a => a.kind === 'level' && a.level === key && !a.firedAt);
 
@@ -365,12 +364,6 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
                 ))}
                 {/* the flip's path through the day, under the levels */}
                 {flipPath && <path d={flipPath} fill="none" stroke={FLIP} strokeOpacity={0.7} strokeWidth={1} strokeDasharray="2 2" strokeLinejoin="round" data-tape-flip-path />}
-                {/* the house book says so on the chart itself, not only on the door (idea 5) */}
-                {simulated && (
-                  <text x={ml + 6} y={MT + plotH - 6} fontFamily={MONO} fontSize={11} fill={INK_3} opacity={0.8} data-simulated-mark>
-                    simulated
-                  </text>
-                )}
                 {/* the cone ahead: one expected move to the close */}
                 {cone && <path d={cone} fill={alpha(SILVER, 0.1)} stroke={SILVER} strokeOpacity={0.35} strokeDasharray="3 3" />}
                 {/* the levels */}

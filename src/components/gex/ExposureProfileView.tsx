@@ -43,11 +43,9 @@ interface Props {
   selectedStrike?: number | null;
   onSelectStrike?: (strike: number) => void;
   paper?: boolean;
-  /** The house book — said on the chart itself (idea 5) */
-  simulated?: boolean;
 }
 
-const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSelectStrike, paper = false, simulated = false }: Props) => {
+const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSelectStrike, paper = false }: Props) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   useLayoutEffect(() => {
@@ -207,11 +205,6 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
               </text>
             </g>
           ))}
-          {simulated && (
-            <text x={W - MR - 4} y={H - MB - 6} textAnchor="end" fontFamily={MONO} fontSize={11} fill={INK_3} opacity={0.8} data-simulated-mark>
-              simulated
-            </text>
-          )}
           {/* the pointer's spot */}
           {hp && (
             <g>

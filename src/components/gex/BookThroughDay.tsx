@@ -29,7 +29,7 @@
 */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { bookMarket, isFeedSnap } from '../../data/bookMarket';
+import { bookMarket } from '../../data/bookMarket';
 import { sessionBars } from '../../data/levelview';
 import { fmtUsd } from '../../data/gex';
 import { CLOSE_MIN, OPEN_MIN, hhmm } from '../../data/ahead';
@@ -199,7 +199,6 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
     return n;
   }, [minutes]);
   const last = minutes[minutes.length - 1];
-  const simulated = !isFeedSnap(snapshot);
   const focusRow = focus != null ? strikes.findIndex(k => Math.abs(k - focus) < 1e-9) : -1;
   /* THE KEYS WALK IT TOO (the re-audit's M6) — the tape's walk: left and right along the minutes, up and down the
      strikes on the surface, Enter keeps the row's strike */
@@ -297,11 +296,6 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
                   </text>
                 </g>
               ))}
-              {simulated && (
-                <text x={ML + 6} y={MT + plotH - 6} fontFamily={MONO} fontSize={11} fill={INK_3} opacity={0.8} data-simulated-mark>
-                  simulated
-                </text>
-              )}
               {face === 'net' && minutes.length > 1 && (
                 <g>
                   <path d={netArea(1)} fill={alpha(SHORT_GAMMA, paper ? 0.1 : 0.14)} />

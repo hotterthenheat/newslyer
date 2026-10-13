@@ -64,7 +64,6 @@ import { STRIKE_WINDOWS, type StrikeWindow } from '../../data/exposure';
 import { useLevelsScope } from '../../data/levelsScope';
 import { roomLevels } from '../../data/roomLevels';
 import { useLedgerPalette } from '../../data/ledgerPalette';
-import { isFeedSnap } from '../../data/bookMarket';
 import ExportDoor from './ExportDoor';
 import { buildExposureSurface, CALENDAR_DTES, GREEKS, type ExposureSurface, type Greek } from '../../data/exposureSurface';
 import { snapshotAtOpen } from '../../data/levelview';
@@ -1427,7 +1426,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                   data-ledger-fading={fading || undefined}
                 >
                   {d.view === 'profile' ? (
-                    <ExposureProfileView simulated={!isFeedSnap(book.snapshot)} surface={surfDrawn} expiries={shownFor(book.surface, d)} liveSpot={book.snapshot.spot} selectedStrike={kept} onSelectStrike={keep} paper={paper} />
+                    <ExposureProfileView surface={surfDrawn} expiries={shownFor(book.surface, d)} liveSpot={book.snapshot.spot} selectedStrike={kept} onSelectStrike={keep} paper={paper} />
                   ) : d.view === 'matrix' ? (
                     <ExposureMatrix surface={surfDrawn} liveSpot={book.snapshot.spot} greeks={colGreeks} expiries={shownFor(book.surface, d)} rings={d.rings} hoverStrike={c.host ? hoverStrike : undefined} palette={palette} selectedStrike={kept} marks={c.host ? marks : undefined} onPointer={c.host ? onPointer : handlesFor(c.ticker).point} onSelectStrike={keep} lead={c.host ? leadGreek : undefined} legs={d.legs} />
                   ) : (
