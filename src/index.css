@@ -146,6 +146,14 @@
   background: rgb(var(--text-muted) / 0.6);
 }
 
+/* A row that scrolls sideways without a bar — the Map's band on a phone (the re-audit's H2) */
+.scroll-row {
+  scrollbar-width: none;
+}
+.scroll-row::-webkit-scrollbar {
+  display: none;
+}
+
 /* Tabular figures for aligned numeric columns */
 .tnum {
   font-variant-numeric: tabular-nums;

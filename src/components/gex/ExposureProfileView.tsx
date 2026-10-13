@@ -33,7 +33,7 @@ const MR = 18;
 const MT = 44;
 const MB = 46;
 /** a tag's width, near enough, for keeping the rules' tags off each other */
-const TAG_PX = 5.6;
+const TAG_PX = 6.7;
 
 interface Props {
   surface: ExposureSurface;
@@ -130,8 +130,21 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
   const xTicks: number[] = [];
   for (let s = Math.ceil(x0 / tick) * tick; s <= x1 + 1e-9; s += tick) xTicks.push(s);
   const hp = hover != null ? points[hover] : null;
-  const cardLeft = hp ? Math.min(W - 232, Math.max(ML, xOf(hp.spot) + 12)) : 0;
-  const onRight = hp ? xOf(hp.spot) + 12 + 220 <= W - MR : true;
+  /* THE CARD TAKES THE CORNER THE POINTER IS NOT IN (the re-audit's M3): beside the pointer it covered the spot and
+     flip rules, the two lines the reader hovers near to see */
+  const cardLeft = hp ? (xOf(hp.spot) > ML + plotW / 2 ? ML + 8 : W - MR - 228) : 0;
+  /* the two heaviest dates named at their right ends (the re-audit's L4) — the thin lines were nameless off the card */
+  const dateTags = (() => {
+    const out: { e: number; y: number; word: string }[] = [];
+    if (!points.length || curve.expiries.length < 2) return out;
+    const weight = curve.expiries.map((_, i) => Math.max(...points.map(p => Math.abs(p.byExpiry[i]))));
+    const top = curve.expiries.map((e, i) => ({ e, i, w: weight[i] })).sort((a, b) => b.w - a.w).slice(0, 2);
+    const end = points[points.length - 1];
+    for (const t of top) out.push({ e: t.e, y: yOf(end.byExpiry[t.i]), word: surface.expiries[t.e]?.date ?? '' });
+    out.sort((a, b) => a.y - b.y);
+    if (out.length === 2 && out[1].y - out[0].y < 13) out[1].y = out[0].y + 13;
+    return out;
+  })();
 
   return (
     <div
@@ -159,16 +172,16 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
           {yTicks.map(v => (
             <g key={v}>
               <line x1={ML} x2={W - MR} y1={yOf(v)} y2={yOf(v)} stroke={v === 0 ? 'rgb(var(--ink) / 0.35)' : RULE} strokeDasharray={v === 0 ? undefined : '2 3'} />
-              <text x={ML - 8} y={yOf(v)} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={10} fill={INK_3}>
+              <text x={ML - 8} y={yOf(v)} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={11} fill={INK_3}>
                 {v === 0 ? '0' : fmtUsd(v)}
               </text>
             </g>
           ))}
-          <text x={ML - 8} y={MT - 10} textAnchor="end" fontFamily={MONO} fontSize={9} fill={SHORT_GAMMA}>amplifies</text>
-          <text x={ML - 8} y={H - MB + 16} textAnchor="end" fontFamily={MONO} fontSize={9} fill={LONG_GAMMA}>absorbs</text>
+          <text x={ML - 8} y={MT - 10} textAnchor="end" fontFamily={MONO} fontSize={11} fill={SHORT_GAMMA}>amplifies</text>
+          <text x={ML - 8} y={H - MB + 16} textAnchor="end" fontFamily={MONO} fontSize={11} fill={LONG_GAMMA}>absorbs</text>
           {/* the x figures */}
           {xTicks.map(s => (
-            <text key={s} x={xOf(s)} y={H - MB + 16} textAnchor="middle" fontFamily={MONO} fontSize={10} fill={INK_3}>
+            <text key={s} x={xOf(s)} y={H - MB + 16} textAnchor="middle" fontFamily={MONO} fontSize={11} fill={INK_3}>
               {fmtStrike(Math.round(s / step) * step)}
             </text>
           ))}
@@ -176,13 +189,18 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
           {curve.expiries.map((e, i) => (
             <path key={e} d={line(p => p.byExpiry[i])} fill="none" stroke={INK_3} strokeOpacity={0.5} strokeWidth={1} />
           ))}
+          {dateTags.map(t => (
+            <text key={t.e} x={W - MR - 4} y={t.y} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={11} fill={INK_3} data-profile-date={t.word}>
+              {t.word}
+            </text>
+          ))}
           {/* the total, loud */}
           <path d={line(p => p.total)} fill="none" stroke={INK} strokeWidth={2} strokeLinejoin="round" />
           {/* the rules and their tags, on two rows so they never overprint */}
           {rules.map((r, i) => (
             <g key={r.key} data-profile-rule={r.key}>
               <line x1={xOf(r.x)} x2={xOf(r.x)} y1={MT - 2} y2={H - MB} stroke={r.ink} strokeOpacity={r.key === 'spot' ? 0.9 : 0.6} strokeDasharray={r.dash ? '3 3' : undefined} />
-              <text x={xOf(r.x)} y={11 + rowOf[i] * 11} textAnchor="middle" fontFamily={MONO} fontSize={9} fontWeight={700} fill={r.ink}>
+              <text x={xOf(r.x)} y={12 + rowOf[i] * 13} textAnchor="middle" fontFamily={MONO} fontSize={11} fontWeight={700} fill={r.ink}>
                 {r.word}
               </text>
             </g>
@@ -200,7 +218,7 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
       {hp && (
         <div
           className="pointer-events-none absolute z-10 w-[220px] rounded-md border border-borderMuted bg-card/95 px-2.5 py-2 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm"
-          style={{ top: MT + 4, left: onRight ? cardLeft : Math.max(ML, xOf(hp.spot) - 232) }}
+          style={{ top: MT + 4, left: cardLeft }}
           data-profile-card={hp.spot.toFixed(2)}
         >
           <div className="flex items-baseline justify-between gap-2">

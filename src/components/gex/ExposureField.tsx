@@ -60,8 +60,9 @@ import CompanyLogo from '../ui/CompanyLogo';
 import TickerSearch from '../ui/TickerSearch';
 import { useFadeClose } from '../ui/useFadeClose';
 import { fmtUsd } from '../../data/gex';
-import { STRIKE_WINDOWS, buildExposureProfile, type StrikeWindow } from '../../data/exposure';
+import { STRIKE_WINDOWS, type StrikeWindow } from '../../data/exposure';
 import { useLevelsScope } from '../../data/levelsScope';
+import { roomLevels } from '../../data/roomLevels';
 import ExportDoor from './ExportDoor';
 import { buildExposureSurface, CALENDAR_DTES, GREEKS, type ExposureSurface, type Greek } from '../../data/exposureSurface';
 import { snapshotAtOpen } from '../../data/levelview';
@@ -81,7 +82,7 @@ export type LegsPick = 'net' | 'call' | 'put' | 'both';
 const legsOptions = (calendar: boolean): DropdownOption<LegsPick>[] => [
   { value: 'net', label: 'Net', hint: 'The two legs added — the sign is the side that wins the strike' },
   { value: 'call', label: 'Calls', hint: 'The call leg alone — what dealers hedge against the calls open there' },
-  { value: 'put', label: 'Puts', hint: 'The put leg alone' },
+  { value: 'put', label: 'Puts', hint: 'The put leg alone — what dealers hedge against the puts open there' },
   { value: 'both', label: 'Both', hint: calendar ? 'On the matrix only — the two legs side by side' : 'The two legs side by side, each in its own column, the bars mirrored at the seam', disabled: calendar },
 ];
 
@@ -204,11 +205,16 @@ const SWAP_OUT_MS = 160;
     the read and the guide as their icons). ONE ROW, as long as it can be one row (Noah, on the landing still's second
     row: "top buttons are being kicked out and placed underneath"): named at 1,672 and up, the picks BARE from 1,390
     (a desk with the sidebar open), the doors COMPACT too from 1,140 (the landing's still, the rail folded); only
-    under that two tidy rows, the picks bare under 1,021 there too. Names in the tooltips throughout. */
+    under that two tidy rows, the picks bare under 1,021 there too. Names in the tooltips throughout.
+    MEASURED, NOT ONLY BY WIDTH (the re-audit's H1, 2026-10-13): the Data, Legs and Export cards put sixteen pieces on
+    the band, over the one row's room at 1920 — so the pieces are measured (bandOver) and a band over its room goes to
+    the two tidy rows WITH their words; one row only where the words fit. */
 const BAND_ONE_ROW_PX = 1672;
 const BAND_BARE_ROW_PX = 1390;
 const BAND_TIGHT_ROW_PX = 1140;
 const BAND_NAMED_ROW_PX = 1021;
+/** Under this the two rows scroll sideways with their words (a phone) — the re-audit's H2 */
+const BAND_SCROLL_PX = 640;
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 const GREEK_LABEL: Record<Greek, string> = { gex: 'GEX', dex: 'DEX', vex: 'VEX', vanna: 'VANNA', charm: 'CHARM' };
 /*
@@ -312,10 +318,28 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
     const hit = scopedCache.current.get(surf);
     if (hit) return hit;
     let out = surf;
-    try {
-      out = { ...surf, levels: buildExposureProfile(snap, 'ALL', WHOLE_BOOK).levels };
-    } catch {
-      /* a book without its dates yet — the front's levels stand */
+    /* the room's one reading (data/roomLevels.ts) — a book without its dates yet keeps the front's levels */
+    const levels = roomLevels(snap, 'ALL');
+    if (levels) {
+      /* ONE SUPREME PER SCREEN (the re-audit's H6): the Supreme door follows the levels' supreme too, its date the one
+         carrying most of that strike's hedging, its total the strike's whole-book net */
+      const si = surf.strikes.indexOf(levels.supreme);
+      let supreme = surf.supreme;
+      if (si >= 0) {
+        let e = 0;
+        let value = 0;
+        let total = 0;
+        for (let x = 0; x < surf.expiries.length; x++) {
+          const v = surf.net.gex[x]?.[si] ?? 0;
+          total += v;
+          if (Math.abs(v) > Math.abs(value)) {
+            value = v;
+            e = x;
+          }
+        }
+        supreme = { ...surf.supreme, gex: { strike: levels.supreme, e, value, total } };
+      }
+      out = { ...surf, levels, supreme };
     }
     scopedCache.current.set(surf, out);
     return out;
@@ -823,15 +847,23 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   /* the band's mode by its measured width (see BAND_*_ROW_PX); the desk toolbar (Pulse) has no band and never
      measures, so its cards keep their names */
   const bandMode: 'one' | 'bare' | 'tight' | 'two' = bandW === 0 || bandW >= BAND_ONE_ROW_PX ? 'one' : bandW >= BAND_BARE_ROW_PX ? 'bare' : bandW >= BAND_TIGHT_ROW_PX ? 'tight' : 'two';
-  const stripsBare = toolbar === 'band' && (bandMode === 'bare' || bandMode === 'tight' || (bandMode === 'two' && bandW < BAND_NAMED_ROW_PX));
-  const doorsTight = toolbar === 'band' && bandMode === 'tight';
+  /* TWO TIDY ROWS WITH THEIR WORDS when the pieces are over the one row's room (the re-audit's H1): bare picks were
+     the price of staying on one row; a band that wraps anyway pays it for nothing. And under BAND_SCROLL_PX (a phone)
+     the two rows scroll sideways with their words (H2) — a bare pick's name lives in a tooltip no thumb can hover. */
+  const overNamed = bandOver && bandMode !== 'two';
+  const bandScroll = toolbar === 'band' && bandW > 0 && bandW < BAND_SCROLL_PX;
+  const stripsBare = toolbar === 'band' && !overNamed && !bandScroll && (bandMode === 'bare' || bandMode === 'tight' || (bandMode === 'two' && bandW < BAND_NAMED_ROW_PX));
+  const doorsTight = toolbar === 'band' && !overNamed && bandMode === 'tight';
   const strips = (
     <>
       <DropdownSelect label="View" value={view} options={VIEWS_FOR[viewHost].map(v => VIEW_OPTION[v])} onChange={pickView} title="The matrix or the calendar" testId="ledger-view" bare={stripsBare} />
-      {/* with names side by side the greek steps down to each column's head */}
-      <Fold open={!many} gap={8} testId="data-band-greek">
-        <DropdownMulti label="Greek" values={pick} groups={GREEK_GROUPS} onChange={setPick} emptyWord="All" clearWord="Clear · all five" title="One, some, or all five" testId="ledger-greek" align="start" bare={stripsBare} />
-      </Fold>
+      {/* with names side by side the greek steps down to each column's head; the profile draws GEX alone (its foot says
+          so), so the card steps aside there rather than read "All five" over a chart it does not govern (the re-audit's M2) */}
+      {view !== 'profile' && (
+        <Fold open={!many} gap={8} testId="data-band-greek">
+          <DropdownMulti label="Greek" values={pick} groups={GREEK_GROUPS} onChange={setPick} emptyWord="All" clearWord="Clear · all five" title="One, some, or all five" testId="ledger-greek" align="start" bare={stripsBare} />
+        </Fold>
+      )}
       {/* the profile draws the net alone — the card steps aside there */}
       {view !== 'profile' && <DropdownSelect label="Legs" value={legs} options={legsOptions(view === 'calendar')} onChange={setLegs} title="Which legs the cells carry" testId="ledger-legs" bare={stripsBare} />}
       {/* the trigger says the window DRAWN when the fit cuts the one chosen — "Today → Oct 16 · 4 of 7" (the audit's H4) */}
@@ -997,13 +1029,13 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
         {doors}
       </div>
     ) : (
-      <div ref={bandRef} className="shrink-0 flex flex-col gap-y-1.5 px-3 py-1.5 border-b border-borderSubtle/60 bg-panel" data-ledger-toolbar data-ledger-toolbar-rows="two" data-ledger-toolbar-mode={bandMode}>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" data-ledger-toolbar-row="picks">
+      <div ref={bandRef} className="shrink-0 flex flex-col gap-y-1.5 px-3 py-1.5 border-b border-borderSubtle/60 bg-panel" data-ledger-toolbar data-ledger-toolbar-rows="two" data-ledger-toolbar-mode={bandMode} data-ledger-toolbar-scroll={bandScroll ? '' : undefined}>
+        <div className={`flex items-center gap-x-2 gap-y-1.5 ${bandScroll ? 'flex-nowrap overflow-x-auto scroll-row [&>*]:shrink-0' : 'flex-wrap'}`} data-ledger-toolbar-row="picks">
           {backButton}
           {leadFold}
           {strips}
         </div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" data-ledger-toolbar-row="doors">
+        <div className={`flex items-center gap-x-2 gap-y-1.5 ${bandScroll ? 'flex-nowrap overflow-x-auto scroll-row [&>*]:shrink-0' : 'flex-wrap'}`} data-ledger-toolbar-row="doors">
           {doors}
         </div>
       </div>

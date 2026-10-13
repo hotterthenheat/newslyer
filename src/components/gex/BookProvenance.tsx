@@ -50,8 +50,9 @@ export const DataDoor = ({ ticker, open, onClick, compact = false }: DoorProps) 
       onClick={onClick}
       aria-pressed={open}
       aria-label={`Data: ${src.short}`}
+      aria-haspopup="dialog"
       title={title}
-      className={`inline-flex items-center gap-1.5 h-7 rounded-md border bg-chip transition-colors font-mono select-none ${compact ? 'w-7 justify-center' : 'px-2.5'} ${open ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
+      className={`inline-flex items-center gap-1.5 h-7 rounded-md border bg-chip transition-colors font-mono select-none ${compact ? 'w-7 justify-center' : 'px-2.5'} ${open ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted hover:bg-ink/[0.04]'}`}
       data-ledger-data-door={src.live ? 'live' : 'simulated'}
     >
       <Database className={`w-3 h-3 ${src.live ? 'text-silver' : 'text-textMuted'}`} />

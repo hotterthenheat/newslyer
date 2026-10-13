@@ -192,7 +192,9 @@ const PinpointLayout = () => {
           <p className="mt-0.5 text-[11px] text-textMuted">{page.subtitle}</p>
         </div>
 
-        <div className="flex items-center gap-6 flex-wrap">
+        {/* THE CARDS DROP FIRST (the re-audit's M1): this side shares the line with the title and wraps inside itself, so
+            the Levels and Ruler cards step under the facts before the facts step under the title */}
+        <div className="flex-[3_1_0%] min-w-[min(100%,480px)] flex items-center gap-x-6 gap-y-2 flex-wrap" data-shell-side>
           {/* THE FACTS, each named: which way dealers hedge, the flip and how far, how often it was crossed, the clock */}
           {gauge && (
             <dl className={`flex flex-wrap gap-x-6 gap-y-2 ${replaying ? 'opacity-70' : ''}`} data-shell-facts data-shell-facts-live={replaying ? '' : undefined} title={replaying ? 'Live — the replay rewinds the boxes, not these facts' : undefined}>
@@ -239,8 +241,10 @@ const PinpointLayout = () => {
               </Fact>
             </dl>
           )}
-          <DropdownSelect label="Levels" value={levelsScope} options={LEVELS_OPTIONS} onChange={setLevelsScope} title={LEVELS_TITLE} testId="levels-scope" align="end" />
-          <DropdownSelect label="Ruler" value={unit} options={RULER_OPTIONS} onChange={setDistanceUnit} title="The unit every distance on Pinpoint is read in" testId="ruler" align="end" />
+          <div className="ml-auto flex items-center gap-6" data-shell-cards>
+            <DropdownSelect label="Levels" value={levelsScope} options={LEVELS_OPTIONS} onChange={setLevelsScope} title={LEVELS_TITLE} testId="levels-scope" align="end" />
+            <DropdownSelect label="Ruler" value={unit} options={RULER_OPTIONS} onChange={setDistanceUnit} title="The unit every distance on Pinpoint is read in" testId="ruler" align="end" />
+          </div>
         </div>
       </header>
 

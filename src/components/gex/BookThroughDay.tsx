@@ -28,7 +28,7 @@
 ==================================================
 */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { bookMarket } from '../../data/bookMarket';
 import { sessionBars } from '../../data/levelview';
 import { fmtUsd } from '../../data/gex';
@@ -186,6 +186,22 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
   }, [minutes]);
   const last = minutes[minutes.length - 1];
   const focusRow = focus != null ? strikes.findIndex(k => Math.abs(k - focus) < 1e-9) : -1;
+  /* THE KEYS WALK IT TOO (the re-audit's M6) — the tape's walk: left and right along the minutes, up and down the
+     strikes on the surface, Enter keeps the row's strike */
+  const onKeys = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget || !minutes.length) return;
+    const i = hover?.i ?? minutes.length - 1;
+    const row = hover?.row ?? (face === 'heat' ? (focusRow >= 0 ? focusRow : Math.floor(strikes.length / 2)) : null);
+    if (e.key === 'ArrowLeft') setHover({ i: Math.max(0, i - 1), row });
+    else if (e.key === 'ArrowRight') setHover({ i: Math.min(minutes.length - 1, i + 1), row });
+    else if (e.key === 'ArrowUp' && face === 'heat') setHover({ i, row: Math.max(0, (row ?? 0) - 1) });
+    else if (e.key === 'ArrowDown' && face === 'heat') setHover({ i, row: Math.min(strikes.length - 1, (row ?? -1) + 1) });
+    else if (e.key === 'Home') setHover({ i: 0, row });
+    else if (e.key === 'End') setHover({ i: minutes.length - 1, row });
+    else if ((e.key === 'Enter' || e.key === ' ') && face === 'heat' && row != null && strikes[row] != null) onPick(strikes[row]);
+    else return;
+    e.preventDefault();
+  };
 
   return (
     <section className="relative flex flex-col min-w-0" data-through-day data-through-face={face}>
@@ -210,7 +226,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
             </div>
           </div>
           <p className="mt-0.5 text-[11px] text-textMuted">
-            {face === 'net' ? 'The whole book’s net gamma through the session — above zero dealer hedging amplified moves, below it absorbed them · spot beside it, quiet' : 'Every strike’s net gamma, minute by minute — where a wall built, drained or moved · the kept strike’s row is lit'}
+            {face === 'net' ? 'The whole book’s net gamma through the session — above zero dealer hedging amplified moves, below it absorbed them · spot drawn faint beside it' : 'Every strike’s net gamma, minute by minute — where a wall built, drained or moved · the kept strike’s row is lit'}
           </p>
         </div>
         {last && (
@@ -227,7 +243,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
             </div>
             <div>
               <dt className="text-[11px] text-textMuted">Books kept</dt>
-              <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap">{minutes.length} minutes</dd>
+              <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap">{minutes.length} {minutes.length === 1 ? 'minute' : 'minutes'}</dd>
             </div>
           </dl>
         )}
@@ -235,7 +251,11 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
       <div className="px-3 pb-3">
         <div
           ref={hostRef}
-          className="relative h-[260px] rounded-md border border-borderSubtle/60 bg-inset"
+          className="relative h-[260px] rounded-md border border-borderSubtle/60 bg-inset outline-none"
+          tabIndex={0}
+          role="group"
+          aria-label={`${ticker}'s book through the day — the arrow keys walk the minutes${face === 'heat' ? ' and the strikes, Enter keeps the strike' : ''}`}
+          onKeyDown={onKeys}
           onPointerMove={e => onMove(e.clientX, e.clientY)}
           onPointerLeave={() => setHover(null)}
           onClick={() => {
@@ -249,7 +269,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
               {hours.map(t => (
                 <g key={t}>
                   <line x1={xOfMin(t)} x2={xOfMin(t)} y1={MT} y2={MT + plotH} stroke={RULE} />
-                  <text x={xOfMin(t)} y={H - 7} textAnchor={t === OPEN_MIN ? 'start' : t === CLOSE_MIN ? 'end' : 'middle'} fontFamily={MONO} fontSize={10} fill={INK_3}>
+                  <text x={xOfMin(t)} y={H - 7} textAnchor={t === OPEN_MIN ? 'start' : t === CLOSE_MIN ? 'end' : 'middle'} fontFamily={MONO} fontSize={11} fill={INK_3}>
                     {hhmm(t)}
                   </text>
                 </g>
@@ -260,16 +280,16 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
                   <path d={netArea(-1)} fill={alpha(LONG_GAMMA, paper ? 0.1 : 0.14)} />
                   <line x1={ML} x2={W - MR} y1={yOfNet(0)} y2={yOfNet(0)} stroke="rgb(var(--ink) / 0.35)" />
                   {[-1, 0, 1].map(f => (
-                    <text key={f} x={ML - 8} y={yOfNet(f * netMax)} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={10} fill={INK_3}>
+                    <text key={f} x={ML - 8} y={yOfNet(f * netMax)} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={11} fill={INK_3}>
                       {f === 0 ? '0' : fmtUsd(f * netMax)}
                     </text>
                   ))}
                   {spotPath && <path d={spotPath} fill="none" stroke={INK_3} strokeOpacity={0.6} strokeWidth={1} strokeDasharray="2 2" />}
                   {spotHi > spotLo && (
                     <>
-                      <text x={W - MR + 8} y={MT + 4} fontFamily={MONO} fontSize={9} fill={INK_3}>{spotHi.toFixed(2)}</text>
-                      <text x={W - MR + 8} y={MT + plotH} fontFamily={MONO} fontSize={9} fill={INK_3}>{spotLo.toFixed(2)}</text>
-                      <text x={W - MR + 8} y={MT + plotH / 2 + 3} fontFamily={MONO} fontSize={9} fill={INK_3}>spot</text>
+                      <text x={W - MR + 8} y={MT + 4} fontFamily={MONO} fontSize={11} fill={INK_3}>{spotHi.toFixed(2)}</text>
+                      <text x={W - MR + 8} y={MT + plotH} fontFamily={MONO} fontSize={11} fill={INK_3}>{spotLo.toFixed(2)}</text>
+                      <text x={W - MR + 8} y={MT + plotH / 2 + 3} fontFamily={MONO} fontSize={11} fill={INK_3}>spot</text>
                     </>
                   )}
                   <path d={netPath} fill="none" stroke={INK} strokeWidth={1.5} strokeLinejoin="round" />
@@ -278,7 +298,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
               {face === 'heat' &&
                 strikes.map((k, i) =>
                   i % Math.max(1, Math.round(strikes.length / 10)) === 0 || i === focusRow ? (
-                    <text key={k} x={ML - 8} y={yOfRow(i) + rowH / 2} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={10} fill={i === focusRow ? SILVER : INK_3} fontWeight={i === focusRow ? 700 : 400}>
+                    <text key={k} x={ML - 8} y={yOfRow(i) + rowH / 2} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={11} fill={i === focusRow ? SILVER : INK_3} fontWeight={i === focusRow ? 700 : 400}>
                       {fmtStrike(k)}
                     </text>
                   ) : null
@@ -294,7 +314,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
             </svg>
           )}
           {hm && (
-            <div className="pointer-events-none absolute left-2 top-2 rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm" data-through-card={hhmm(hm.min)}>
+            <div className="pointer-events-none absolute top-2 rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm" style={xOfMin(hm.min) > ML + plotW / 2 ? { left: 8 } : { right: MR + 8 }} data-through-card={hhmm(hm.min)}>
               <span className="font-semibold tnum text-textPrimary">{hhmm(hm.min)}</span>
               {face === 'net' ? (
                 <>

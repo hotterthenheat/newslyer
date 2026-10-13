@@ -35,7 +35,7 @@
 */
 
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { buildExposureProfile } from '../../data/exposure';
+import { roomLevels } from '../../data/roomLevels';
 import { buildLevelRead, sessionBars } from '../../data/levelview';
 import { nyClock } from '../../core/nyTime';
 import { RECORD_LEVELS, RECORD_WORDS, baseRates, levelTicks, sessionRecords, type Tick } from '../../data/levelRecord';
@@ -145,12 +145,9 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
   /* the levels off today's contracts or every date — the desk's one choice (data/levelsScope.ts) */
   const levelsScope = useLevelsScope();
   const rows = useMemo<Row[]>(() => {
-    let levels: { callWall: number; putWall: number; flip: number; pin: number; supreme: number; spot: number } | null = null;
-    try {
-      levels = buildExposureProfile(snapshot, levelsScope, 20).levels;
-    } catch {
-      return [];
-    }
+    /* the room's one reading of the levels (data/roomLevels.ts): the band's window and scope, so the pin here is the pin
+       the band tags (the re-audit's H6) */
+    const levels = roomLevels(snapshot, levelsScope);
     if (!levels) return [];
     const mk = (key: string, label: string, ink: string, price: number, side: 'call' | 'put'): Row => {
       const ticks = levelTicks(bars, price, side);
@@ -195,6 +192,8 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
 
   const first = bars[0]?.time;
   const last = bars[bars.length - 1]?.time;
+  /* the levels, counted before the merge — "3 levels" read as two missing (the re-audit's L11) */
+  const levelCount = rows.reduce((n, r) => n + r.labels.length, 0);
   /* The guide as a focus over the whole box (the house pattern, 2026-09-06) */
   const [guideOpen, setGuideOpen] = useState(false);
 
@@ -210,16 +209,34 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
           <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the rows, the strips and the ticks mean" testId="report-guide" />
         </div>
         <p className="mt-0.5 text-[11px] text-textMuted">
-          {rows.length} levels off {levelsScope === 'ALL' ? 'every listed date' : "today's contracts"} · {bars.length} one-minute bars{first != null && last != null ? ` from ${hhmm(first)} to ${hhmm(last)}` : ''} · a test is a bar whose range reaches the level, a break is a close beyond it after a test
+          {levelCount} levels{rows.length < levelCount ? `, ${rows.length} rows,` : ''} off {levelsScope === 'ALL' ? 'every listed date' : "today's contracts"} · {bars.length} one-minute {bars.length === 1 ? 'bar' : 'bars'}{first != null && last != null ? ` from ${hhmm(first)} to ${hhmm(last)}` : ''} · a test is a bar whose range reaches the level, a break is a close beyond it after a test
         </p>
+        {/* THE BASE RATES AS THE BOX'S OWN FACTS (the re-audit's M8): a labelled figure each, not a sentence that said
+            "held its first test" four times over two lines */}
         {rates.sessions > 0 && (
-          <p className="mt-1 text-[11px] leading-relaxed text-textSecondary" title="Each session's levels are read off the first book kept that morning, never a later one — no look-ahead; the rule for a test and a break is this report's" data-base-rates={rates.sessions}>
-            <span className="text-textMuted">The {rates.sessions} {rates.sessions === 1 ? 'session' : 'sessions'} before today, each level as it stood at the open · </span>
-            {RECORD_LEVELS.filter(k => rates.levels[k].tested > 0)
-              .map(k => `${RECORD_WORDS[k]} held its first test ${rates.levels[k].heldFirst} of ${rates.levels[k].tested}`)
-              .join(' · ')}
-            {rates.insideMove.n > 0 && ` · the close landed inside one expected move ${rates.insideMove.inside} of ${rates.insideMove.n}`}
-          </p>
+          <div className="mt-1.5" title="Each session's levels are read off the first book kept that morning, never a later one — no look-ahead; the rule for a test and a break is this report's" data-base-rates={rates.sessions}>
+            <p className="text-[11px] text-textMuted">
+              The {rates.sessions} {rates.sessions === 1 ? 'session' : 'sessions'} before today, each level as it stood at the open
+            </p>
+            <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1">
+              {RECORD_LEVELS.filter(k => rates.levels[k].tested > 0).map(k => (
+                <div key={k} className="flex items-baseline gap-1.5" data-base-rate={k}>
+                  <dt className="text-[11px] text-textMuted">{RECORD_WORDS[k].charAt(0).toUpperCase() + RECORD_WORDS[k].slice(1)} held its first test</dt>
+                  <dd className="font-mono text-[12px] tnum text-textPrimary">
+                    {rates.levels[k].heldFirst} of {rates.levels[k].tested}
+                  </dd>
+                </div>
+              ))}
+              {rates.insideMove.n > 0 && (
+                <div className="flex items-baseline gap-1.5" data-base-rate="close">
+                  <dt className="text-[11px] text-textMuted">Close inside one expected move</dt>
+                  <dd className="font-mono text-[12px] tnum text-textPrimary">
+                    {rates.insideMove.inside} of {rates.insideMove.n}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
         )}
       </div>
       <ul className="flex flex-col" data-level-rows>

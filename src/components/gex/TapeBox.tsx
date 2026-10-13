@@ -27,7 +27,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Bell, BellRing, ChevronDown } from 'lucide-react';
-import { buildExposureProfile } from '../../data/exposure';
+import { roomLevels } from '../../data/roomLevels';
 import { sessionBars } from '../../data/levelview';
 import { bookMarket } from '../../data/bookMarket';
 import { readSessionClock } from '../../data/moc';
@@ -47,7 +47,7 @@ const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 const fmtStrike = (v: number) => (!Number.isFinite(v) ? '—' : v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 const ML = 8;
 const MR_WIDE = 150; /* the tags' lane */
-const MR_NARROW = 120; /* a phone's plot keeps more of the day */
+const MR_OVER = 24; /* a phone's plot keeps the day — the tags sit over its right edge instead (the re-audit's L8) */
 const MT = 10;
 const MB = 22;
 const TAPE_KEY = 'slayer_map_tape';
@@ -96,7 +96,10 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
   const levelsScope = useLevelsScope();
   const levels = useMemo<Level[]>(() => {
     try {
-      const l = buildExposureProfile(snapshot, levelsScope, 20).levels;
+      /* the room's one reading of the levels (data/roomLevels.ts): the band's window and scope, so the tags here are the
+         band's tags (the re-audit's H6) */
+      const l = roomLevels(snapshot, levelsScope);
+      if (!l) return [];
       const all: Level[] = [
         { key: 'callWall', word: 'CALL WALL', ink: CALL_WALL, price: l.callWall },
         { key: 'flip', word: 'FLIP', ink: FLIP, price: l.flip },
@@ -139,7 +142,8 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
   /* the scales: the session across, price up — the bars' range and the levels within reach of it */
   const W = box.w;
   const H = box.h;
-  const MR = W < 520 ? MR_NARROW : MR_WIDE;
+  const over = W > 0 && W < 520;
+  const MR = over ? MR_OVER : MR_WIDE;
   const plotW = Math.max(10, W - ML - MR);
   const plotH = Math.max(10, H - MT - MB);
   const xOfMin = (min: number) => ML + ((min - OPEN_MIN) / (CLOSE_MIN - OPEN_MIN)) * plotW;
@@ -207,19 +211,39 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
   const cone = minLeft > 0 && bars.length ? `M${xNow.toFixed(1)} ${yOf(spot).toFixed(1)} L${xClose.toFixed(1)} ${yOf(spot + w1).toFixed(1)} L${xClose.toFixed(1)} ${yOf(spot - w1).toFixed(1)} Z` : '';
   /* a narrow plot (a phone) holds four hours, not eight — the labels overprinted at 390px */
   const hours = plotW < 480 ? [OPEN_MIN, 12 * 60, 14 * 60, CLOSE_MIN] : [OPEN_MIN, 10 * 60, 11 * 60, 12 * 60, 13 * 60, 14 * 60, 15 * 60, CLOSE_MIN];
-  /* the tags in the right lane, pushed apart when two levels sit within a tag's height, and kept inside the plot */
+  /* ONE TAG WHERE LEVELS COINCIDE (the re-audit's M4): the report prints one row for levels on one strike; the tape
+     printed three tags. Levels that share a price share a tag, their words stacked in their own inks; its bell arms
+     every level in it that an alert can watch. */
+  const groups = (() => {
+    const out: { key: string; price: number; levels: Level[]; h: number }[] = [];
+    for (const l of levels) {
+      const g = out.find(x => Math.abs(x.price - l.price) < 1e-9);
+      if (g) {
+        g.levels.push(l);
+        g.key = `${g.key}+${l.key}`;
+      } else out.push({ key: l.key, price: l.price, levels: [l], h: 18 });
+    }
+    for (const g of out) if (g.levels.length > 1) g.h = 6 + 12 * g.levels.length;
+    return out;
+  })();
+  /* the tags in the right lane, pushed apart when two sit within each other's height, and kept inside the plot */
   const tagYs = (() => {
-    const sorted = [...levels].map(l => ({ l, y: yOf(l.price) })).sort((a, b) => a.y - b.y);
-    for (let i = 1; i < sorted.length; i++) if (sorted[i].y - sorted[i - 1].y < 18) sorted[i].y = sorted[i - 1].y + 18;
-    for (let i = sorted.length - 2; i >= 0; i--) if (sorted[i + 1].y - sorted[i].y < 18) sorted[i].y = sorted[i + 1].y - 18;
+    const sorted = [...groups].map(g => ({ g, y: yOf(g.price) })).sort((a, b) => a.y - b.y);
+    const room = (a: { g: { h: number } }, b: { g: { h: number } }) => a.g.h / 2 + b.g.h / 2 + 2;
+    for (let i = 1; i < sorted.length; i++) if (sorted[i].y - sorted[i - 1].y < room(sorted[i - 1], sorted[i])) sorted[i].y = sorted[i - 1].y + room(sorted[i - 1], sorted[i]);
+    for (let i = sorted.length - 2; i >= 0; i--) if (sorted[i + 1].y - sorted[i].y < room(sorted[i], sorted[i + 1])) sorted[i].y = sorted[i + 1].y - room(sorted[i], sorted[i + 1]);
     if (sorted.length) {
-      const down = Math.max(0, sorted[sorted.length - 1].y - (H - 12));
+      /* …and above the hours' band at the foot (a phone's tags sit over the plot) */
+      const tail = sorted[sorted.length - 1];
+      const down = Math.max(0, tail.y + tail.g.h / 2 - (H - MB + 2));
       for (const s of sorted) s.y -= down;
-      const up = Math.max(0, MT + 2 - sorted[0].y);
+      const up = Math.max(0, MT + sorted[0].g.h / 2 - sorted[0].y);
       for (const s of sorted) s.y += up;
     }
-    return new Map(sorted.map(s => [s.l.key, s.y]));
+    return new Map(sorted.map(s => [s.g.key, s.y]));
   })();
+  /* "the put wall, the pin and the supreme" — a group's levels in one breath */
+  const say = (ws: string[]) => (ws.length <= 1 ? ws[0] ?? '' : `${ws.slice(0, -1).join(', ')} and ${ws[ws.length - 1]}`);
 
   return (
     <section className="relative flex flex-col min-w-0" data-tape-box data-tape-open={open || undefined}>
@@ -257,7 +281,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
             <div>
               <dt className="text-[11px] text-textMuted">One move to the close</dt>
               <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap" data-tape-move={w1.toFixed(2)}>
-                {minLeft > 0 ? `±${w1.toFixed(2)} · ${minLeft} min left` : 'closed'}
+                {minLeft > 0 ? `±${w1.toFixed(2)} · ${minLeft} ${minLeft === 1 ? 'minute' : 'minutes'} left` : 'closed'}
               </dd>
             </div>
           </dl>
@@ -282,7 +306,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
                 {hours.map(t => (
                   <g key={t}>
                     <line x1={xOfMin(t)} x2={xOfMin(t)} y1={MT} y2={MT + plotH} stroke={RULE} />
-                    <text x={xOfMin(t)} y={H - 7} textAnchor={t === OPEN_MIN ? 'start' : t === CLOSE_MIN ? 'end' : 'middle'} fontFamily={MONO} fontSize={10} fill={INK_3}>
+                    <text x={xOfMin(t)} y={H - 7} textAnchor={t === OPEN_MIN ? 'start' : t === CLOSE_MIN ? 'end' : 'middle'} fontFamily={MONO} fontSize={11} fill={INK_3}>
                       {hhmm(t)}
                     </text>
                   </g>
@@ -311,32 +335,42 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
             )}
             {/* the tags: keep the strike, or set the alert */}
             {W > 0 &&
-              levels.map(l => {
-                const on = focus != null && Math.abs(focus - l.price) < 1e-9;
-                const key = l.key;
-                const alert = key === 'pin' ? undefined : watched(key);
+              groups.map(g => {
+                const on = focus != null && Math.abs(focus - g.price) < 1e-9;
+                const alertable = g.levels.filter((l): l is Level & { key: LevelName } => l.key !== 'pin');
+                const armed = alertable.map(l => watched(l.key)).filter((a): a is NonNullable<typeof a> => !!a);
+                const words = say(g.levels.map(l => l.word.toLowerCase()));
+                const bellWords = say(alertable.map(l => l.word.toLowerCase()));
+                const y = tagYs.get(g.key) ?? 0;
                 return (
-                  <div key={l.key} className="absolute flex items-center gap-1" style={{ left: W - MR + 10, top: (tagYs.get(l.key) ?? 0) - 9 }} data-tape-tag={l.key}>
+                  <div key={g.key} className={`absolute flex items-center gap-1 ${over ? 'rounded bg-inset/90' : ''}`} style={over ? { right: 6, top: y - g.h / 2 } : { left: W - MR + 10, top: y - g.h / 2 }} data-tape-tag={g.key}>
                     <button
                       type="button"
-                      onClick={() => onPick(l.price)}
-                      title={`${l.word.toLowerCase()} ${fmtStrike(l.price)} — click to keep the strike`}
-                      className={`inline-flex items-center gap-1.5 h-[18px] rounded px-1.5 font-mono text-[10px] font-bold tracking-wider transition-colors ${on ? 'bg-silver/[0.12] text-textPrimary' : 'hover:bg-ink/[0.06]'}`}
-                      style={{ color: on ? undefined : l.ink }}
+                      onClick={() => onPick(g.price)}
+                      title={`${words} ${fmtStrike(g.price)} — click to keep the strike${alertable.length === 0 ? ' · no bell: the pin is where price settles, not a line it crosses' : ''}`}
+                      className={`inline-flex items-center gap-1.5 rounded px-1.5 font-mono text-[11px] font-bold tracking-wider transition-colors ${on ? 'bg-silver/[0.12]' : 'hover:bg-ink/[0.06]'}`}
+                      style={{ height: g.h }}
                     >
-                      {l.word} <span className="font-semibold tnum text-textPrimary">{fmtStrike(l.price)}</span>
+                      <span className="flex flex-col leading-[12px]">
+                        {g.levels.map(l => (
+                          <span key={l.key} className={on ? 'text-textPrimary' : undefined} style={{ color: on ? undefined : l.ink }}>
+                            {l.word}
+                          </span>
+                        ))}
+                      </span>
+                      <span className="font-semibold tnum text-textPrimary">{fmtStrike(g.price)}</span>
                     </button>
-                    {key !== 'pin' && (
+                    {alertable.length > 0 && (
                       <button
                         type="button"
-                        onClick={() => (alert ? removeAlert(snapshot.ticker, alert.id) : armLevel(snapshot.ticker, key))}
-                        aria-pressed={!!alert}
-                        title={alert ? `Watching the ${l.word.toLowerCase()} — click to stop` : `Tell me when price crosses the ${l.word.toLowerCase()}`}
-                        className={`hit inline-flex h-[18px] w-[18px] items-center justify-center rounded transition-colors ${alert ? 'text-silver' : 'text-textMuted hover:text-textPrimary hover:bg-ink/[0.06]'}`}
-                        data-tape-alert={l.key}
-                        data-watching={alert ? '' : undefined}
+                        onClick={() => (armed.length ? armed.forEach(a => removeAlert(snapshot.ticker, a.id)) : alertable.forEach(l => armLevel(snapshot.ticker, l.key)))}
+                        aria-pressed={armed.length > 0}
+                        title={armed.length ? `Watching the ${bellWords} — click to stop` : `Tell me when price crosses the ${bellWords}`}
+                        className={`hit inline-flex h-[18px] w-[18px] items-center justify-center rounded transition-colors ${armed.length ? 'text-silver' : 'text-textMuted hover:text-textPrimary hover:bg-ink/[0.06]'}`}
+                        data-tape-alert={alertable.map(l => l.key).join('+')}
+                        data-watching={armed.length ? '' : undefined}
                       >
-                        {alert ? <BellRing className="w-3 h-3" /> : <Bell className="w-3 h-3" />}
+                        {armed.length ? <BellRing className="w-3 h-3" /> : <Bell className="w-3 h-3" />}
                       </button>
                     )}
                   </div>
@@ -344,7 +378,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
               })}
             {/* the pointer's minute */}
             {hb && (
-              <div className="pointer-events-none absolute left-2 top-2 rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm" data-tape-card={hhmm(minOf(hb))}>
+              <div className="pointer-events-none absolute top-2 rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm" style={over || xOfMin(minOf(hb)) > ML + plotW / 2 ? { left: 8 } : { right: MR + 8 }} data-tape-card={hhmm(minOf(hb))}>
                 <span className="font-semibold tnum text-textPrimary">{hhmm(minOf(hb))}</span>
                 <span className="ml-2 tnum text-textPrimary">{hb.close.toFixed(2)}</span>
                 <span className="ml-2 text-textMuted">{nearLevel(hb.close)}</span>

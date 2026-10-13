@@ -58,7 +58,7 @@ export const useLevelsScope = (): LevelsScope =>
   );
 
 export const LEVELS_OPTIONS: DropdownOption<LevelsScope>[] = [
-  { value: '0DTE', label: '0DTE', hint: "Today's contracts alone — the day's walls and flip, the ones that expire at the close" },
+  { value: '0DTE', label: 'Today', hint: "Today's contracts alone — the day's walls and flip, the ones that expire at the close" },
   { value: 'ALL', label: 'All expiries', hint: 'Every listed date together — the structural levels the longer book holds' },
 ];
 export const LEVELS_TITLE = 'Which contracts the call wall, the put wall, the flip and the supreme are read off';
