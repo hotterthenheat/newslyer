@@ -55,7 +55,8 @@ import { afterGlide, onGlide, promisedWidth } from '../../core/glide';
 import { netInk } from './ExposureReadout';
 import type { SurfaceCell } from './exposureView';
 import { sinceOpenRead } from '../../data/levelview';
-import PointerCard, { CardRow } from '../ui/PointerCard';
+import PointerCard, { CardRow, PointerFollowCard } from '../ui/PointerCard';
+import { CARD_W } from './ExposureMatrix';
 
 interface ExposureLedgerProps {
   surface: ExposureSurface;
@@ -118,6 +119,9 @@ const ROW_MIN = 18;
     pill touched the capsules (Noah, 2026-10-12: "top and bottom spacing is off notice how close they are") */
 const SPOT_H = 28;
 const HEAD_H = 44;
+/* A CELL HAS A CEILING (the owner, 2026-10-13: "its so wide" — one date on a 3000px screen was a 570px capsule a row):
+   the cells share the width up to this, and past it the grid sits at the left with the panel's air after it */
+const CELL_MAX = 220;
 /** How many nodes a board badges with their move since the open — the biggest ones (Noah, 2026-10-12) */
 const SINCE_SHOWN = 10;
 /** …and no node whose move is under this share of the board's heaviest cell: a quiet board wears no badge */
@@ -420,7 +424,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
     ro.observe(strikeHead);
     return () => ro.disconnect();
   }, [strikeHead]);
-  const cellW = (box.w - strikeW) / Math.max(1, cols);
+  const cellW = Math.min(CELL_MAX, (box.w - strikeW) / Math.max(1, cols));
   /* the floor is 10px, not 9 (the partner, 2026-09-14: the figures "difficult to see") — a 20px
      row held 9px type; a short figure at 10px bold is 32px in a 42px cell, the full one 65 in 71 */
   /* …AND 11 SINCE 2026-10-13 (the audit's M10): the terminal's floor, which every other word on the page keeps — the
@@ -469,14 +473,32 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
     setPinned(prev => (prev && !greeks.includes(prev.greek) ? { ...prev, greek: greeks[0] } : prev));
   }, [greeks]);
 
-  /* THE CARD ON A CLICK (2026-10-12) — the matrix's and the ladder's pointer card, but on the calendar ONLY ON A
-     CLICK (Noah: "unlike the matrix i think the calendar should only be click to display the hover card"): a hover
-     lights the row, the column and the ring and says nothing more; a click KEEPS the card where the pointer was,
-     tied to its cell (an offset from the cell's box, re-read on scroll and resize), until the next click. */
+  /* THE CARD ON A HOVER AND ON A CLICK (the owner, 2026-10-13, reversing 10-12's click-only calendar — "theirs no
+     hover ability you have to click on each strike"): the matrix's pointer card follows the pointer across the cells;
+     a click KEEPS it where the pointer was, tied to its cell (an offset from the cell's box, re-read on scroll and
+     resize), until the next click. */
   const [keptAt, setKeptAt] = useState<{ key: string; dx: number; dy: number } | null>(null);
   const [keptPos, setKeptPos] = useState<{ x: number; y: number } | null>(null);
+  /* where the pointer was when the hover began — the follow card tracks it from there by itself */
+  const [hoverStart, setHoverStart] = useState<{ x: number; y: number } | null>(null);
+  const leaveTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(leaveTimer.current), []);
   const hoverCell = (f: Focus | null, x: number, y: number) => {
-    setHovered(prev => (prev?.strike === f?.strike && prev?.e === f?.e && prev?.greek === f?.greek ? prev : f));
+    if (leaveTimer.current) {
+      window.clearTimeout(leaveTimer.current);
+      leaveTimer.current = 0;
+    }
+    if (f) {
+      setHovered(prev => (prev?.strike === f.strike && prev?.e === f.e && prev?.greek === f.greek ? prev : f));
+      setHoverStart(prev => prev ?? { x, y });
+    } else {
+      /* a beat before it goes, so crossing from one cell to the next never remounts the card (the matrix's 70ms) */
+      leaveTimer.current = window.setTimeout(() => {
+        leaveTimer.current = 0;
+        setHovered(null);
+        setHoverStart(null);
+      }, 70);
+    }
     onPointer?.(f ? { strike: f.strike, e: f.e } : null, x, y);
   };
   /* Stable handles for the memoised cells — the latest closures behind them */
@@ -645,8 +667,8 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
   const verdict =
     focus.greek === 'gex'
       ? gexV >= 0
-        ? 'peak — dealer hedging amplifies a move here'
-        : 'well — dealer hedging absorbs one here'
+        ? 'peak · hedging amplifies a move here'
+        : 'well · hedging absorbs a move here'
       : netV >= 0
         ? 'the put side wins here'
         : 'the call side wins here';
@@ -722,7 +744,6 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
   const laneFor = (text: string | null): 'figure' | 'dot' | 'none' => (text && cellW >= 60 + text.length * 6.8 + 8 + 24 ? 'figure' : figure !== 'none' ? 'dot' : 'none');
   /* the dot beside the figure from 56px — under that the short figure fills the capsule and the dot rides the edge */
   const dotBeside = cellW >= 56;
-  const focusSince = sinceCell(focus.greek, focus.e, focus.strike);
   /* THE CARD'S WORDS — the kept cell's; nothing at rest or under a mere hover */
   const cardAside = `${ex?.date ?? ''} · ${focus.e === todayIdx ? 'today' : (ex?.short ?? '')} · ${distPct >= 0 ? '+' : '−'}${Math.abs(distPct).toFixed(2)}%`;
   const legMax = Math.max(1, Math.abs(putV), Math.abs(callV));
@@ -746,15 +767,13 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
       <CardRow k="Call" v={fmtUsd(callV)} sub={pct(callV)} ink={CALL_INK} />
       <CardRow k={`Net · ${GREEK_LABEL[focus.greek]}`} v={fmtUsd(netV)} sub={netV >= 0 ? 'put-heavy' : 'call-heavy'} ink={heatLaneColor(netV, surface.maxAbs[focus.greek], mode ?? HEAT_MODE, 0.35, paper)} />
       {oi > 0 && <CardRow k="Open interest" v={oi.toLocaleString('en-US')} sub="contracts" />}
-      {focusSince && <CardRow k="Since the open" v={focusSince.text} sub={focusSince.dir === 1 ? 'building' : focusSince.dir === -1 ? 'bleeding' : undefined} ink={sinceInk(focusSince.dir)} />}
-      {bell != null && <CardRow k={afterBell ? 'Expired at the close' : 'Expires today'} v={`${bell}%`} sub={afterBell ? 'of this book' : 'of this book, at the close'} />}
     </>
   );
   const cardTitle = fmtStrike(focus.strike);
   const cardFoot = (
     <>
       <span style={{ color: verdictInk }}>{verdict}</span>
-      {pinned && <span className="block mt-0.5 text-[11px] uppercase tracking-widest text-textMuted">kept · click it again, or anywhere off the grid, to let go</span>}
+      {pinned && <span className="block mt-0.5 text-[11px] uppercase tracking-widest text-textMuted">kept · click to let go</span>}
     </>
   );
   /* While a node is in focus the pointer stops washing rows and columns — two
@@ -792,6 +811,29 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
 
   return (
     <div className="h-full min-h-0 flex flex-col" data-ledger>
+      {/* WHAT THE FOCUS KEPT, IN WORDS (the audit's M12, 2026-10-13): the count and the strikes, highest first, each a
+          keep — ONE LINE ABOVE THE GRID (the owner, 2026-10-13: laid over the grid's foot it wrapped to three lines, hid
+          the last rows and sat at a different height in every column); past the width it scrolls sideways */}
+      {focusOn && keptStrikes.length > 0 && (
+        <div className={`shrink-0 h-7 flex items-center gap-x-2 px-3 border-b border-borderSubtle ${ground} font-mono text-[11px] whitespace-nowrap overflow-x-auto scroll-row`} data-ledger-focus-summary={exceptional.size}>
+          <span className="shrink-0 text-textSecondary">
+            {exceptional.size} biggest {exceptional.size === 1 ? 'move' : 'moves'} since the open
+            {keptStrikes.length < exceptional.size ? `, on ${keptStrikes.length} ${keptStrikes.length === 1 ? 'strike' : 'strikes'}` : ''}
+          </span>
+          <span className="shrink-0 text-textMuted">·</span>
+          {keptStrikes.map(s => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => onSelectStrike?.(s)}
+              title={`Keep ${fmtStrike(s)}`}
+              className={`shrink-0 tnum rounded px-1 transition-colors ${pinned?.strike === s ? 'text-silver' : 'text-textPrimary hover:text-silver'}`}
+            >
+              {fmtStrike(s)}
+            </button>
+          ))}
+        </div>
+      )}
       {/* THE GRID — rows share the height; past ROW_MIN it scrolls */}
       <div className="relative flex-1 min-h-0">
         {/* THE FOCUS SCRIM — one layer for the blur and the dim (see index.css) */}
@@ -848,14 +890,14 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
              keying on the fit remounted every cell of every pane as a name left (~66ms, the last of the exit's jank) */
           key={`${greeks.join(',')}-${expiries.join('|')}-${rings}-${afterBell ? 'after' : 'now'}-${leg}`}
           data-ledger-focus={focusOn ? '' : undefined}
-          className="grid min-h-full animate-fade-in"
+          className="grid min-h-full pr-1 animate-fade-in"
           /* THE STRIKE COLUMN IS AS WIDE AS ITS WIDEST ROW and the cells take the rest (Noah, 2026-10-12: "let the
              container fit that empty space … the nodes should get longer equally"); its width is measured off the
              head below for the figures' sizing */
           /* …AND PAINTED ONCE: `will-change: transform` through the glide gives the pinned grid a layer of its own, so
              the frames in between only composite it as the pane clips it — a trace of a name leaving put PAINT first
              (135ms in 700ms: four panes of shadowed capsules repainted every frame), style recalc second, layout third */
-          style={{ gridTemplateColumns: `max-content repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: rowsTemplate, ...(gliding && box.w > 0 ? { width: box.w, willChange: 'transform' } : null) }}
+          style={{ gridTemplateColumns: `max-content repeat(${cols}, minmax(0, ${CELL_MAX}px))`, gridTemplateRows: rowsTemplate, ...(gliding && box.w > 0 ? { width: box.w, willChange: 'transform' } : null) }}
         >
           {/* HEAD — sticky under scroll */}
           <div ref={setStrikeHead} className={`sticky top-0 z-10 ${ground} px-2 flex flex-col items-start justify-end pb-1 font-mono text-[11px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle`} style={{ gridRow: 'span 2' }}>
@@ -996,32 +1038,15 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
           })}
           </div>
         </div>
-        {/* WHAT THE FOCUS KEPT, IN WORDS (the audit's M12, 2026-10-13): the scrim softened the board and left the sharp cells
-            to be found by eye; this names them — the count and the strikes, highest first, each a keep */}
-        {focusOn && keptStrikes.length > 0 && (
-          <div className={`absolute inset-x-0 bottom-0 z-30 flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1.5 border-t border-borderSubtle ${ground} font-mono text-[11px]`} data-ledger-focus-summary={exceptional.size}>
-            <span className="text-textSecondary">
-              {exceptional.size} biggest {exceptional.size === 1 ? 'move' : 'moves'} since the open
-              {keptStrikes.length < exceptional.size ? `, on ${keptStrikes.length} ${keptStrikes.length === 1 ? 'strike' : 'strikes'}` : ''}
-            </span>
-            <span className="text-textMuted">·</span>
-            {keptStrikes.map(s => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => onSelectStrike?.(s)}
-                title={`Keep ${fmtStrike(s)}`}
-                className={`tnum rounded px-1 transition-colors ${pinned?.strike === s ? 'text-silver' : 'text-textPrimary hover:text-silver'}`}
-              >
-                {fmtStrike(s)}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
-      {/* THE CARD — on the clicked node (see `keptPos`) until the next click; never on a hover */}
+      {/* THE CARD — following the pointer over the cells, and on the clicked node (see `keptPos`) until the next click */}
+      {!pinned && hovered && hoverStart && (
+        <PointerFollowCard start={hoverStart} width={CARD_W} title={cardTitle} aside={cardAside} foot={cardFoot} testId="data-ledger-card" testValue={keyOf(focus)}>
+          {cardBody}
+        </PointerFollowCard>
+      )}
       {pinned && keptPos && (
-        <PointerCard x={keptPos.x} y={keptPos.y} width={232} still title={cardTitle} aside={cardAside} foot={cardFoot} testId="data-ledger-card" testValue={keyOf(focus)}>
+        <PointerCard x={keptPos.x} y={keptPos.y} width={CARD_W} still title={cardTitle} aside={cardAside} foot={cardFoot} testId="data-ledger-card" testValue={keyOf(focus)}>
           {cardBody}
         </PointerCard>
       )}

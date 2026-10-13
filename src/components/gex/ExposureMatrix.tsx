@@ -79,6 +79,16 @@ const SILVER = 'rgb(var(--silver))';
 const PUT_INK = PUT_WALL;
 const CALL_INK = CALL_WALL;
 const ROW_H = 27;
+/* …AND NO LOWER THAN THIS when the box is short: the rows share the box's height down to this floor, the ledger's way
+   (the owner, 2026-10-13: the first row half under the head and the last cut at the foot — forty 27px rows never fit
+   an 870px box) */
+const ROW_MIN = 17;
+/* THE LANE HAS A CEILING (the owner, 2026-10-13: "its so wide"): a leg's cell — bar and figure — grows with the box up
+   to this; past it the table sits at the left and the air is the panel's, not the bar's */
+const LANE_MAX = 560;
+/* THE CARD (the owner, 2026-10-13: "the side panel thing is so damn big"): four rows, one line under them, and wide
+   enough that "Open interest · 18,709 contracts" prints whole — the calendar's card is the same */
+export const CARD_W = 248;
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 /* the wall words on the strike at the house's 11px floor (the audit's H5, 2026-10-13 — they were 7.5px, the smallest type
    on the terminal); the column's reserve below prints the same words, so it grows with them */
@@ -100,13 +110,13 @@ const groupSkin = (gi: number, first: boolean, last: boolean, paper: boolean) =>
   `${first ? `border-l ${paper ? 'border-borderSubtle' : 'border-borderMuted'} pl-3` : ''} ${last ? 'pr-3' : ''} ${gi % 2 === 1 ? (paper ? 'bg-ink/[0.02]' : 'bg-ink/[0.045]') : ''}`;
 const groupWash = (gi: number, paper: boolean) => (gi % 2 === 1 ? (paper ? 'bg-ink/[0.02]' : 'bg-ink/[0.045]') : '');
 
-const Cell = ({ value, leg, cap, mode, paper, gi, first, last, mirror }: { value: number; leg: Leg; cap: number; mode: HeatMode; paper: boolean; gi: number; first: boolean; last: boolean; /** with both legs drawn, the put's bar grows LEFT from the seam and the call's right */ mirror: 'left' | 'right' | null }) => {
+const Cell = ({ value, leg, cap, mode, paper, gi, first, last, mirror, tight = false }: { value: number; leg: Leg; cap: number; mode: HeatMode; paper: boolean; gi: number; first: boolean; last: boolean; /** a row under 20px: no padding, the bar right under the figure */ tight?: boolean; /** with both legs drawn, the put's bar grows LEFT from the seam and the call's right */ mirror: 'left' | 'right' | null }) => {
   const pct = Math.min(100, (Math.abs(value) / Math.max(1, cap)) * 100);
   return (
-    <td className={`px-2 py-1 align-middle ${mirror === 'right' ? 'text-left' : 'text-right'} ${groupSkin(gi, first, last, paper)}`} data-matrix-leg={leg} data-matrix-mirror={mirror ?? undefined}>
+    <td className={`px-2 ${tight ? 'py-0' : 'py-0.5'} align-middle ${mirror === 'right' ? 'text-left' : 'text-right'} ${groupSkin(gi, first, last, paper)}`} data-matrix-leg={leg} data-matrix-mirror={mirror ?? undefined}>
       <span className={`block font-mono text-[11px] tnum leading-none ${leg === 'net' ? 'text-textPrimary font-semibold' : 'text-textPrimary'}`}>{fmtUsd(value)}</span>
       {/* the bar's lane is the whole cell — the net fills its container (2026-10-12) */}
-      <span className={`mt-1 ml-auto flex h-[3px] w-full rounded-full bg-ink/[0.06] ${mirror === 'left' ? 'justify-end' : ''}`}>
+      <span className={`${tight ? 'mt-px' : 'mt-0.5'} ml-auto flex h-[3px] w-full rounded-full bg-ink/[0.06] ${mirror === 'left' ? 'justify-end' : ''}`}>
         {/* the width glides with the data, the ink with the Colours switch — the ladder's two clocks */}
         <span className="block h-full shrink-0 rounded-full transition-[width,background-color] [transition-duration:700ms,450ms]" style={{ width: `${pct}%`, background: value === 0 ? 'transparent' : heatLadderColor(value, cap, mode, paper) }} />
       </span>
@@ -226,9 +236,6 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
     const distPct = ((r.strike - surface.spot) / surface.spot) * 100;
     const l = r.legs[lead];
     const ink = heatLadderColor(l.net, caps[lead].net, mode, paper);
-    const total = rows.reduce((s, x) => s + Math.abs(x.legs[lead].net), 0);
-    const share = total > 0 ? (Math.abs(l.net) / total) * 100 : 0;
-    const heaviest = si >= 0 ? shownIdx.map(e => ({ e, v: surface.net[lead][e]?.[si] ?? 0 })).sort((a, b) => Math.abs(b.v) - Math.abs(a.v))[0] : undefined;
     const oi = si >= 0 ? shownIdx.reduce((s, e) => s + (surface.oi[e]?.[si] ?? 0), 0) : 0;
     const pct = (v: number, max: number) => `${Math.round((Math.abs(v) / Math.max(1, max)) * 100)}%`;
     const title = (
@@ -253,16 +260,14 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
         <CardRow k="Call" v={fmtUsd(l.call)} sub={pct(l.call, caps[lead].call)} ink={CALL_INK} />
         <CardRow k={`Net · ${GREEK_LABEL[lead]}`} v={fmtUsd(l.net)} sub={l.net >= 0 ? 'put-heavy' : 'call-heavy'} ink={ink} />
         {oi > 0 && <CardRow k="Open interest" v={Math.round(oi).toLocaleString()} sub="contracts" />}
-        {heaviest && <CardRow k="Heaviest expiry" v={fmtUsd(heaviest.v)} sub={surface.expiries[heaviest.e]?.date} ink={ink} />}
-        <CardRow k="Of the book" v={`${share.toFixed(1)}%`} sub="shown" />
       </>
     );
     return still ? (
-      <PointerCard x={start.x} y={start.y} still width={212} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside} foot={<span className="text-[11px] uppercase tracking-widest text-textMuted">kept · click it again, or anywhere off the grid, to let go</span>}>
+      <PointerCard x={start.x} y={start.y} still width={CARD_W} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside} foot={<span className="text-[11px] uppercase tracking-widest text-textMuted">kept · click to let go</span>}>
         {body}
       </PointerCard>
     ) : (
-      <PointerFollowCard start={start} width={212} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside}>
+      <PointerFollowCard start={start} width={CARD_W} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside}>
         {body}
       </PointerFollowCard>
     );
@@ -346,6 +351,26 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
     box.scrollTop = Math.max(0, row.offsetTop - box.clientHeight / 2);
   }, [surface.ticker, rows.length]);
 
+  /* THE ROWS SHARE THE BOX (2026-10-13): the box's height less the head and the spot row, over the rows, floored at
+     ROW_MIN and capped at ROW_H — an 870px box holds forty rows at 20px with nothing hidden under the head */
+  const theadRef = useRef<HTMLTableSectionElement | null>(null);
+  const [rowH, setRowH] = useState(ROW_H);
+  useLayoutEffect(() => {
+    const box = scrollRef.current;
+    if (!box) return;
+    const read = () => {
+      const head = theadRef.current?.offsetHeight ?? 32;
+      const spot = spotRef.current?.offsetHeight ?? 28;
+      const h = Math.floor((box.clientHeight - head - spot) / Math.max(1, rows.length)) - 1; // the row's 1px rule
+      const next = Math.max(ROW_MIN, Math.min(ROW_H, h));
+      setRowH(prev => (prev === next ? prev : next));
+    };
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [rows.length]);
+
   const renderRow = (r: Row) => {
     const on = keptStrike === r.strike;
     const lit = hoverStrike === r.strike || hovered === r.strike;
@@ -379,7 +404,7 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
           onSelectStrike?.(r.strike);
         }}
         className={`relative border-b border-borderSubtle/30 transition-colors ${onSelectStrike ? 'cursor-pointer' : ''} ${on ? 'bg-ink/[0.05]' : lit ? 'bg-ink/[0.04]' : ''} ${pinned && !on ? 'opacity-60' : ''}`}
-        style={{ height: ROW_H, ...(on ? { boxShadow: `inset 2px 0 0 0 ${SILVER}` } : walked ? { boxShadow: 'inset 0 0 0 2px rgb(var(--silver) / var(--ring-a))' } : {}) }}
+        style={{ height: rowH, ...(on ? { boxShadow: `inset 2px 0 0 0 ${SILVER}` } : walked ? { boxShadow: 'inset 0 0 0 2px rgb(var(--silver) / var(--ring-a))' } : {}) }}
         data-matrix-row={r.strike}
         data-kept={on || undefined}
         data-walked={walked || undefined}
@@ -388,7 +413,7 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
         {/* THE STRIKE AT THE FAR LEFT, ITS TAGS AFTER IT, THE COLUMN NO WIDER THAN ITS WIDEST ROW (Noah, 2026-10-12:
             "the strikes should be furthest left" and no empty band — the table sizes the column to its content, the
             cells take the rest) */}
-        <td className="pl-2 pr-1 py-1 bg-inset border-r border-borderSubtle/40 font-mono text-[11px] font-semibold tnum text-textSecondary whitespace-nowrap">
+        <td className={`pl-2 pr-1 ${rowH < 20 ? 'py-0' : 'py-0.5'} leading-tight bg-inset border-r border-borderSubtle/40 font-mono text-[11px] font-semibold tnum text-textSecondary whitespace-nowrap`}>
           <span className={on || lit ? 'text-textPrimary' : ''}>{fmtStrike(r.strike)}</span>
           {tag && (
             <span className={TAG} style={{ color: tag.ink }} data-matrix-role={tag.word}>
@@ -399,7 +424,7 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
         </td>
         {shownGreeks.map((g, gi) =>
           LEGS.map((leg, li) => (
-            <Cell key={`${g}-${leg}`} value={r.legs[g][leg]} leg={leg} cap={caps[g][leg]} mode={mode} paper={paper} gi={gi} first={li === 0} last={li === LEGS.length - 1} mirror={LEGS.length > 1 ? (leg === 'put' ? 'left' : 'right') : null} />
+            <Cell key={`${g}-${leg}`} value={r.legs[g][leg]} leg={leg} cap={caps[g][leg]} mode={mode} paper={paper} gi={gi} first={li === 0} last={li === LEGS.length - 1} mirror={LEGS.length > 1 ? (leg === 'put' ? 'left' : 'right') : null} tight={rowH < 20} />
           ))
         )}
       </tr>
@@ -427,14 +452,14 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
       data-exposure-matrix={surface.ticker}
       data-matrix-palette={palette}
     >
-      <table className="w-full border-collapse" style={{ minWidth: (strikeColW || 84) + shownGreeks.length * LEGS.length * 76, tableLayout: strikeColW ? 'fixed' : 'auto' }}>
+      <table className="border-collapse" style={{ width: `min(100%, ${(strikeColW || 84) + shownGreeks.length * LEGS.length * LANE_MAX}px)`, minWidth: (strikeColW || 84) + shownGreeks.length * LEGS.length * 76, tableLayout: strikeColW ? 'fixed' : 'auto' }}>
         {strikeColW > 0 && (
           <colgroup>
             <col style={{ width: strikeColW }} />
             {shownGreeks.map(g => LEGS.map(leg => <col key={`${g}-${leg}`} />))}
           </colgroup>
         )}
-        <thead className="sticky top-0 z-10 bg-panel">
+        <thead ref={theadRef} className="sticky top-0 z-10 bg-panel">
           <tr>
             <th className={`${head} px-2 pt-2 pb-1 text-left text-textSecondary border-b border-borderSubtle`}>
               {/* THE COLUMN'S WIDTH IS RESERVED (2026-10-12, the replay): the widest row this table can print, set
@@ -442,7 +467,8 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
               <span ref={setReserve} aria-hidden className="invisible block h-0 w-max overflow-hidden whitespace-nowrap normal-case tracking-normal text-[11px] font-semibold tnum">
                 {rows.map(r => fmtStrike(r.strike)).reduce((a, b) => (b.length > a.length ? b : a), '')}
                 <span className={TAG}>call wall</span>
-                <span className={TAG}>you own</span>
+                {/* …and "you own" only while a strike is owned (the owner, 2026-10-13: the column was wide for words no row had) */}
+                {marks && marks.size > 0 && <span className={TAG}>you own</span>}
               </span>
               Strike
             </th>

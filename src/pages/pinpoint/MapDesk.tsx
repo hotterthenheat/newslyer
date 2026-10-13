@@ -383,8 +383,9 @@ const MapDesk = () => {
           short so make it taller"; at 600 only 25 of the 40 rows showed) */}
       {/* …AND NEVER PAST THE FOLD (the audit's M9, 2026-10-13): on a 900px screen the fixed box ran 62px under the fold
           and the matrix inside it scrolled in a box that was itself cut — two scroll regions nested. The box is the
-          first screen's (the shell's chrome above it is ~174px, 16 of air under), 870 at most, never under 640. */}
-      <div ref={calRef} id="map-book" className="border border-borderSubtle rounded-md overflow-hidden h-[clamp(640px,calc(100dvh-190px),870px)] flex flex-col max-sm:scroll-mt-24" data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
+          first screen's (the shell's chrome above it is ~174px, 16 of air under), never under 640 — and 1000 at most
+          since 2026-10-13 (the owner's tall screen: forty rows of the matrix at 20px need ~900 to stand unscrolled). */}
+      <div ref={calRef} id="map-book" className="border border-borderSubtle rounded-md overflow-hidden h-[clamp(640px,calc(100dvh-190px),1000px)] flex flex-col max-sm:scroll-mt-24" data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
         <Deferred index={0} frames={0} fallback={<CalendarInner />} className="h-full min-h-0 flex flex-col animate-fade-in">
           <ExposureField
             snapshot={calSnap ?? scan}
