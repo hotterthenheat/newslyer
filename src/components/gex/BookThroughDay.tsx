@@ -29,7 +29,7 @@
 */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { bookMarket } from '../../data/bookMarket';
+import { bookMarket, isFeedSnap } from '../../data/bookMarket';
 import { sessionBars } from '../../data/levelview';
 import { fmtUsd } from '../../data/gex';
 import { CLOSE_MIN, OPEN_MIN, hhmm } from '../../data/ahead';
@@ -37,6 +37,7 @@ import { nyMinutes } from '../../core/nyTime';
 import { HEAT_MODE, heatLaneColor } from './heatmap';
 import { LONG_GAMMA, SHORT_GAMMA, alpha } from './paletteInk';
 import { useResolvedTheme } from '../../theme/theme';
+import { setDayHover, useDayHover } from '../../data/dayHover';
 import type { Candle, GexSnapshot, MarketSnapshot } from '../../types/market';
 
 const SILVER = 'rgb(var(--silver))';
@@ -47,6 +48,8 @@ const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 const ML = 64;
 const MR = 56;
+const MR_PART = 150; /* as a part of the day box: the tape's tag lane above, so the clocks align */
+const MR_PART_OVER = 24; /* …a phone's tape keeps the day, its tags over the plot's edge */
 const MT = 10;
 const MB = 22;
 /** Strikes each side of spot on the surface */
@@ -61,6 +64,8 @@ interface Props {
   focus: number | null;
   onPick: (price: number) => void;
   scope?: ReactNode;
+  /** A part of the day box (DayBox.tsx): no head of its own, the faces and the facts in a row, the clock shared with the tape above */
+  part?: boolean;
 }
 
 interface Minute {
@@ -71,7 +76,7 @@ interface Minute {
   byStrike: Map<number, number>;
 }
 
-const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Props) => {
+const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part = false }: Props) => {
   const paper = useResolvedTheme() === 'light';
   const [face, setFace] = useState<Face>('net');
   const ticker = snapshot.ticker;
@@ -128,7 +133,8 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
   }, [face]);
   const W = box.w;
   const H = box.h;
-  const plotW = Math.max(10, W - ML - MR);
+  const mr = part ? (W > 0 && W < 520 ? MR_PART_OVER : MR_PART) : MR;
+  const plotW = Math.max(10, W - ML - mr);
   const plotH = Math.max(10, H - MT - MB);
   const xOfMin = (min: number) => ML + ((min - OPEN_MIN) / (CLOSE_MIN - OPEN_MIN)) * plotW;
   const yOfNet = (v: number) => MT + plotH / 2 - (v / netMax) * (plotH / 2);
@@ -174,6 +180,14 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
     setHover({ i: best, row });
   };
   const hm = hover ? minutes[hover.i] : null;
+  /* THE MINUTE, SHARED (idea 1): the pointer's minute told to the tape above, the tape's drawn here as a quiet rule */
+  const shared = useDayHover();
+  useEffect(() => {
+    if (!part) return;
+    setDayHover(hm ? { min: hm.min, from: 'through' } : null);
+  }, [part, hm]);
+  useEffect(() => () => setDayHover(null), []);
+  const otherMin = part && hm == null && shared?.from === 'tape' ? shared.min : null;
   /* a narrow plot (a phone) holds four hours, not eight */
   const hours = plotW < 480 ? [OPEN_MIN, 12 * 60, 14 * 60, CLOSE_MIN] : [OPEN_MIN, 10 * 60, 11 * 60, 12 * 60, 13 * 60, 14 * 60, 15 * 60, CLOSE_MIN];
   const netPath = minutes.map((m, i) => `${i ? 'L' : 'M'}${xOfMin(m.min).toFixed(1)} ${yOfNet(m.net).toFixed(1)}`).join(' ');
@@ -185,6 +199,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
     return n;
   }, [minutes]);
   const last = minutes[minutes.length - 1];
+  const simulated = !isFeedSnap(snapshot);
   const focusRow = focus != null ? strikes.findIndex(k => Math.abs(k - focus) < 1e-9) : -1;
   /* THE KEYS WALK IT TOO (the re-audit's M6) — the tape's walk: left and right along the minutes, up and down the
      strikes on the surface, Enter keeps the row's strike */
@@ -204,13 +219,19 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
   };
 
   return (
-    <section className="relative flex flex-col min-w-0" data-through-day data-through-face={face}>
-      <div className="px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap">
-        <div className="min-w-0 flex-1">
+    <section className="relative flex flex-col min-w-0" data-through-day data-through-face={face} data-through-part={part || undefined}>
+      <div className={part ? 'px-5 pt-2 pb-2 flex items-end gap-6 flex-wrap' : 'px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap'}>
+        <div className={part ? 'flex items-center gap-3 flex-wrap' : 'min-w-0 flex-1'}>
           <div className="flex items-center gap-3 flex-wrap">
-            <h3 className="text-[15px] font-semibold leading-tight text-textPrimary">The book through the day</h3>
-            {scope}
-            <div className="inline-flex items-center gap-0.5 rounded-md border border-borderSubtle p-0.5" role="group" aria-label="Which face">
+            {part ? (
+              <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted" data-through-part-word>
+                The book
+              </span>
+            ) : (
+              <h3 className="text-[15px] font-semibold leading-tight text-textPrimary">The book through the day</h3>
+            )}
+            {!part && scope}
+            <div className="inline-flex items-center gap-0.5 rounded-md border border-borderSubtle p-0.5" role="group" aria-label="Which face" title="Net gamma: the whole book's net through the session, above zero hedging amplified moves, below it absorbed them · Strike × time: every strike's net minute by minute, the kept strike's row lit">
               {(['net', 'heat'] as Face[]).map(f => (
                 <button
                   key={f}
@@ -225,12 +246,14 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
               ))}
             </div>
           </div>
-          <p className="mt-0.5 text-[11px] text-textMuted">
-            {face === 'net' ? 'The whole book’s net gamma through the session — above zero dealer hedging amplified moves, below it absorbed them · spot drawn faint beside it' : 'Every strike’s net gamma, minute by minute — where a wall built, drained or moved · the kept strike’s row is lit'}
-          </p>
+          {!part && (
+            <p className="mt-0.5 text-[11px] text-textMuted">
+              {face === 'net' ? 'The whole book’s net gamma through the session — above zero dealer hedging amplified moves, below it absorbed them · spot drawn faint beside it' : 'Every strike’s net gamma, minute by minute — where a wall built, drained or moved · the kept strike’s row is lit'}
+            </p>
+          )}
         </div>
         {last && (
-          <dl className="grid grid-cols-3 gap-x-6">
+          <dl className={part ? 'flex flex-wrap gap-x-6 gap-y-1' : 'grid grid-cols-3 gap-x-6'}>
             <div>
               <dt className="text-[11px] text-textMuted">Net now</dt>
               <dd className="mt-0.5 font-mono text-[12px] tnum whitespace-nowrap" style={{ color: last.net >= 0 ? SHORT_GAMMA : LONG_GAMMA }} data-through-net={Math.round(last.net)}>
@@ -274,22 +297,27 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
                   </text>
                 </g>
               ))}
+              {simulated && (
+                <text x={ML + 6} y={MT + plotH - 6} fontFamily={MONO} fontSize={11} fill={INK_3} opacity={0.8} data-simulated-mark>
+                  simulated
+                </text>
+              )}
               {face === 'net' && minutes.length > 1 && (
                 <g>
                   <path d={netArea(1)} fill={alpha(SHORT_GAMMA, paper ? 0.1 : 0.14)} />
                   <path d={netArea(-1)} fill={alpha(LONG_GAMMA, paper ? 0.1 : 0.14)} />
-                  <line x1={ML} x2={W - MR} y1={yOfNet(0)} y2={yOfNet(0)} stroke="rgb(var(--ink) / 0.35)" />
+                  <line x1={ML} x2={W - mr} y1={yOfNet(0)} y2={yOfNet(0)} stroke="rgb(var(--ink) / 0.35)" />
                   {[-1, 0, 1].map(f => (
                     <text key={f} x={ML - 8} y={yOfNet(f * netMax)} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={11} fill={INK_3}>
                       {f === 0 ? '0' : fmtUsd(f * netMax)}
                     </text>
                   ))}
                   {spotPath && <path d={spotPath} fill="none" stroke={INK_3} strokeOpacity={0.6} strokeWidth={1} strokeDasharray="2 2" />}
-                  {spotHi > spotLo && (
+                  {spotHi > spotLo && mr >= 100 && (
                     <>
-                      <text x={W - MR + 8} y={MT + 4} fontFamily={MONO} fontSize={11} fill={INK_3}>{spotHi.toFixed(2)}</text>
-                      <text x={W - MR + 8} y={MT + plotH} fontFamily={MONO} fontSize={11} fill={INK_3}>{spotLo.toFixed(2)}</text>
-                      <text x={W - MR + 8} y={MT + plotH / 2 + 3} fontFamily={MONO} fontSize={11} fill={INK_3}>spot</text>
+                      <text x={W - mr + 8} y={MT + 4} fontFamily={MONO} fontSize={11} fill={INK_3}>{spotHi.toFixed(2)}</text>
+                      <text x={W - mr + 8} y={MT + plotH} fontFamily={MONO} fontSize={11} fill={INK_3}>{spotLo.toFixed(2)}</text>
+                      <text x={W - mr + 8} y={MT + plotH / 2 + 3} fontFamily={MONO} fontSize={11} fill={INK_3}>spot</text>
                     </>
                   )}
                   <path d={netPath} fill="none" stroke={INK} strokeWidth={1.5} strokeLinejoin="round" />
@@ -305,6 +333,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
                 )}
               {face === 'heat' && focusRow >= 0 && <rect x={ML} y={yOfRow(focusRow)} width={plotW} height={Math.max(1, rowH)} fill="none" stroke={SILVER} strokeWidth={1.5} data-through-kept-row={focus ?? undefined} />}
               {face === 'heat' && hover?.row != null && <rect x={ML} y={yOfRow(hover.row)} width={plotW} height={Math.max(1, rowH)} fill={alpha(SILVER, 0.08)} />}
+              {otherMin != null && <line x1={xOfMin(otherMin)} x2={xOfMin(otherMin)} y1={MT} y2={MT + plotH} stroke={SILVER} strokeOpacity={0.35} strokeDasharray="2 2" data-through-shared-minute />}
               {hm && (
                 <g>
                   <line x1={xOfMin(hm.min)} x2={xOfMin(hm.min)} y1={MT} y2={MT + plotH} stroke={SILVER} strokeOpacity={0.5} />
@@ -314,7 +343,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
             </svg>
           )}
           {hm && (
-            <div className="pointer-events-none absolute top-2 rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm" style={xOfMin(hm.min) > ML + plotW / 2 ? { left: 8 } : { right: MR + 8 }} data-through-card={hhmm(hm.min)}>
+            <div className="pointer-events-none absolute top-2 rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm" style={xOfMin(hm.min) > ML + plotW / 2 ? { left: 8 } : { right: mr + 8 }} data-through-card={hhmm(hm.min)}>
               <span className="font-semibold tnum text-textPrimary">{hhmm(hm.min)}</span>
               {face === 'net' ? (
                 <>

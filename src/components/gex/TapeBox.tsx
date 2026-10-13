@@ -29,13 +29,15 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { Bell, BellRing, ChevronDown } from 'lucide-react';
 import { roomLevels } from '../../data/roomLevels';
 import { sessionBars } from '../../data/levelview';
-import { bookMarket } from '../../data/bookMarket';
+import { bookMarket, isFeedSnap } from '../../data/bookMarket';
+import { pickFlip } from '../../core/walls';
 import { readSessionClock } from '../../data/moc';
 import { YEAR_MINUTES } from '../../data/measure';
 import { CLOSE_MIN, OPEN_MIN, hhmm } from '../../data/ahead';
 import { nyMinutes } from '../../core/nyTime';
 import { armLevel, removeAlert, useAlerts, type LevelName } from './alertStore';
 import { useLevelsScope } from '../../data/levelsScope';
+import { setDayHover, useDayHover } from '../../data/dayHover';
 import { CALL_WALL, FLIP, PUT_WALL, SUPREME, alpha } from './paletteInk';
 import type { Candle, MarketSnapshot } from '../../types/market';
 
@@ -46,6 +48,8 @@ const RULE = 'rgb(var(--ink) / 0.12)';
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 const fmtStrike = (v: number) => (!Number.isFinite(v) ? '—' : v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 const ML = 8;
+const ML_PART = 64; /* as a part of the day box: the net gamma's y labels sit in the margin under it, so the clocks align */
+const MB_PART = 8; /* …and the hours are printed once, under the lower plot */
 const MR_WIDE = 150; /* the tags' lane */
 const MR_OVER = 24; /* a phone's plot keeps the day — the tags sit over its right edge instead (the re-audit's L8) */
 const MT = 10;
@@ -68,6 +72,8 @@ interface Props {
   scope?: ReactNode;
   /** Minutes from midnight ET the replay stands at — the cone starts there */
   at?: number | null;
+  /** A part of the day box (DayBox.tsx): no head of its own, the facts in a row, the clock shared with the plot under it */
+  part?: boolean;
 }
 
 /** The box's fold, remembered on this machine */
@@ -79,8 +85,11 @@ const readOpen = (): boolean => {
   }
 };
 
-const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) => {
-  const [open, setOpen] = useState(readOpen);
+const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = false }: Props) => {
+  const ml = part ? ML_PART : ML;
+  const mb = part ? MB_PART : MB;
+  const [openOwn, setOpen] = useState(readOpen);
+  const open = part || openOwn;
   const toggle = () => {
     setOpen(v => {
       try {
@@ -112,6 +121,19 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
       return [];
     }
   }, [snapshot, levelsScope]);
+  /* THE FLIP'S PATH (idea 2, 2026-10-13): the flip of each minute's own book, paired to the bars by time — the line the
+     gauge counts crossings of, drawn on the price rather than left as a number. A minute with no book, or a one-sided
+     book, breaks the path. */
+  const flipTrail = useMemo(() => {
+    const snaps = bookMarket().getGexHistory(snapshot.ticker);
+    if (!snaps?.length || !bars.length) return [] as { min: number; flip: number | null }[];
+    const byTime = new Map(snaps.map(s => [s.time, s]));
+    return bars.map(b => {
+      const s = byTime.get(b.time);
+      return { min: nyMinutes(b.time * 1000), flip: s ? pickFlip(s.levels, b.close, l => l.value) : null };
+    });
+  }, [snapshot.ticker, bars]);
+  const simulated = !isFeedSnap(snapshot);
   const alerts = useAlerts(snapshot.ticker);
   const watched = (key: Level['key']) => alerts.find(a => a.kind === 'level' && a.level === key && !a.firedAt);
 
@@ -144,9 +166,9 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
   const H = box.h;
   const over = W > 0 && W < 520;
   const MR = over ? MR_OVER : MR_WIDE;
-  const plotW = Math.max(10, W - ML - MR);
-  const plotH = Math.max(10, H - MT - MB);
-  const xOfMin = (min: number) => ML + ((min - OPEN_MIN) / (CLOSE_MIN - OPEN_MIN)) * plotW;
+  const plotW = Math.max(10, W - ml - MR);
+  const plotH = Math.max(10, H - MT - mb);
+  const xOfMin = (min: number) => ml + ((min - OPEN_MIN) / (CLOSE_MIN - OPEN_MIN)) * plotW;
   const minOf = (b: Candle) => nyMinutes(b.time * 1000);
   const { lo, hi } = useMemo(() => {
     let lo = Infinity;
@@ -179,7 +201,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
   const nearest = (clientX: number) => {
     const r = hostRef.current?.getBoundingClientRect();
     if (!r || !bars.length) return null;
-    const min = OPEN_MIN + ((clientX - r.left - ML) / plotW) * (CLOSE_MIN - OPEN_MIN);
+    const min = OPEN_MIN + ((clientX - r.left - ml) / plotW) * (CLOSE_MIN - OPEN_MIN);
     let best = 0;
     for (let i = 1; i < bars.length; i++) if (Math.abs(minOf(bars[i]) - min) < Math.abs(minOf(bars[best]) - min)) best = i;
     return best;
@@ -195,6 +217,15 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
     e.preventDefault();
   };
   const hb = hover != null ? bars[hover] : null;
+  /* THE MINUTE, SHARED (idea 1): as a part of the day box the pointer's minute is told to the plot under it, and its
+     pointer's minute drawn here as a quiet rule */
+  const shared = useDayHover();
+  useEffect(() => {
+    if (!part) return;
+    setDayHover(hb ? { min: minOf(hb), from: 'tape' } : null);
+  }, [part, hb]);
+  useEffect(() => () => setDayHover(null), []);
+  const otherMin = part && hb == null && shared?.from === 'through' ? shared.min : null;
   /* the nearest level to the hovered close, in words */
   const nearLevel = (price: number) => {
     let best: Level | null = null;
@@ -206,6 +237,19 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
 
   const path = bars.map((b, i) => `${i ? 'L' : 'M'}${xOfMin(minOf(b)).toFixed(1)} ${yOf(b.close).toFixed(1)}`).join(' ');
   const area = bars.length ? `${path} L${xOfMin(minOf(bars[bars.length - 1])).toFixed(1)} ${(MT + plotH).toFixed(1)} L${xOfMin(minOf(bars[0])).toFixed(1)} ${(MT + plotH).toFixed(1)} Z` : '';
+  const flipPath = (() => {
+    let d = '';
+    let pen = false;
+    for (const p of flipTrail) {
+      if (p.flip == null || p.flip < lo || p.flip > hi) {
+        pen = false;
+        continue;
+      }
+      d += `${pen ? 'L' : 'M'}${xOfMin(p.min).toFixed(1)} ${yOf(p.flip).toFixed(1)} `;
+      pen = true;
+    }
+    return d;
+  })();
   const xNow = xOfMin(nowMin);
   const xClose = xOfMin(CLOSE_MIN);
   const cone = minLeft > 0 && bars.length ? `M${xNow.toFixed(1)} ${yOf(spot).toFixed(1)} L${xClose.toFixed(1)} ${yOf(spot + w1).toFixed(1)} L${xClose.toFixed(1)} ${yOf(spot - w1).toFixed(1)} Z` : '';
@@ -235,7 +279,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
     if (sorted.length) {
       /* …and above the hours' band at the foot (a phone's tags sit over the plot) */
       const tail = sorted[sorted.length - 1];
-      const down = Math.max(0, tail.y + tail.g.h / 2 - (H - MB + 2));
+      const down = Math.max(0, tail.y + tail.g.h / 2 - (H - mb + 2));
       for (const s of sorted) s.y -= down;
       const up = Math.max(0, MT + sorted[0].g.h / 2 - sorted[0].y);
       for (const s of sorted) s.y += up;
@@ -246,8 +290,13 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
   const say = (ws: string[]) => (ws.length <= 1 ? ws[0] ?? '' : `${ws.slice(0, -1).join(', ')} and ${ws[ws.length - 1]}`);
 
   return (
-    <section className="relative flex flex-col min-w-0" data-tape-box data-tape-open={open || undefined}>
-      <div className="px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap">
+    <section className="relative flex flex-col min-w-0" data-tape-box data-tape-open={open || undefined} data-tape-part={part || undefined}>
+      <div className={part ? 'px-5 pt-2 pb-2 flex items-end gap-6 flex-wrap' : 'px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap'}>
+        {part ? (
+          <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted" data-tape-part-word>
+            The tape
+          </span>
+        ) : (
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3 flex-wrap">
             <h3 className="text-[15px] font-semibold leading-tight text-textPrimary">The tape</h3>
@@ -264,10 +313,11 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
               {open ? 'Fold' : 'Unfold'}
             </button>
           </div>
-          <p className="mt-0.5 text-[11px] text-textMuted">Today's price with the book's levels on it · a tag keeps the strike, its bell sets an alert on the level · the cone ahead is one expected move to the close</p>
+          <p className="mt-0.5 text-[11px] text-textMuted">Today's price with the book's levels on it and the flip's path as it moved · a tag keeps the strike, its bell sets an alert on the level · the cone ahead is one expected move to the close</p>
         </div>
+        )}
         {bars.length > 0 && (
-          <dl className="grid grid-cols-3 gap-x-6">
+          <dl className={part ? 'flex flex-wrap gap-x-6 gap-y-1' : 'grid grid-cols-3 gap-x-6'}>
             <div>
               <dt className="text-[11px] text-textMuted">Last</dt>
               <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap">{spot.toFixed(2)}</dd>
@@ -306,24 +356,36 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
                 {hours.map(t => (
                   <g key={t}>
                     <line x1={xOfMin(t)} x2={xOfMin(t)} y1={MT} y2={MT + plotH} stroke={RULE} />
-                    <text x={xOfMin(t)} y={H - 7} textAnchor={t === OPEN_MIN ? 'start' : t === CLOSE_MIN ? 'end' : 'middle'} fontFamily={MONO} fontSize={11} fill={INK_3}>
-                      {hhmm(t)}
-                    </text>
+                    {!part && (
+                      <text x={xOfMin(t)} y={H - 7} textAnchor={t === OPEN_MIN ? 'start' : t === CLOSE_MIN ? 'end' : 'middle'} fontFamily={MONO} fontSize={11} fill={INK_3}>
+                        {hhmm(t)}
+                      </text>
+                    )}
                   </g>
                 ))}
+                {/* the flip's path through the day, under the levels */}
+                {flipPath && <path d={flipPath} fill="none" stroke={FLIP} strokeOpacity={0.7} strokeWidth={1} strokeDasharray="2 2" strokeLinejoin="round" data-tape-flip-path />}
+                {/* the house book says so on the chart itself, not only on the door (idea 5) */}
+                {simulated && (
+                  <text x={ml + 6} y={MT + plotH - 6} fontFamily={MONO} fontSize={11} fill={INK_3} opacity={0.8} data-simulated-mark>
+                    simulated
+                  </text>
+                )}
                 {/* the cone ahead: one expected move to the close */}
                 {cone && <path d={cone} fill={alpha(SILVER, 0.1)} stroke={SILVER} strokeOpacity={0.35} strokeDasharray="3 3" />}
                 {/* the levels */}
                 {levels.map(l => (
-                  <line key={l.key} x1={ML} x2={W - MR + 6} y1={yOf(l.price)} y2={yOf(l.price)} stroke={l.ink} strokeOpacity={l.key === 'pin' ? 0.5 : 0.75} strokeDasharray={l.key === 'flip' ? '3 3' : undefined} data-tape-level={l.key} />
+                  <line key={l.key} x1={ml} x2={W - MR + 6} y1={yOf(l.price)} y2={yOf(l.price)} stroke={l.ink} strokeOpacity={l.key === 'pin' ? 0.5 : 0.75} strokeDasharray={l.key === 'flip' ? '3 3' : undefined} data-tape-level={l.key} />
                 ))}
                 {/* the kept strike */}
-                {focus != null && focus >= lo && focus <= hi && <line x1={ML} x2={W - MR + 6} y1={yOf(focus)} y2={yOf(focus)} stroke={SILVER} strokeOpacity={0.9} strokeWidth={1.5} data-tape-kept={focus} />}
+                {focus != null && focus >= lo && focus <= hi && <line x1={ml} x2={W - MR + 6} y1={yOf(focus)} y2={yOf(focus)} stroke={SILVER} strokeOpacity={0.9} strokeWidth={1.5} data-tape-kept={focus} />}
                 {/* the price */}
                 {area && <path d={area} fill={alpha(INK, 0.06)} />}
                 {path && <path d={path} fill="none" stroke={INK} strokeWidth={1.5} strokeLinejoin="round" />}
                 {/* now */}
                 {bars.length > 0 && <line x1={xNow} x2={xNow} y1={MT} y2={MT + plotH} stroke={SILVER} strokeOpacity={0.6} />}
+                {/* the other plot's minute, as a part of the day box */}
+                {otherMin != null && <line x1={xOfMin(otherMin)} x2={xOfMin(otherMin)} y1={MT} y2={MT + plotH} stroke={SILVER} strokeOpacity={0.35} strokeDasharray="2 2" data-tape-shared-minute />}
                 {/* the pointer's bar */}
                 {hb && (
                   <g>
@@ -378,7 +440,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
               })}
             {/* the pointer's minute */}
             {hb && (
-              <div className="pointer-events-none absolute top-2 rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm" style={over || xOfMin(minOf(hb)) > ML + plotW / 2 ? { left: 8 } : { right: MR + 8 }} data-tape-card={hhmm(minOf(hb))}>
+              <div className="pointer-events-none absolute top-2 rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm" style={over || xOfMin(minOf(hb)) > ml + plotW / 2 ? { left: 8 } : { right: MR + 8 }} data-tape-card={hhmm(minOf(hb))}>
                 <span className="font-semibold tnum text-textPrimary">{hhmm(minOf(hb))}</span>
                 <span className="ml-2 tnum text-textPrimary">{hb.close.toFixed(2)}</span>
                 <span className="ml-2 text-textMuted">{nearLevel(hb.close)}</span>

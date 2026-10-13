@@ -36,6 +36,8 @@
 
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { roomLevels } from '../../data/roomLevels';
+import FoldDoor from './FoldDoor';
+import { useBoxFold } from '../../data/boxFold';
 import { buildLevelRead, sessionBars } from '../../data/levelview';
 import { nyClock } from '../../core/nyTime';
 import { RECORD_LEVELS, RECORD_WORDS, baseRates, levelTicks, sessionRecords, type Tick } from '../../data/levelRecord';
@@ -196,6 +198,8 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
   const levelCount = rows.reduce((n, r) => n + r.labels.length, 0);
   /* The guide as a focus over the whole box (the house pattern, 2026-09-06) */
   const [guideOpen, setGuideOpen] = useState(false);
+  /* the box folds to its head, remembered (data/boxFold.ts) */
+  const [open, toggleOpen] = useBoxFold('report');
 
   return (
     <section className="relative flex flex-col min-w-0" data-report-card>
@@ -207,6 +211,7 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
           <h3 className="text-[15px] font-semibold leading-tight text-textPrimary">How the levels held today</h3>
           {scope}
           <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the rows, the strips and the ticks mean" testId="report-guide" />
+          <FoldDoor open={open} onToggle={toggleOpen} what="the report" testId="report" />
         </div>
         <p className="mt-0.5 text-[11px] text-textMuted">
           {levelCount} levels{rows.length < levelCount ? `, ${rows.length} rows,` : ''} off {levelsScope === 'ALL' ? 'every listed date' : "today's contracts"} · {bars.length} one-minute {bars.length === 1 ? 'bar' : 'bars'}{first != null && last != null ? ` from ${hhmm(first)} to ${hhmm(last)}` : ''} · a test is a bar whose range reaches the level, a break is a close beyond it after a test
@@ -241,6 +246,7 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
           </div>
         )}
       </div>
+      {open && (
       <ul className="flex flex-col" data-level-rows>
         {rows.map(r => {
           const isFocus = focus != null && Math.abs(focus - r.price) < 1e-9;
@@ -291,6 +297,7 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
           );
         })}
       </ul>
+      )}
     </section>
   );
 };

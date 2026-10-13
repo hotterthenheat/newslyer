@@ -6,7 +6,10 @@
   finds it already here (Noah, 2026-10-10: "why does it take forever for stripe to load"); the page itself asks if
   nobody did. The browser holds only the publishable key.
 */
-import { loadStripe, type Stripe } from '@stripe/stripe-js';
+/* the `pure` entry: the package's main entry puts Stripe's script on every page at import (the Map logged its failure on
+   every visit, idea 11, 2026-10-13); this one fetches it only when `stripeLoader()` is called */
+import { loadStripe } from '@stripe/stripe-js/pure';
+import type { Stripe } from '@stripe/stripe-js';
 import { STRIPE_PUBLISHABLE_KEY } from './billing';
 
 let loading: Promise<Stripe | null> | null = null;

@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRef, Suspense, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useOutlet } from 'react-router-dom';
 import { PinpointPageSkeleton } from './pinpointSkeletons';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -143,6 +143,16 @@ const PinpointLayout = () => {
   const open = clock.phase === 'OPEN' || clock.phase === 'AUCTION';
   /* THE REPLAY, SAID HERE TOO (the audit's M8, 2026-10-13): the boxes below are rewound, these facts are not */
   const replaying = useReplayLabel();
+  /* whether the head has scrolled away — the strip below shows then (idea 3) */
+  const headRef = useRef<HTMLElement>(null);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const el = headRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([entry]) => setStuck(!entry.isIntersecting), { rootMargin: '-48px 0px 0px 0px', threshold: 0 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   return (
     <>
@@ -152,7 +162,7 @@ const PinpointLayout = () => {
       {/* THE FRAME OWNS THE SUBJECT AND THE PAGES (direction B, 2026-09-05): the
           sidebar carries the ticker and the Map · Ahead · … choice, so this head
           no longer repeats them. It names the page and reads the market. */}
-      <header className="flex items-start gap-6 flex-wrap pb-3 border-b border-borderSubtle" data-shell>
+      <header ref={headRef} className="flex items-start gap-6 flex-wrap pb-3 border-b border-borderSubtle" data-shell>
         {/* THE LINE IS NEVER CUT MID-WORD (the audit's H8, 2026-10-13): the column keeps room for it, so under ~1,200px the
             facts wrap under the title instead of the title column shrinking to "The book by s…" */}
         <div className="min-w-[min(100%,560px)] flex-1">
@@ -249,6 +259,35 @@ const PinpointLayout = () => {
           </div>
         </div>
       </header>
+      {/* THE FACTS, STUCK (idea 3, 2026-10-13): once the head has scrolled away, the name, the price, the regime, the flip
+          and the clock stay in a 36px strip at the top of the page column. A sticky box of no height, the strip laid
+          over the page from it — nothing below moves when it comes or goes. Under the phone strip on a phone. */}
+      {/* top-0 on a phone too: the column's own top padding (the phone strip's 48px) insets the sticky edge already */}
+      <div className="sticky top-0 z-30 h-0" data-shell-stuck={stuck ? '' : undefined}>
+        <div
+          className={`absolute inset-x-0 top-0 h-9 flex items-center gap-x-5 overflow-hidden whitespace-nowrap border-b border-borderSubtle bg-panel/95 backdrop-blur-md px-3 font-mono text-[11px] transition-opacity duration-200 ${stuck ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          aria-hidden={!stuck}
+          data-shell-strip
+        >
+          <span className="font-semibold text-textPrimary">{activeTicker}</span>
+          {spot != null && <span className="tnum text-textPrimary">{spot.toFixed(2)}</span>}
+          {gauge?.regime && <span style={{ color: gauge.regime === 'SHORT' ? SHORT_GAMMA : LONG_GAMMA }}>{DEALER_WORDS[gauge.regime]}</span>}
+          {gauge?.flip != null && (
+            <span className="text-textSecondary">
+              flip <span className="font-semibold tnum" style={{ color: FLIP }}>{fmt(gauge.flip)}</span>
+              {flipLead && ` · ${flipLead} ${gauge.distAbs! > 0 ? 'above' : 'below'}`}
+            </span>
+          )}
+          <span className="text-textSecondary">{open ? `${untilBell(clock.secondsToClose)} to the close` : clock.label.toLowerCase()}</span>
+          {focused != null && (
+            <span className="text-silver">
+              kept {fmtStrike(focused)}
+              {keptLead ? ` · ${keptLead}` : ''}
+            </span>
+          )}
+          {replaying && <span className="text-silver">replaying {replaying}</span>}
+        </div>
+      </div>
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div

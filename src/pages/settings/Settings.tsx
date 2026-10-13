@@ -61,6 +61,8 @@ import { CANDLE_THEME_OPTIONS, setCandleTheme, useCandleThemeKey, type CandleThe
 import { setDistanceUnit, useDistanceUnit } from '../../data/distanceUnits';
 import type { DistanceUnit } from '../../data/atr';
 import { setColourVision, setThemeChoice, useColourVision, useResolvedTheme, useThemeChoice, type ColourVision, type ThemeChoice } from '../../theme/theme';
+import ColoursSwitch from '../../components/gex/ColoursSwitch';
+import { setLedgerPalette, useLedgerPalette } from '../../data/ledgerPalette';
 import SlayerMark from '../../brand/SlayerMark';
 import { probeFeeds, useFeedStatus, type ProviderState, type ProviderStatus } from '../../data/feed/status';
 import { ROOM_FEEDS, roomsReading } from '../../data/feed/rooms';
@@ -1218,6 +1220,7 @@ const AboutBox = () => {
 const Settings = () => {
   const choice = useThemeChoice();
   const theme = useResolvedTheme();
+  const ledgerPalette = useLedgerPalette();
   const candleKey = useCandleThemeKey();
   const unit = useDistanceUnit();
   const desk = useDeskPrefs();
@@ -1334,6 +1337,13 @@ const Settings = () => {
                 ))}
               </div>
             </div>
+            {/* THE MAP'S COLOURS (idea 10, 2026-10-13): off the Map's band, where a choice made once cost every row 150px. A
+                dark-page choice — on paper every heat surface walks one tint-to-pole journey (heatmap.ts) */}
+            {theme === 'dark' && (
+              <Row name="Map colours" line="The ramp the Map's matrix and calendar are painted in — thermal, yellow in the middle with red where hedging amplifies a move and blue where it absorbs one, or the house's ember and glacier" testId="map-colours">
+                <ColoursSwitch palette={ledgerPalette} onChange={setLedgerPalette} paper={false} testId="settings-map-colours" />
+              </Row>
+            )}
             <Row name="Candles" line="The chart's own theme — the same menu every chart carries. Kept apart for each theme above: Glacier to begin with on dark, Stone on light" testId="candles">
               <DropdownSelect<CandleThemeKey> label="Candles" value={candleKey} options={CANDLE_THEME_OPTIONS} onChange={setCandleTheme} title="The colours every chart draws its candles in" testId="settings-candles" align="end" />
             </Row>

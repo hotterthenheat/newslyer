@@ -54,6 +54,8 @@
 */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import FoldDoor from './FoldDoor';
+import { useBoxFold } from '../../data/boxFold';
 import { buildExposureSurface, CALENDAR_DTES } from '../../data/exposureSurface';
 import { buildExposureProfile } from '../../data/exposure';
 import { buildVannaCharm } from '../../data/vannacharm';
@@ -177,6 +179,8 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
   const [hover, setHover] = useState<number | null>(null);
   const [pin, setPin] = useState<Pin>(null);
   const stripRef = useRef<HTMLDivElement>(null);
+  /* the box folds to its head, remembered (data/boxFold.ts) */
+  const [open, toggleOpen] = useBoxFold('clock');
   /* FIFTEEN-MINUTE BLOCKS ON A NARROW STRIP (the re-audit's H2, 2026-10-13): 78 five-minute blocks on a phone's 356px
      were 1.9px wide each, and each is a button. Under 520px the strip holds 26 blocks of a quarter hour; the block kept
      is read as its first minute, as before. */
@@ -189,8 +193,11 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
     const ro = new ResizeObserver(read);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [open]);
   const narrow = stripW > 0 && stripW < 520;
+  /* the phase names on two rows, short, when the strip is under 760px — measured off the strip, not the window, so the
+     clock laid beside the report on a wide desk (idea 4) reads as it does on a phone */
+  const twoRows = stripW > 0 && stripW < 760;
   const blockMin = narrow ? 15 : BLOCK_MIN;
   const blocks = SPAN / blockMin;
   /* a kept block means a different minute once the blocks change size — let it go rather than keep the wrong one */
@@ -318,12 +325,15 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
       <GuideFocus open={guideOpen} onClose={() => setGuideOpen(false)} title="How to read the clock" testId="clock-guide" viewport>
         <ClockGuide nowBlock={guideNow} line={line} bellShare={facts.bellShare} pin={facts.pin} supreme={facts.supreme} charmStrike={facts.charmStrike} />
       </GuideFocus>
+      {/* the title block keeps 300px, so beside the report on a wide desk (580px of box) the facts step under it rather
+          than the title's row breaking word by word */}
       <div className="px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[min(100%,300px)] flex-1">
           <div className="flex items-center gap-3 flex-wrap">
             <h3 className="text-[15px] font-semibold leading-tight text-textPrimary">The trader's clock</h3>
             {scope}
             <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the strip and the phases mean" testId="clock-guide" />
+            <FoldDoor open={open} onToggle={toggleOpen} what="the clock" testId="clock" />
           </div>
           <p className="mt-0.5 text-[11px] text-textMuted">New York · 09:30 to 16:00 · the phases are a rule of thumb, the figures are today's numbers</p>
         </div>
@@ -363,12 +373,13 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
         </dl>
       </div>
 
+      {open && (
       <div className="px-5 pb-4" ref={stripRef}>
         {/* THE PHASES — named above the strip on ONE row. Each name sits at its
             phase's start, except the last two: the turn is twenty minutes wide
             and the close ten, so the turn's name ends at 15:50 and the close's
             starts there — the same line, no overlap. */}
-        <div className="relative h-5 max-lg:h-10" data-clock-phases>
+        <div className={`relative ${twoRows ? 'h-10' : 'h-5'}`} data-clock-phases>
           {PHASES.map((p, i) => {
             const active = current?.key === p.key;
             const kept = keptPhase?.key === p.key || (keptBlock != null && phaseAt(OPEN_MIN + keptBlock * blockMin).key === p.key);
@@ -384,7 +395,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
                 onClick={() => onNameClick(p.key)}
                 /* Under lg: every other name on the second row, the close's name on the strip's right edge (it ran 8px past a
                    phone's strip from its own start, so the phone pass of 2026-09-13 hid it) */
-                className={`hit absolute top-0 text-[11px] font-medium whitespace-nowrap transition-colors ${nameCls} ${i % 2 === 1 ? 'max-lg:top-5' : ''} ${last ? 'max-lg:!left-auto max-lg:!right-0 max-lg:!translate-x-0' : ''}`}
+                className={`hit absolute text-[11px] font-medium whitespace-nowrap transition-colors ${nameCls} ${twoRows && i % 2 === 1 ? 'top-5' : 'top-0'} ${twoRows && last ? '!left-auto !right-0 !translate-x-0' : ''}`}
                 style={{
                   left: `${pct(turn ? p.to : p.from)}%`,
                   transform: turn ? 'translateX(calc(-100% - 6px))' : last ? 'translateX(2px)' : undefined,
@@ -392,8 +403,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
                 }}
                 title={`${hhmm(p.from)}–${hhmm(p.to)} — click to keep this phase`}
               >
-                <span className="max-lg:hidden">{p.name}</span>
-                <span className="lg:hidden">{SHORT_NAME[p.key]}</span>
+                {twoRows ? SHORT_NAME[p.key] : p.name}
               </button>
             );
           })}
@@ -464,7 +474,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
               <span
                 key={t}
                 /* a phone's strip holds four hours, not eight: 09:30 overprinted 10:00 (the audit's C1) */
-                className={`absolute top-0 font-mono text-[11px] tnum text-textMuted ${t === 10 * 60 || t === 11 * 60 || t === 13 * 60 || t === 15 * 60 ? 'max-lg:hidden' : ''}`}
+                className={`absolute top-0 font-mono text-[11px] tnum text-textMuted ${twoRows && (t === 10 * 60 || t === 11 * 60 || t === 13 * 60 || t === 15 * 60) ? 'hidden' : ''}`}
                 style={{ left: `${pct(t)}%`, transform: t === CLOSE_MIN ? 'translateX(-100%)' : t === OPEN_MIN ? undefined : 'translateX(-50%)' }}
               >
                 {hhmm(t)}
@@ -512,6 +522,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
           {line}
         </p>
       </div>
+      )}
     </section>
   );
 };

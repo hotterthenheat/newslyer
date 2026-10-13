@@ -43,6 +43,7 @@ import TraderClock from '../../components/gex/TraderClock';
 import WallReportCard from '../../components/gex/WallReportCard';
 import TapeBox from '../../components/gex/TapeBox';
 import BookThroughDay from '../../components/gex/BookThroughDay';
+import DayBox from '../../components/gex/DayBox';
 import ReplayStrip from '../../components/gex/ReplayStrip';
 import { barsAt, replayDay, replayLabel, replayMinute, replayRange, snapPos, snapshotAt, type ReplayRange } from '../../data/replay';
 import { readSessionClock } from '../../data/moc';
@@ -69,13 +70,31 @@ const POSITIONS_EXPIRY: ExposureExpiry = '0DTE';
   refreshed on the scan cadence) and its chip wears the name. Held across route
   changes within a session and reset on reload, so every visit starts as one.
 */
-type BoxKey = 'calendar' | 'tape' | 'through' | 'day' | 'report';
+type BoxKey = 'calendar' | 'tape' | 'day' | 'report';
 type Scopes = Partial<Record<BoxKey, string>>;
 let scopesMemory: Scopes = {};
 
 const MapDesk = () => {
   const { marketData, activeTicker, changeTicker } = useMarketData();
   const { focus, toggleFocus, focusOn } = useFocus();
+
+  /* TYPE A STRIKE TO KEEP IT (idea 8, 2026-10-13): `/` opens a small prompt; Enter keeps the nearest strike the chain
+     has, everywhere on the page; Esc closes. Caught before the command line, which `/` opens on pages with no search. */
+  const [strikeAsk, setStrikeAsk] = useState(false);
+  const strikeInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (document.querySelector('[role="dialog"], [data-guide-layer], [data-strike-ask]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setStrikeAsk(true);
+    };
+    window.addEventListener('keydown', onKey, { capture: true });
+    return () => window.removeEventListener('keydown', onKey, { capture: true });
+  }, []);
 
   /* Which boxes have stepped off the frame, and onto which name */
   const [scopes, setScopesState] = useState<Scopes>(scopesMemory);
@@ -112,7 +131,7 @@ const MapDesk = () => {
 
   /* THE OWN-NAME SNAPSHOTS — one per name a box has stepped onto, on the room's market (the feed's or the house's),
      rebuilt on the scan cadence like the frame's own */
-  const pinnedKey = [scopes.calendar, scopes.tape, scopes.through, scopes.day, scopes.report].filter(Boolean).join('|');
+  const pinnedKey = [scopes.calendar, scopes.tape, scopes.day, scopes.report].filter(Boolean).join('|');
   const ownSnaps = useMemo(() => {
     const m = new Map<string, MarketSnapshot>();
     if (!scan || !pinnedKey) return m;
@@ -225,10 +244,9 @@ const MapDesk = () => {
      catches up on its next render. What it reads arrives DEFERRED. */
   const [calRef, calOn] = useOnScreen<HTMLDivElement>();
   const [tapeRef, tapeOn] = useOnScreen<HTMLDivElement>();
-  const [throughRef, throughOn] = useOnScreen<HTMLDivElement>();
   const [dayRef, dayOn] = useOnScreen<HTMLDivElement>();
   const [reportRef, reportOn] = useOnScreen<HTMLDivElement>();
-  const heldRef = useRef<{ calendar: MarketSnapshot | null; tape: MarketSnapshot | null; through: MarketSnapshot | null; day: MarketSnapshot | null; report: MarketSnapshot | null; bars: Candle[] | undefined }>({ calendar: null, tape: null, through: null, day: null, report: null, bars: undefined });
+  const heldRef = useRef<{ calendar: MarketSnapshot | null; tape: MarketSnapshot | null; day: MarketSnapshot | null; report: MarketSnapshot | null; bars: Candle[] | undefined }>({ calendar: null, tape: null, day: null, report: null, bars: undefined });
   const shown = (key: BoxKey, on: boolean): MarketSnapshot | null => {
     const fresh = snapFor(key);
     if (!replayOn || on || !heldRef.current[key]) heldRef.current[key] = fresh;
@@ -236,7 +254,6 @@ const MapDesk = () => {
   };
   const calSnap = useDeferredValue(shown('calendar', calOn));
   const tapeSnap = useDeferredValue(shown('tape', tapeOn));
-  const throughSnap = useDeferredValue(shown('through', throughOn));
   const daySnap = useDeferredValue(shown('day', dayOn));
   const reportSnap = useDeferredValue(shown('report', reportOn));
   if (!replayOn || reportOn || !heldRef.current.bars) heldRef.current.bars = replayBars;
@@ -269,7 +286,6 @@ const MapDesk = () => {
   const focusPrice = focusFor(ticker);
   const calTicker = calSnap?.ticker ?? ticker;
   const tapeTicker = tapeSnap?.ticker ?? ticker;
-  const throughTicker = throughSnap?.ticker ?? ticker;
   const dayTicker = daySnap?.ticker ?? ticker;
   const reportTicker = reportSnap?.ticker ?? ticker;
 
@@ -292,8 +308,70 @@ const MapDesk = () => {
      mounts use, so nothing on the page moves when the book lands. */
   if (!scan || !data) return <MapPageSkeleton />;
 
+  const keepTyped = (raw: string) => {
+    const want = Number.parseFloat(raw.replace(/[^0-9.]/g, ''));
+    setStrikeAsk(false);
+    if (!Number.isFinite(want) || !scan.chain.length) return;
+    let best = scan.chain[0].strike;
+    for (const n of scan.chain) if (Math.abs(n.strike - want) < Math.abs(best - want)) best = n.strike;
+    focusOn(best, ticker);
+  };
+
   return (
     <>
+      {strikeAsk && (
+        <div className="fixed inset-x-0 top-16 z-[95] flex justify-center pointer-events-none" data-strike-ask>
+          <form
+            className="pointer-events-auto flex items-center gap-3 rounded-md border border-silver/40 bg-card/95 backdrop-blur-md px-3 py-2 shadow-[0_12px_32px_rgba(0,0,0,0.55)] animate-soft-in"
+            onSubmit={e => {
+              e.preventDefault();
+              keepTyped(strikeInput.current?.value ?? '');
+            }}
+          >
+            <label htmlFor="strike-ask" className="text-[11px] text-textMuted">
+              Keep a strike
+            </label>
+            <input
+              id="strike-ask"
+              ref={strikeInput}
+              autoFocus
+              inputMode="decimal"
+              placeholder={scan.spot.toFixed(0)}
+              className="w-20 bg-transparent font-mono text-[12px] tnum text-textPrimary outline-none border-b border-borderMuted focus:border-silver placeholder:text-textMuted/60"
+              onKeyDown={e => {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setStrikeAsk(false);
+                }
+              }}
+              onBlur={() => setStrikeAsk(false)}
+            />
+            <span className="text-[11px] text-textMuted">Enter keeps it · Esc</span>
+          </form>
+        </div>
+      )}
+      {/* JUMP LINKS ON A PHONE (idea 7, 2026-10-13): the page is 3,000px tall there; a sticky row under the phone strip
+          lands on any box in one tap */}
+      <nav className="sm:hidden sticky top-9 z-20 -mx-4 px-4 py-1.5 flex gap-2 overflow-x-auto scroll-row border-b border-borderSubtle/60 bg-panel/95 backdrop-blur-sm" aria-label="Jump to a box" data-map-jumps>
+        {(
+          [
+            ['map-book', 'Book'],
+            ['map-session', 'The day'],
+            ['map-clock', 'Clock'],
+            ['map-report', 'Report'],
+          ] as const
+        ).map(([id, word]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className="hit shrink-0 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip font-mono text-[11px] text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
+            data-map-jump={id}
+          >
+            {word}
+          </button>
+        ))}
+      </nav>
       {/* THE CALENDAR, FIRST — the same book by expiry, the Exposure Ledger with
           its one-row toolbar (greek · expiries · strikes · palette · Now | After
           the bell · the read · fullscreen) and the replay's transport. The host
@@ -306,7 +384,7 @@ const MapDesk = () => {
       {/* …AND NEVER PAST THE FOLD (the audit's M9, 2026-10-13): on a 900px screen the fixed box ran 62px under the fold
           and the matrix inside it scrolled in a box that was itself cut — two scroll regions nested. The box is the
           first screen's (the shell's chrome above it is ~174px, 16 of air under), 870 at most, never under 640. */}
-      <div ref={calRef} className="border border-borderSubtle rounded-md overflow-hidden h-[clamp(640px,calc(100dvh-190px),870px)] flex flex-col" data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
+      <div ref={calRef} id="map-book" className="border border-borderSubtle rounded-md overflow-hidden h-[clamp(640px,calc(100dvh-190px),870px)] flex flex-col max-sm:scroll-mt-24" data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
         <Deferred index={0} frames={0} fallback={<CalendarInner />} className="h-full min-h-0 flex flex-col animate-fade-in">
           <ExposureField
             snapshot={calSnap ?? scan}
@@ -332,13 +410,13 @@ const MapDesk = () => {
       {/* THE TAPE (the competitive audit, 2026-10-13): today's price with the book's levels on it, a bell on each level,
           the expected move to the close — the chart practitioners open first, on this page rather than Terrain alone;
           foldable, remembered. The replay rewinds it with the report's bars. */}
-      <div ref={tapeRef} className="border border-borderSubtle rounded-md bg-panel" data-tape data-scope-ticker={tapeTicker} data-on-screen={tapeOn}>
-        <TapeBox snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} scope={chipFor('tape', tapeTicker)} at={playing && tapeTicker === ticker ? replayMinute(framePos) : undefined} />
-      </div>
-      {/* THE BOOK THROUGH THE DAY (the competitive audit, 2026-10-13): net gamma over the session and every strike's
-          gamma minute by minute — the record a regime change is read off */}
-      <div ref={throughRef} className="border border-borderSubtle rounded-md bg-panel" data-through data-scope-ticker={throughTicker} data-on-screen={throughOn}>
-        <BookThroughDay snapshot={throughSnap ?? scan} bars={playing && throughTicker === ticker ? reportBars : undefined} focus={focusFor(throughTicker)} onPick={price => toggleFocus(price, throughTicker)} scope={chipFor('through', throughTicker)} />
+      {/* …AND THE BOOK THROUGH THE DAY UNDER IT ON THE SAME CLOCK (idea 1, 2026-10-13): one box, the tape over the net
+          gamma, the minute under the pointer marked on both — DayBox.tsx */}
+      <div ref={tapeRef} id="map-session" className="border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24" data-session data-scope-ticker={tapeTicker} data-on-screen={tapeOn}>
+        <DayBox scope={chipFor('tape', tapeTicker)}>
+          <TapeBox part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} at={playing && tapeTicker === ticker ? replayMinute(framePos) : undefined} />
+          <BookThroughDay part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} />
+        </DayBox>
       </div>
       {/* THE DAY — the two tools nobody ships (roadmap step 5, 2026-09-05):
           the Trader's Clock, today's hedging schedule with the book's figures
@@ -346,17 +424,22 @@ const MapDesk = () => {
           tape. One box, two columns, the same strike shared. */}
       {/* No overflow clip here: the clock's hover card rises above the strip and a
           long phase sentence would be cut at the box's top edge */}
-      <div ref={dayRef} className="border border-borderSubtle rounded-md bg-panel" data-day data-scope-ticker={dayTicker} data-on-screen={dayOn}>
+      {/* THE CLOCK BESIDE THE REPORT from 1,880px (idea 4, 2026-10-13): both ran the full width for a 178px strip and
+          370px of rows; side by side a big monitor's page is a screen shorter. `contents` below that, so the flex column
+          above still lays them out one under the other. */}
+      <div className="contents min-[1880px]:grid min-[1880px]:grid-cols-[580px_minmax(0,1fr)] min-[1880px]:gap-4 min-[1880px]:items-start" data-map-wide-row>
+      <div ref={dayRef} id="map-clock" className="border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24" data-day data-scope-ticker={dayTicker} data-on-screen={dayOn}>
         <Deferred index={1} frames={22} fallback={<DayInner />} className="animate-fade-in">
           <TraderClock snapshot={daySnap ?? scan} scope={chipFor('day', dayTicker)} at={playing && dayTicker === ticker ? replayMinute(framePos) : undefined} />
         </Deferred>
       </div>
       {/* HOW THE LEVELS HELD TODAY — full width, in the approved grammar: the
           page grows rather than cramming (Noah, 2026-09-05) */}
-      <div ref={reportRef} className="border border-borderSubtle rounded-md overflow-hidden bg-panel" data-report data-scope-ticker={reportTicker} data-on-screen={reportOn}>
+      <div ref={reportRef} id="map-report" className="border border-borderSubtle rounded-md overflow-hidden bg-panel max-sm:scroll-mt-24" data-report data-scope-ticker={reportTicker} data-on-screen={reportOn}>
         <Deferred index={2} frames={26} fallback={<ReportInner />} className="animate-fade-in">
           <WallReportCard snapshot={reportSnap ?? scan} focus={focusFor(reportTicker)} onPick={price => toggleFocus(price, reportTicker)} scope={chipFor('report', reportTicker)} bars={playing && reportTicker === ticker ? reportBars : undefined} />
         </Deferred>
+      </div>
       </div>
       {/* YOUR POSITIONS left this page for the Weigher's desk (Noah, 2026-09-14: "this is a
           feature a weigher section should have and not a pinpoint map section") — the map keeps

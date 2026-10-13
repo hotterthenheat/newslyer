@@ -135,6 +135,17 @@ export const KEY_GROUPS: KeyGroup[] = [
       { keys: [MOD, 'Enter'], does: 'Run it on its chart' },
     ],
   },
+  {
+    where: 'The Map',
+    on: ['/pinpoint/map'],
+    keys: [
+      { keys: ['←', '→'], alt: true, does: 'Walk the tape, the profile, the day\'s book and the clock, once each is focused' },
+      { keys: ['↑', '↓'], alt: true, does: 'Walk the strikes on the matrix, the calendar and the day\'s book' },
+      { keys: ['Enter'], does: 'Keep the strike, the block or the cell under the mark — everywhere on the page' },
+      { keys: ['/'], does: 'Type a strike to keep it' },
+      { keys: ['Esc'], does: 'Let go of what is kept; close a card, a guide, the replay, fullscreen' },
+    ],
+  },
 ];
 
 /** The groups that work on this address: Everywhere first, then the page's own */

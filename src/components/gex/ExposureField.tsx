@@ -63,12 +63,13 @@ import { fmtUsd } from '../../data/gex';
 import { STRIKE_WINDOWS, type StrikeWindow } from '../../data/exposure';
 import { useLevelsScope } from '../../data/levelsScope';
 import { roomLevels } from '../../data/roomLevels';
+import { useLedgerPalette } from '../../data/ledgerPalette';
+import { isFeedSnap } from '../../data/bookMarket';
 import ExportDoor from './ExportDoor';
 import { buildExposureSurface, CALENDAR_DTES, GREEKS, type ExposureSurface, type Greek } from '../../data/exposureSurface';
 import { snapshotAtOpen } from '../../data/levelview';
 import { beginGlide } from '../../core/glide';
 import { HEAT_MODE, heatCellStyle, heatRampColorFor } from './heatmap';
-import ColoursSwitch from './ColoursSwitch';
 import type { MarketSnapshot } from '../../types/market';
 import { VIEWS_FOR, readLedgerView, writeLedgerView, type LedgerView } from './ledgerView';
 import ExposureMatrix from './ExposureMatrix';
@@ -303,7 +304,8 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   /* THE PALETTE, a try (Noah, 2026-09-05: "can we try the thermal design
      just for a try") — the thermal leads while it is on trial; the house
      ramp is one click away. Only this grid reads it. */
-  const [palette, setPalette] = useState<'house' | 'thermal'>('thermal');
+  /* the ramp the book is painted in — Settings › Appearance (data/ledgerPalette.ts) */
+  const palette = useLedgerPalette();
   /* THE VIEW — the matrix or the calendar; remembered per host (ledgerView.ts): the Map's band opens on the matrix */
   const viewHost = toolbar === 'band' ? 'map' : 'tile';
   const [view, setView] = useState<LedgerView>(() => readLedgerView(viewHost));
@@ -312,6 +314,23 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   useEffect(() => {
     if (view === 'calendar' && legs === 'both') setLegs('net');
   }, [view, legs]);
+  /* A FIRST-VISIT NOTE over the book (idea 12, 2026-10-13): three lines once, dismissed for good on this machine — the
+     guides stay for the full read */
+  const [noteSeen, setNoteSeen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('slayer_map_note') === '1';
+    } catch {
+      return true;
+    }
+  });
+  const dismissNote = () => {
+    setNoteSeen(true);
+    try {
+      localStorage.setItem('slayer_map_note', '1');
+    } catch {
+      /* storage off */
+    }
+  };
   /* THE DATA DOOR (components/gex/BookProvenance.tsx): where the figures come from and how they are computed */
   const [dataOpen, setDataOpen] = useState(false);
   /* THE LEVELS OFF EVERY DATE when the desk says so (data/levelsScope.ts): a surface's levels are its front's; with the
@@ -873,9 +892,6 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      their words they ran to four rows there, the read, the guide and the fullscreen door alone on the last */
   const doorsTightTwo = toolbar === 'band' && !overNamed && !bandScroll && bandMode === 'two' && bandW < BAND_DOORS_WORDS_PX;
   const doorsTight = (toolbar === 'band' && !overNamed && bandMode === 'tight') || doorsTightTwo;
-  /* …and the colours switch, the one pick the first row cannot hold there, leads the compact doors' row instead of
-     sitting alone on a row of its own (a 1024 desk: two rows, not three) */
-  const coloursSwitch = !paper ? <ColoursSwitch palette={palette} onChange={setPalette} paper={paper} bare={stripsBare} testId="ledger-colours" /> : null;
   const strips = (
     <>
       <DropdownSelect label="View" value={view} options={VIEWS_FOR[viewHost].map(v => VIEW_OPTION[v])} onChange={pickView} title="The matrix or the calendar" testId="ledger-view" bare={stripsBare} />
@@ -901,10 +917,8 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       />
       {/* a face of its own, so "Now" alone on a bare band still says which card it is (the audit's L2) */}
       <DropdownSelect label="Show" value={afterBell ? 'after' : 'now'} options={SHOW_OPTIONS} onChange={v => setAfterBell(v === 'after')} title="Which calendar" testId="ledger-show" bare={stripsBare} icon={CalendarClock} />
-      {/* NO COLOURS CARD ON PAPER (Noah, 2026-10-04, with the light Map: "the color pallete should not even be a thing for
-          light theme because its practically invisible") — on paper every heat surface walks one tint-to-pole journey
-          (heatmap.ts), so the two palettes differ by nothing the eye can use; the card stays a dark-page control */}
-      {!doorsTightTwo && coloursSwitch}
+      {/* the colours switch left the band for Settings › Appearance (idea 10, 2026-10-13): a preference made once, not a
+          read, and 150px of every row */}
     </>
   );
   const supremeDoor = (
@@ -1055,7 +1069,6 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   /* the supreme and the read are one name's — they step down into the columns' heads with the chip */
   const doors = (
     <>
-      {doorsTightTwo && coloursSwitch}
       {dataDoor}
       {namesDoor}
       {focusDoor}
@@ -1202,6 +1215,16 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const body = (
     <div className="relative h-full min-h-0 flex flex-col">
       {head}
+      {toolbar === 'band' && !noteSeen && (
+        <div className="shrink-0 flex items-start gap-3 px-4 py-2 border-b border-borderSubtle/60 bg-silver/[0.04] text-[11px] text-textSecondary" data-map-note>
+          <p className="min-w-0 flex-1 leading-relaxed">
+            <span className="font-semibold text-textPrimary">First time here?</span> Rows are strikes; columns are the greeks, or the dates on the calendar. Click a row to keep its strike on every box of the page. The magenta strike is the supreme, the heaviest of the book; the green and red words are the call wall and the put wall. "How to read" on the right says the rest.
+          </p>
+          <button type="button" onClick={dismissNote} className="hit shrink-0 h-6 px-2 rounded-md border border-borderSubtle bg-chip font-mono text-[11px] text-textPrimary hover:border-borderMuted transition-colors" data-map-note-close>
+            Got it
+          </button>
+        </div>
+      )}
       {/* THE BOOK IS A DARK ISLAND on either theme — the calendar's capsules and the
           ladder's bars wear the heat ramp, cut for a dark ground (Noah, 2026-09-12:
           "these ladders need gray or black as the background") */}
@@ -1404,7 +1427,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                   data-ledger-fading={fading || undefined}
                 >
                   {d.view === 'profile' ? (
-                    <ExposureProfileView surface={surfDrawn} expiries={shownFor(book.surface, d)} liveSpot={book.snapshot.spot} selectedStrike={kept} onSelectStrike={keep} paper={paper} />
+                    <ExposureProfileView simulated={!isFeedSnap(book.snapshot)} surface={surfDrawn} expiries={shownFor(book.surface, d)} liveSpot={book.snapshot.spot} selectedStrike={kept} onSelectStrike={keep} paper={paper} />
                   ) : d.view === 'matrix' ? (
                     <ExposureMatrix surface={surfDrawn} liveSpot={book.snapshot.spot} greeks={colGreeks} expiries={shownFor(book.surface, d)} rings={d.rings} hoverStrike={c.host ? hoverStrike : undefined} palette={palette} selectedStrike={kept} marks={c.host ? marks : undefined} onPointer={c.host ? onPointer : handlesFor(c.ticker).point} onSelectStrike={keep} lead={c.host ? leadGreek : undefined} legs={d.legs} />
                   ) : (
