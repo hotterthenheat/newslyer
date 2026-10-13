@@ -96,7 +96,7 @@ const RowFigure = () => {
 const TestFigure = () => {
   const level = 66;
   const bars = [
-    { x: 68, hi: 82, lo: 116, o: 108, c: 88, words: 'no test', why: 'never reached it', tick: null },
+    { x: 68, hi: 82, lo: 102, o: 98, c: 88, words: 'no test', why: 'never reached it', tick: null },
     { x: 200, hi: 54, lo: 100, o: 94, c: 76, words: 'test · held', why: 'reached, closed below', tick: GREEN },
     { x: 332, hi: 48, lo: 96, o: 90, c: 56, words: 'test · broke', why: 'reached, closed through', tick: RED },
   ];
