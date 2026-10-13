@@ -128,10 +128,14 @@ const readCollapsed = () => {
   /* in the landing's window the rail opens folded, so the page has the width — and unwritten (embed.ts) */
   if (EMBEDDED) return true;
   try {
-    return localStorage.getItem(COLLAPSED_KEY) === '1';
+    const stored = localStorage.getItem(COLLAPSED_KEY);
+    if (stored !== null) return stored === '1';
   } catch {
-    return false;
+    /* storage off — the width decides */
   }
+  /* NOTHING CHOSEN YET: a narrow desk (a tablet, a small laptop window) opens folded so the page has the width — at 768
+     the open rail left the Map 500px (the Map's re-audit M5, 2026-10-13); the chevron, once used, is remembered */
+  return typeof window !== 'undefined' && window.innerWidth < 1024;
 };
 
 interface SideNavProps {

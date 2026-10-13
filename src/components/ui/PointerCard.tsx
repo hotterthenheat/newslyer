@@ -69,7 +69,13 @@ export const CardRow = ({ k, v, sub, ink }: { k: string; v: ReactNode; sub?: Rea
 
 const PointerCard = ({ x, y, width = 196, title, aside, children, foot, still = false, testId = 'data-pointer-card', testValue = '' }: PointerCardProps) => {
   const ref = useRef<HTMLDivElement>(null);
-  const onRight = typeof globalThis.innerWidth !== 'number' || x + GAP + width < globalThis.innerWidth - EDGE;
+  const vw = typeof globalThis.innerWidth === 'number' ? globalThis.innerWidth : null;
+  const onRight = vw === null || x + GAP + width < vw - EDGE;
+  /* NEVER OFF THE EDGE (the Map's re-audit H3, 2026-10-13): a card that could not sit to the right went left of the
+     pointer by its whole width, and on a phone that was past the edge of the screen — the left 22px of every line cut.
+     The card goes where it can and stops at the edge. */
+  const wanted = onRight ? x + GAP : x - GAP - width;
+  const left = vw === null ? wanted : Math.max(EDGE, Math.min(wanted, vw - EDGE - width));
   /* The card's own height decides where it stops at the bottom edge — measured
      before paint on every placement, so the card follows the pointer as far
      down as it can and never jumps to a guess */
@@ -82,7 +88,7 @@ const PointerCard = ({ x, y, width = 196, title, aside, children, foot, still = 
     <div
       ref={ref}
       className={`fixed z-[90] rounded-lg border bg-card/85 backdrop-blur-md px-3 py-2.5 shadow-[0_12px_32px_rgba(0,0,0,0.55)] animate-soft-in pointer-events-none ${still ? 'border-silver/40' : 'border-borderMuted'}`}
-      style={{ width, left: onRight ? x + GAP : x - GAP - width, top: Math.max(EDGE, y - LIFT) }}
+      style={{ width, left, top: Math.max(EDGE, y - LIFT) }}
       data-card-kept={still ? '' : undefined}
       {...{ [testId]: testValue }}
     >

@@ -67,7 +67,7 @@ const ExportDoor = ({ surface, greeks, expiries, compact = false }: Props) => {
         aria-expanded={open}
         aria-label="Export"
         title="Save the book as a file — the book as CSV, the levels as JSON"
-        className={`inline-flex items-center gap-1.5 h-7 rounded-md border bg-chip transition-colors font-mono select-none ${compact ? 'w-7 justify-center' : 'px-2.5'} ${open ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
+        className={`hit inline-flex items-center gap-1.5 h-7 rounded-md border bg-chip transition-colors font-mono select-none ${compact ? 'w-7 justify-center' : 'px-2.5'} ${open ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
         data-ledger-export
       >
         <Download className="w-3 h-3 text-textMuted" />

@@ -212,7 +212,7 @@ const SWAP_OUT_MS = 160;
 const BAND_ONE_ROW_PX = 1672;
 const BAND_BARE_ROW_PX = 1390;
 const BAND_TIGHT_ROW_PX = 1140;
-const BAND_NAMED_ROW_PX = 1021;
+const BAND_NAMED_ROW_PX = 1100; /* the named picks with Legs need ~1,090 (re-measured 2026-10-13: 1,080 wrapped, 1,114 held) */
 /** Under this the two rows scroll sideways with their words (a phone) — the re-audit's H2 */
 const BAND_SCROLL_PX = 640;
 /** The doors with their words (data, names, biggest moves, replay, export, the supreme with its date and figure, the
@@ -387,6 +387,15 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      sum of the pieces' widths and their gaps against the band's room; over it, the two tidy rows. The pieces' widths are
      their own in either layout, so the answer holds still. */
   const [bandOver, setBandOver] = useState(false);
+  /* a coarse pointer — a phone, a tablet — read once and on change (index.css's .hit is gated the same way) */
+  const [coarsePointer, setCoarsePointer] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches);
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(pointer: coarse)');
+    const on = () => setCoarsePointer(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
   useLayoutEffect(() => {
     const el = bandEl.current;
     if (!el) return;
@@ -855,7 +864,9 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      the price of staying on one row; a band that wraps anyway pays it for nothing. And under BAND_SCROLL_PX (a phone)
      the two rows scroll sideways with their words (H2) — a bare pick's name lives in a tooltip no thumb can hover. */
   const overNamed = bandOver && bandMode !== 'two';
-  const bandScroll = toolbar === 'band' && bandW > 0 && bandW < BAND_SCROLL_PX;
+  /* …and on a coarse pointer (a tablet) while the picks cannot be named on one row: a thumb cannot hover a bare pick's
+     tooltip, and at 682px (a tablet with the rail folded) the two tidy rows ran to four */
+  const bandScroll = toolbar === 'band' && bandW > 0 && (bandW < BAND_SCROLL_PX || (coarsePointer && bandW < BAND_NAMED_ROW_PX));
   const stripsBare = toolbar === 'band' && !overNamed && !bandScroll && (bandMode === 'bare' || bandMode === 'tight' || (bandMode === 'two' && bandW < BAND_NAMED_ROW_PX));
   /* …and on the two rows under BAND_NAMED_ROW_PX (a 1024 desk, the picks already bare) the doors go compact too: with
      their words they ran to four rows there, the read, the guide and the fullscreen door alone on the last */
@@ -900,7 +911,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       onClick={() => onSelectStrike?.(supreme.strike)}
       title={`The heaviest strike of the whole book by ${GREEK_LABEL[supremeGreek]} — the one the chart wears in magenta — most of it on ${supremeEx?.date ?? ''} · click to keep the strike`}
       /* the cards' 28px (it stood 32 on a 28px row), sentence case like them, and a button's hover edge (the audit's M2, M3, L10) */
-      className="ml-auto inline-flex items-center gap-2.5 h-7 px-2.5 rounded-md border border-supreme/40 bg-supreme/[0.06] hover:bg-supreme/[0.12] hover:border-supreme/70 font-mono transition-colors"
+      className="hit ml-auto inline-flex items-center gap-2.5 h-7 px-2.5 rounded-md border border-supreme/40 bg-supreme/[0.06] hover:bg-supreme/[0.12] hover:border-supreme/70 font-mono transition-colors"
       data-ledger-supreme={doorsTight ? 'compact' : 'full'}
     >
       <span className="text-[11px] font-bold text-supreme">Supreme</span>
@@ -926,7 +937,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       <button
         onClick={() => (full ? close() : setFull(true))}
         title={full ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
-        className="shrink-0 p-1.5 rounded text-textMuted hover:text-textPrimary hover:bg-ink/[0.05] transition-colors"
+        className="hit shrink-0 p-1.5 rounded text-textMuted hover:text-textPrimary hover:bg-ink/[0.05] transition-colors"
       >
         {full ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
       </button>
@@ -993,7 +1004,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       aria-pressed={focusOn}
       disabled={fresh || view !== 'calendar'}
       title={view !== 'calendar' ? 'On the calendar only' : fresh ? 'Not while the replay runs' : focusOn ? 'Back to the whole board (Esc)' : 'Keep only the biggest moves since the open sharp — the badged nodes'}
-      className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border bg-chip transition-colors font-mono select-none disabled:opacity-50 ${focusOn ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
+      className={`hit inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border bg-chip transition-colors font-mono select-none disabled:opacity-50 ${focusOn ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
       data-ledger-focus-door={focusOn ? 'on' : 'off'}
     >
       <Crosshair className={`w-3 h-3 ${focusOn ? 'text-silver' : 'text-textMuted'}`} />
@@ -1009,7 +1020,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
             aria-expanded={adding}
             disabled={names.length >= EXTRA_MAX}
             title={names.length >= EXTRA_MAX ? 'Four names at most — take one off to add another' : 'Show another name beside this one — up to four side by side'}
-            className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border bg-chip transition-colors font-mono select-none disabled:opacity-50 ${adding ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
+            className={`hit inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border bg-chip transition-colors font-mono select-none disabled:opacity-50 ${adding ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
             data-ledger-add
           >
             <Plus className="w-3 h-3 text-textMuted" />
@@ -1068,13 +1079,15 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
         {doors}
       </div>
     ) : (
-      <div ref={bandRef} className="shrink-0 flex flex-col gap-y-1.5 px-3 py-1.5 border-b border-borderSubtle/60 bg-panel" data-ledger-toolbar data-ledger-toolbar-rows="two" data-ledger-toolbar-mode={bandMode} data-ledger-toolbar-scroll={bandScroll ? '' : undefined}>
-        <div className={`flex items-center gap-x-2 gap-y-1.5 ${bandScroll ? 'flex-nowrap overflow-x-auto scroll-row [&>*]:shrink-0' : 'flex-wrap'}`} data-ledger-toolbar-row="picks">
+      /* on a phone each row is 44px tall (py-2 round 28px controls): a scrolling row clips what hangs outside it, so the
+         thumb's box (.hit, index.css) needs the row itself to be the box */
+      <div ref={bandRef} className={`shrink-0 flex flex-col px-3 border-b border-borderSubtle/60 bg-panel ${bandScroll ? 'gap-y-0 py-0' : 'gap-y-1.5 py-1.5'}`} data-ledger-toolbar data-ledger-toolbar-rows="two" data-ledger-toolbar-mode={bandMode} data-ledger-toolbar-scroll={bandScroll ? '' : undefined}>
+        <div className={`flex items-center gap-x-2 gap-y-1.5 ${bandScroll ? 'flex-nowrap overflow-x-auto scroll-row [&>*]:shrink-0 py-2' : 'flex-wrap'}`} data-ledger-toolbar-row="picks">
           {backButton}
           {leadFold}
           {strips}
         </div>
-        <div className={`flex items-center gap-x-2 gap-y-1.5 ${bandScroll ? 'flex-nowrap overflow-x-auto scroll-row [&>*]:shrink-0' : 'flex-wrap'}`} data-ledger-toolbar-row="doors">
+        <div className={`flex items-center gap-x-2 gap-y-1.5 ${bandScroll ? 'flex-nowrap overflow-x-auto scroll-row [&>*]:shrink-0 py-2' : 'flex-wrap'}`} data-ledger-toolbar-row="doors">
           {doors}
         </div>
       </div>

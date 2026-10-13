@@ -162,7 +162,7 @@ export const ReadDoor = ({ open, onClick, compact = false, name, testId = 'data-
     aria-label={open ? `Close ${name ? `${name}'s` : 'the'} read` : `${name ? `${name}'s` : 'The'} read`}
     title={open ? `Close ${name ? `${name}'s` : 'the'} read (Esc)` : `${name ? `${name}'s` : "The book's"} read — the net, the levels, the heaviest strikes and what they did, the strike under the pointer, the move to the close`}
     /* sentence case, the cards' grammar (the audit's M3, 2026-10-13) */
-    className={`inline-flex items-center gap-1.5 h-7 rounded-md border font-mono text-[11px] transition-colors ${compact ? 'w-7 justify-center' : 'px-2.5'} ${
+    className={`hit inline-flex items-center gap-1.5 h-7 rounded-md border font-mono text-[11px] transition-colors ${compact ? 'w-7 justify-center' : 'px-2.5'} ${
       open ? 'border-silver/50 text-silver bg-silver/[0.08]' : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted'
     }`}
     {...{ [testId]: name ?? '' }}

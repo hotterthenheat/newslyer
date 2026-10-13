@@ -53,7 +53,7 @@
 ==================================================
 */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { buildExposureSurface, CALENDAR_DTES } from '../../data/exposureSurface';
 import { buildExposureProfile } from '../../data/exposure';
 import { buildVannaCharm } from '../../data/vannacharm';
@@ -177,6 +177,27 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
   const [hover, setHover] = useState<number | null>(null);
   const [pin, setPin] = useState<Pin>(null);
   const stripRef = useRef<HTMLDivElement>(null);
+  /* FIFTEEN-MINUTE BLOCKS ON A NARROW STRIP (the re-audit's H2, 2026-10-13): 78 five-minute blocks on a phone's 356px
+     were 1.9px wide each, and each is a button. Under 520px the strip holds 26 blocks of a quarter hour; the block kept
+     is read as its first minute, as before. */
+  const [stripW, setStripW] = useState(0);
+  useLayoutEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const read = () => setStripW(prev => (prev === el.clientWidth ? prev : el.clientWidth));
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const narrow = stripW > 0 && stripW < 520;
+  const blockMin = narrow ? 15 : BLOCK_MIN;
+  const blocks = SPAN / blockMin;
+  /* a kept block means a different minute once the blocks change size — let it go rather than keep the wrong one */
+  useEffect(() => {
+    setPin(p => (p?.kind === 'block' ? null : p));
+    setHover(null);
+  }, [narrow]);
   /* The guide as a focus over the whole box (the house pattern, 2026-09-06) */
   const [guideOpen, setGuideOpen] = useState(false);
 
@@ -246,7 +267,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
   const [h, m] = clock.etTime.split(':').map(Number);
   const nowMin = at != null ? Math.max(OPEN_MIN, Math.min(CLOSE_MIN - 1, at)) : h * 60 + m;
   const inSession = at != null ? true : clock.phase === 'OPEN' || clock.phase === 'AUCTION';
-  const nowBlock = inSession ? Math.min(BLOCKS - 1, Math.floor((nowMin - OPEN_MIN) / BLOCK_MIN)) : null;
+  const nowBlock = inSession ? Math.min(blocks - 1, Math.floor((nowMin - OPEN_MIN) / blockMin)) : null;
   const current = inSession ? phaseAt(nowMin) : null;
   const next = inSession ? PHASES.find(p => p.from > nowMin) ?? null : null;
 
@@ -255,25 +276,47 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
   const keptBlock = pin?.kind === 'block' ? pin.i : null;
   const keptPhase = pin?.kind === 'phase' ? PHASES.find(p => p.key === pin.key) ?? null : null;
   const shownBlock = hover ?? keptBlock;
-  const shownMin = shownBlock != null ? OPEN_MIN + shownBlock * BLOCK_MIN : null;
+  /* ONE TAB STOP, THE ARROW KEYS WALK THE BLOCKS (the re-audit's M2): the strip was 78 stops between the box above and
+     the report. The kept block, else the one that is now, takes the Tab; Left and Right move along, Enter keeps, Escape
+     lets go — the tape's and the profile's walk. */
+  const focusBlock = keptBlock ?? nowBlock ?? 0;
+  const onStripKeys = (e: KeyboardEvent<HTMLDivElement>) => {
+    const cur = hover ?? keptBlock ?? nowBlock ?? 0;
+    let next: number | null = null;
+    if (e.key === 'ArrowLeft') next = Math.max(0, cur - 1);
+    else if (e.key === 'ArrowRight') next = Math.min(blocks - 1, cur + 1);
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = blocks - 1;
+    else if (e.key === 'Escape') {
+      setPin(null);
+      setHover(null);
+      return;
+    } else return;
+    e.preventDefault();
+    setHover(next);
+    stripRef.current?.querySelector<HTMLButtonElement>(`[data-block="${next}"]`)?.focus();
+  };
+  /* the guide draws the desk's 78 five-minute blocks whatever the strip's width */
+  const guideNow = inSession ? Math.min(SPAN / BLOCK_MIN - 1, Math.floor((nowMin - OPEN_MIN) / BLOCK_MIN)) : null;
+  const shownMin = shownBlock != null ? OPEN_MIN + shownBlock * blockMin : null;
   const shownPhase = shownMin != null ? phaseAt(shownMin) : null;
-  const cardPct = shownBlock != null ? ((shownBlock + 0.5) / BLOCKS) * 100 : 0;
-  const cardOnRight = shownBlock != null ? shownBlock < BLOCKS * 0.6 : true;
+  const cardPct = shownBlock != null ? ((shownBlock + 0.5) / blocks) * 100 : 0;
+  const cardOnRight = shownBlock != null ? shownBlock < blocks * 0.6 : true;
 
   const line = keptBlock != null
-    ? `${hhmm(OPEN_MIN + keptBlock * BLOCK_MIN)}, ${phaseAt(OPEN_MIN + keptBlock * BLOCK_MIN).name.toLowerCase()} — ${phaseAt(OPEN_MIN + keptBlock * BLOCK_MIN).words(facts)}.`
+    ? `${hhmm(OPEN_MIN + keptBlock * blockMin)}, ${phaseAt(OPEN_MIN + keptBlock * blockMin).name.toLowerCase()} — ${phaseAt(OPEN_MIN + keptBlock * blockMin).words(facts)}.`
     : keptPhase
       ? `${keptPhase.name}, ${hhmm(keptPhase.from)} to ${hhmm(keptPhase.to)} — ${keptPhase.words(facts)}.`
       : current
         ? `${current.name} — ${current.words(facts)}${next ? `. ${next.name} in ${next.from - nowMin} minutes.` : '.'}`
         : `${clock.label} — when it opens: ${PHASES[0].words(facts)}.`;
 
-  const lookingAt = keptBlock != null ? `${hhmm(OPEN_MIN + keptBlock * BLOCK_MIN)} · ${phaseAt(OPEN_MIN + keptBlock * BLOCK_MIN).name}` : keptPhase ? `${keptPhase.name} · ${hhmm(keptPhase.from)}–${hhmm(keptPhase.to)}` : null;
+  const lookingAt = keptBlock != null ? `${hhmm(OPEN_MIN + keptBlock * blockMin)} · ${phaseAt(OPEN_MIN + keptBlock * blockMin).name}` : keptPhase ? `${keptPhase.name} · ${hhmm(keptPhase.from)}–${hhmm(keptPhase.to)}` : null;
 
   return (
     <section className="relative flex flex-col min-w-0" data-trader-clock>
       <GuideFocus open={guideOpen} onClose={() => setGuideOpen(false)} title="How to read the clock" testId="clock-guide" viewport>
-        <ClockGuide nowBlock={nowBlock} line={line} bellShare={facts.bellShare} pin={facts.pin} supreme={facts.supreme} charmStrike={facts.charmStrike} />
+        <ClockGuide nowBlock={guideNow} line={line} bellShare={facts.bellShare} pin={facts.pin} supreme={facts.supreme} charmStrike={facts.charmStrike} />
       </GuideFocus>
       <div className="px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap">
         <div className="min-w-0 flex-1">
@@ -328,7 +371,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
         <div className="relative h-5 max-lg:h-10" data-clock-phases>
           {PHASES.map((p, i) => {
             const active = current?.key === p.key;
-            const kept = keptPhase?.key === p.key || (keptBlock != null && phaseAt(OPEN_MIN + keptBlock * BLOCK_MIN).key === p.key);
+            const kept = keptPhase?.key === p.key || (keptBlock != null && phaseAt(OPEN_MIN + keptBlock * blockMin).key === p.key);
             const turn = p.key === 'turn';
             const last = p.key === 'auction';
             /* With something kept, its name stays sharp and the others go soft with their blocks */
@@ -341,7 +384,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
                 onClick={() => onNameClick(p.key)}
                 /* Under lg: every other name on the second row, the close's name on the strip's right edge (it ran 8px past a
                    phone's strip from its own start, so the phone pass of 2026-09-13 hid it) */
-                className={`absolute top-0 text-[11px] font-medium whitespace-nowrap transition-colors ${nameCls} ${i % 2 === 1 ? 'max-lg:top-5' : ''} ${last ? 'max-lg:!left-auto max-lg:!right-0 max-lg:!translate-x-0' : ''}`}
+                className={`hit absolute top-0 text-[11px] font-medium whitespace-nowrap transition-colors ${nameCls} ${i % 2 === 1 ? 'max-lg:top-5' : ''} ${last ? 'max-lg:!left-auto max-lg:!right-0 max-lg:!translate-x-0' : ''}`}
                 style={{
                   left: `${pct(turn ? p.to : p.from)}%`,
                   transform: turn ? 'translateX(calc(-100% - 6px))' : last ? 'translateX(2px)' : undefined,
@@ -358,9 +401,21 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
 
         {/* THE STRIP — 78 five-minute blocks; shade = the phase's weight, silver = now */}
         <div className="relative" onPointerLeave={() => setHover(null)}>
-          <div className="flex gap-[2px] h-[22px]" data-clock-strip role="img" aria-label="Today's session as five-minute blocks, shaded by how hard hedging pushes">
-            {Array.from({ length: BLOCKS }, (_, i) => {
-              const min = OPEN_MIN + i * BLOCK_MIN;
+          {/* a narrow strip is the thumb's height (44px) — the blocks are the targets, and 10px wide is all the width a quarter
+              hour gets on a phone; the height is ours to give */}
+          <div
+            className={`flex gap-[2px] ${narrow ? 'h-11' : 'h-[22px]'}`}
+            data-clock-strip
+            data-block-minutes={blockMin}
+            role="group"
+            aria-label={`Today's session as ${narrow ? 'fifteen' : 'five'}-minute blocks, shaded by how hard hedging pushes — the arrow keys walk them, Enter keeps one`}
+            onKeyDown={onStripKeys}
+            onBlur={e => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHover(null);
+            }}
+          >
+            {Array.from({ length: blocks }, (_, i) => {
+              const min = OPEN_MIN + i * blockMin;
               const p = phaseAt(min);
               const isNow = nowBlock === i;
               const future = nowBlock != null && i > nowBlock;
@@ -376,7 +431,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
               /* The phase you are in sits a touch brighter than its weight alone;
                  the block under the pointer, or a kept one, brighter still */
               const alpha = Math.min(0.8, 0.1 + p.weight * 0.3 + (inCurrent ? 0.08 : 0) + (hovered ? 0.3 : 0) + (!hovered && pin && inFocus ? 0.15 : 0));
-              const boundary = i > 0 && phaseAt(min - BLOCK_MIN).key !== p.key;
+              const boundary = i > 0 && phaseAt(min - blockMin).key !== p.key;
               const dim = hover != null && !hovered;
               return (
                 <button
@@ -387,6 +442,8 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
                   data-focus={pin ? (inFocus ? 'in' : 'soft') : undefined}
                   aria-label={`${hhmm(min)} · ${p.name}`}
                   aria-pressed={keptBlock === i}
+                  tabIndex={i === focusBlock ? 0 : -1}
+                  onFocus={() => setHover(i)}
                   onPointerEnter={() => setHover(i)}
                   onClick={() => onBlockClick(i)}
                   className={`flex-1 min-w-0 rounded-[2px] transition-[opacity,background-color,filter] duration-200 ${boundary ? 'ml-[3px]' : ''}`}
@@ -420,10 +477,11 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
             <div
               data-clock-card
               data-kept={keptBlock === shownBlock ? 'true' : 'false'}
-              className="absolute z-10 pointer-events-none rounded-lg border border-borderMuted bg-card/95 backdrop-blur-sm shadow-[0_8px_24px_rgba(0,0,0,0.5)] px-3 py-2 w-[300px] animate-soft-in"
+              className={`absolute z-10 pointer-events-none rounded-lg border border-borderMuted bg-card/95 backdrop-blur-sm shadow-[0_8px_24px_rgba(0,0,0,0.5)] px-3 py-2 animate-soft-in ${narrow ? 'left-0 right-0' : 'w-[300px]'}`}
               /* UNDER THE STRIP, over the sentence that says the same (the audit's M7, 2026-10-13): risen above the strip, a card
-                 for a block in the right half covered the box's own facts (Now · Next · Expires) */
-              style={{ left: `${cardPct}%`, top: 'calc(100% + 4px)', transform: cardOnRight ? 'translateX(12px)' : 'translateX(calc(-100% - 12px))' }}
+                 for a block in the right half covered the box's own facts (Now · Next · Expires). On a narrow strip it is the
+                 strip's own width — beside the block it ran off a phone's edge (the re-audit). */
+              style={narrow ? { top: 'calc(100% + 4px)' } : { left: `${cardPct}%`, top: 'calc(100% + 4px)', transform: cardOnRight ? 'translateX(12px)' : 'translateX(calc(-100% - 12px))' }}
             >
               <div className="flex items-baseline gap-2">
                 <span className="font-mono text-[12px] font-semibold tnum" style={{ color: keptBlock === shownBlock ? SILVER : undefined }}>

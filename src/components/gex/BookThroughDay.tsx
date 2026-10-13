@@ -217,7 +217,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope }: Prop
                   type="button"
                   onClick={() => setFace(f)}
                   aria-pressed={face === f}
-                  className={`h-6 rounded px-2 font-mono text-[11px] transition-colors ${face === f ? 'bg-silver/[0.1] text-textPrimary' : 'text-textMuted hover:text-textPrimary'}`}
+                  className={`hit h-6 rounded px-2 font-mono text-[11px] transition-colors ${face === f ? 'bg-silver/[0.1] text-textPrimary' : 'text-textMuted hover:text-textPrimary'}`}
                   data-through-face-door={f}
                 >
                   {f === 'net' ? 'Net gamma' : 'Strike × time'}

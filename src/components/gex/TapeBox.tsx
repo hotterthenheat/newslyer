@@ -348,7 +348,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at }: Props) 
                       type="button"
                       onClick={() => onPick(g.price)}
                       title={`${words} ${fmtStrike(g.price)} — click to keep the strike${alertable.length === 0 ? ' · no bell: the pin is where price settles, not a line it crosses' : ''}`}
-                      className={`inline-flex items-center gap-1.5 rounded px-1.5 font-mono text-[11px] font-bold tracking-wider transition-colors ${on ? 'bg-silver/[0.12]' : 'hover:bg-ink/[0.06]'}`}
+                      className={`hit inline-flex items-center gap-1.5 rounded px-1.5 font-mono text-[11px] font-bold tracking-wider transition-colors ${on ? 'bg-silver/[0.12]' : 'hover:bg-ink/[0.06]'}`}
                       style={{ height: g.h }}
                     >
                       <span className="flex flex-col leading-[12px]">

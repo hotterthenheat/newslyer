@@ -601,7 +601,7 @@ export function Palette({ count = 4, corner = CORNER, morph = 50, sets, index = 
           and the two pills never disagree about what a corner
           is here. */}
       <div className="pal-slab pal-tool" style={{ padding: pad, borderRadius: slabR }}>
-        <button className="pal-go" type="button" onClick={roll} aria-label={title ?? 'Generate a new palette'} title={title} style={{ width: tool, height: barH, borderRadius: r }} data-palette-go>
+        <button className="pal-go hit" type="button" onClick={roll} aria-label={title ?? 'Generate a new palette'} title={title} style={{ width: tool, height: barH, borderRadius: r }} data-palette-go>
           {/* a turn per press, and it keeps turning the same
               way — a glyph that unwound would say "undo" */}
           <RefreshCw size={Math.round(Math.min(18, barH * 0.62))} strokeWidth={2.2} style={{ rotate: `${spins.current * 180}deg` }} />

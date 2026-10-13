@@ -23,7 +23,9 @@ const SANS = '"Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans
 
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
-const Label = ({ x, y, children, anchor = 'start', fill = INK_2, size = 9.5, mono = false, weight = 400 }: { x: number; y: number; children: string; anchor?: 'start' | 'middle' | 'end'; fill?: string; size?: number; mono?: boolean; weight?: number }) => (
+/* THE DRAWINGS AT THEIR OWN SIZE (the re-audit's M1, 2026-10-13): 400 wide, 11px throughout; a phone scrolls them */
+const FIG_W = 400;
+const Label = ({ x, y, children, anchor = 'start', fill = INK_2, size = 11, mono = false, weight = 400 }: { x: number; y: number; children: string; anchor?: 'start' | 'middle' | 'end'; fill?: string; size?: number; mono?: boolean; weight?: number }) => (
   <text x={x} y={y} textAnchor={anchor} dominantBaseline="middle" fontFamily={mono ? MONO : SANS} fontSize={size} fontWeight={weight} fill={fill}>
     {children}
   </text>
@@ -32,34 +34,34 @@ const Label = ({ x, y, children, anchor = 'start', fill = INK_2, size = 9.5, mon
 /** FIGURE 1 — one row: the level, its grade, the session strip with its ticks, the facts */
 const RowFigure = () => {
   const ticks = [
-    { x: 138, kind: 'held' },
-    { x: 176, kind: 'held' },
-    { x: 214, kind: 'broke' },
-    { x: 262, kind: 'held' },
+    { x: 150, kind: 'held' },
+    { x: 192, kind: 'held' },
+    { x: 236, kind: 'broke' },
+    { x: 292, kind: 'held' },
   ];
   return (
-    <svg viewBox="0 0 368 166" width="100%" role="img" aria-label="One row of the report: the level's name and price, its grade, the session strip with green and red ticks, and the facts" data-guide-figure="row">
+    <svg viewBox={`0 0 ${FIG_W} 180`} width={FIG_W} height={180} role="img" aria-label="One row of the report: the level's name and price, its grade, the session strip with green and red ticks, and the facts" data-guide-figure="row">
       {/* The level */}
-      <Label x={14} y={18} fill={GREEN} size={9} weight={600}>
+      <Label x={14} y={18} fill={GREEN} weight={600}>
         Call wall
       </Label>
-      <Label x={14} y={36} fill={INK} size={14} mono weight={600}>
+      <Label x={14} y={38} fill={INK} size={15} mono weight={600}>
         525
       </Label>
-      <rect x={14} y={48} width={74} height={15} rx={7.5} fill="rgb(var(--bull) / 0.1)" stroke="rgb(var(--bull) / 0.2)" />
-      <Label x={51} y={55.5} anchor="middle" fill={GREEN} size={8.5} weight={500}>
+      <rect x={14} y={50} width={80} height={16} rx={8} fill="rgb(var(--bull) / 0.1)" stroke="rgb(var(--bull) / 0.2)" />
+      <Label x={54} y={58.5} anchor="middle" fill={GREEN} weight={500}>
         held 3 of 4
       </Label>
       {/* The session strip */}
-      <line x1={110} x2={330} y1={36.5} y2={36.5} stroke="#ffffff" strokeOpacity="0.1" />
+      <line x1={120} x2={370} y1={38.5} y2={38.5} stroke={INK} strokeOpacity="0.12" />
       {ticks.map(t => (
-        <line key={t.x} x1={t.x} x2={t.x} y1={t.kind === 'broke' ? 24 : 28} y2={t.kind === 'broke' ? 49 : 45} stroke={t.kind === 'broke' ? RED : GREEN} strokeWidth={t.kind === 'broke' ? 2 : 1.5} strokeOpacity="0.9" />
+        <line key={t.x} x1={t.x} x2={t.x} y1={t.kind === 'broke' ? 26 : 30} y2={t.kind === 'broke' ? 51 : 47} stroke={t.kind === 'broke' ? RED : GREEN} strokeWidth={t.kind === 'broke' ? 2 : 1.5} strokeOpacity="0.9" />
       ))}
-      <line x1={330} x2={330} y1={27} y2={46} stroke={SILVER} strokeOpacity="0.6" />
-      <Label x={110} y={58} fill={INK_3} size={8} mono>
+      <line x1={370} x2={370} y1={29} y2={48} stroke={SILVER} strokeOpacity="0.6" />
+      <Label x={120} y={60} fill={INK_3} mono>
         09:30
       </Label>
-      <Label x={330} y={58} anchor="end" fill={INK_3} size={8} mono>
+      <Label x={370} y={60} anchor="end" fill={INK_3} mono>
         now
       </Label>
       {/* The facts */}
@@ -71,53 +73,53 @@ const RowFigure = () => {
         ['Since the open', 'growing +12%', INK],
       ].map(([k, v, c], i) => (
         <g key={k}>
-          <Label x={14 + i * 72} y={80} fill={INK_3} size={8}>
+          <Label x={14 + i * 76} y={84} fill={INK_3}>
             {k}
           </Label>
-          <Label x={14 + i * 72} y={94} fill={c} size={9.5} mono>
+          <Label x={14 + i * 76} y={99} fill={c} mono>
             {v}
           </Label>
         </g>
       ))}
       {/* Callouts */}
-      <circle cx={18} cy={116} r={3.5} fill={GREEN} />
-      <Label x={27} y={116}>a green tick: price reached the level in that minute and it held</Label>
-      <circle cx={18} cy={131} r={3.5} fill={RED} />
-      <Label x={27} y={131}>a red tick: price closed through it · the strip is the whole session, 9:30 to now</Label>
-      <Label x={14} y={145} fill={INK_3}>the chip sums the row up</Label>
-      <Label x={14} y={158} fill={INK_3}>the facts count the ticks and track the level's hedging since the open</Label>
+      <circle cx={18} cy={120} r={3.5} fill={GREEN} />
+      <Label x={27} y={120}>a green tick: price reached the level in that minute and it held</Label>
+      <circle cx={18} cy={136} r={3.5} fill={RED} />
+      <Label x={27} y={136}>a red tick: price closed through it · the strip runs 09:30 to now</Label>
+      <Label x={14} y={152} fill={INK_3}>the chip sums the row up</Label>
+      <Label x={14} y={168} fill={INK_3}>the facts count the ticks and track the hedging since the open</Label>
     </svg>
   );
 };
 
 /** FIGURE 2 — what counts: three one-minute bars against a level */
 const TestFigure = () => {
-  const level = 62;
+  const level = 66;
   const bars = [
-    { x: 70, hi: 78, lo: 112, o: 104, c: 84, words: 'no test', why: 'never reached it', tick: null },
-    { x: 184, hi: 50, lo: 96, o: 90, c: 72, words: 'test · held', why: 'reached, closed below', tick: GREEN },
-    { x: 298, hi: 44, lo: 92, o: 86, c: 52, words: 'test · broke', why: 'reached, closed through', tick: RED },
+    { x: 68, hi: 82, lo: 116, o: 108, c: 88, words: 'no test', why: 'never reached it', tick: null },
+    { x: 200, hi: 54, lo: 100, o: 94, c: 76, words: 'test · held', why: 'reached, closed below', tick: GREEN },
+    { x: 332, hi: 48, lo: 96, o: 90, c: 56, words: 'test · broke', why: 'reached, closed through', tick: RED },
   ];
   return (
-    <svg viewBox="0 0 368 150" width="100%" role="img" aria-label="Three one-minute bars against a level line: one never reaches it, one reaches it and holds, one closes through it" data-guide-figure="test">
-      <line x1={14} x2={354} y1={level + 0.5} y2={level + 0.5} stroke={GREEN} strokeOpacity="0.8" />
-      <Label x={14} y={level - 8} fill={GREEN} size={8.5} weight={600}>
+    <svg viewBox={`0 0 ${FIG_W} 156`} width={FIG_W} height={156} role="img" aria-label="Three one-minute bars against a level line: one never reaches it, one reaches it and holds, one closes through it" data-guide-figure="test">
+      <line x1={14} x2={386} y1={level + 0.5} y2={level + 0.5} stroke={GREEN} strokeOpacity="0.8" />
+      <Label x={14} y={level - 10} fill={GREEN} weight={600}>
         Call wall 525
       </Label>
       {bars.map(b => (
         <g key={b.x}>
           <line x1={b.x} x2={b.x} y1={b.hi} y2={b.lo} stroke={INK} strokeOpacity="0.8" />
-          <rect x={b.x - 4} y={Math.min(b.o, b.c)} width={8} height={Math.abs(b.o - b.c)} fill={b.c < b.o ? INK : '#0a0a0a'} stroke={INK} strokeOpacity="0.9" />
-          {b.tick && <line x1={b.x} x2={b.x} y1={116} y2={128} stroke={b.tick} strokeWidth={b.tick === RED ? 2 : 1.5} />}
-          <Label x={b.x} y={106} anchor="middle" fill={b.tick ?? INK_3} size={9} weight={600}>
+          <rect x={b.x - 4} y={Math.min(b.o, b.c)} width={8} height={Math.abs(b.o - b.c)} fill={b.c < b.o ? INK : 'rgb(var(--panel))'} stroke={INK} strokeOpacity="0.9" />
+          {b.tick && <line x1={b.x} x2={b.x} y1={120} y2={132} stroke={b.tick} strokeWidth={b.tick === RED ? 2 : 1.5} />}
+          <Label x={b.x} y={110} anchor="middle" fill={b.tick ?? INK_3} weight={600}>
             {b.words}
           </Label>
-          <Label x={b.x} y={137} anchor="middle" fill={INK_3} size={8.5}>
+          <Label x={b.x} y={142} anchor="middle" fill={INK_3}>
             {b.why}
           </Label>
         </g>
       ))}
-      <Label x={190} y={20} anchor="middle" fill={INK_3} size={9}>
+      <Label x={200} y={20} anchor="middle" fill={INK_3}>
         one-minute bars · up bars hollow, down bars filled
       </Label>
     </svg>
@@ -149,7 +151,7 @@ const ReportGuide = ({ rows, bars, from }: ReportGuideProps) => {
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
           Every row is one of today's levels: the call wall, the put wall, the flip, the pin, the supreme. Its price is on the left with a chip that sums up its day. The strip is the whole session from 9:30 to now. Every time price reached the level in a one-minute bar, the strip gets a tick: green if the level held, red if price closed through it. The facts count those ticks and say how much hedging the level has gained or lost since the open.
         </p>
-        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2">
+        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2 overflow-x-auto scroll-row">
           <RowFigure />
         </div>
       </div>
@@ -158,7 +160,7 @@ const ReportGuide = ({ rows, bars, from }: ReportGuideProps) => {
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
           A test is a one-minute bar whose range reaches the level. If the bar closes back on the near side, the level held. If it closes on the far side, it broke. A bar that never reaches the level is not a test at all. Hover a tick to see the minute and the close; click a level to make it the strike the rest of the page follows.
         </p>
-        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2">
+        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2 overflow-x-auto scroll-row">
           <TestFigure />
         </div>
       </div>

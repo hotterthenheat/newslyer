@@ -37,50 +37,54 @@ const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
 const Cell = ({ x, y, w, fill, text, ink = '#0a0a0a', ring }: { x: number; y: number; w: number; fill: string; text?: string; ink?: string; ring?: string }) => (
   <g>
-    <rect x={x} y={y - 6} width={w} height={12} rx={6} fill={fill} />
-    {ring && <rect x={x - 1.5} y={y - 7.5} width={w + 3} height={15} rx={7.5} fill="none" stroke={ring} strokeWidth="1.25" />}
+    <rect x={x} y={y - 7} width={w} height={14} rx={7} fill={fill} />
+    {ring && <rect x={x - 1.5} y={y - 8.5} width={w + 3} height={17} rx={8.5} fill="none" stroke={ring} strokeWidth="1.25" />}
     {text && (
-      <text x={x + w - 5} y={y + 0.5} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize="8" fontWeight="600" fill={ink}>
+      <text x={x + w - 6} y={y + 0.5} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize="11" fontWeight="600" fill={ink}>
         {text}
       </text>
     )}
   </g>
 );
 
-const Label = ({ x, y, children, anchor = 'start', fill = INK_2, size = 9.5, mono = false }: { x: number; y: number; children: string; anchor?: 'start' | 'middle' | 'end'; fill?: string; size?: number; mono?: boolean }) => (
+/* THE DRAWINGS AT THEIR OWN SIZE (the re-audit's M1, 2026-10-13): drawn 368 wide and stretched to the card, their
+   8–9.5px type never reached the page's 11px floor and the dates in them were a September that never moved. They are
+   400 wide now, 11px throughout, dated from today, and a phone scrolls them sideways rather than shrinking them. */
+const FIG_W = 400;
+const Label = ({ x, y, children, anchor = 'start', fill = INK_2, size = 11, mono = false }: { x: number; y: number; children: string; anchor?: 'start' | 'middle' | 'end'; fill?: string; size?: number; mono?: boolean }) => (
   <text x={x} y={y} textAnchor={anchor} dominantBaseline="middle" fontFamily={mono ? MONO : SANS} fontSize={size} fill={fill}>
     {children}
   </text>
 );
 
 const COLS = [
-  { x: 50, head: 'Sep 8 · today' },
-  { x: 132, head: 'Sep 9' },
-  { x: 214, head: 'Sep 11' },
-  { x: 296, head: 'Sep 18' },
+  { x: 52, head: 'today' },
+  { x: 138, head: '+1 day' },
+  { x: 224, head: '+3 days' },
+  { x: 310, head: '+10 days' },
 ];
-const CELL_W = 72;
+const CELL_W = 80;
 
 /** FIGURE 1 — the grid: a strike per row, an expiry per column, the supreme starred */
 const GridFigure = () => {
   const rows = [
-    { y: 44, k: '496', cells: [[COOL_1, '$94M'], [COOL_1, '$81M'], [PALE, '$40M'], [PALE, '$22M']] },
-    { y: 66, k: '495', wall: 'call', cells: [[COOL_3, '$256M', '#fff', true], [COOL_3, '$231M', '#fff'], [COOL_2, '$188M'], [COOL_2, '$150M']] },
-    { y: 88, k: '494', cells: [[WARM_1, '$61M'], [PALE, '$38M'], [PALE, '$19M'], [PALE, '$9M']] },
-    { y: 110, k: '493', wall: 'put', cells: [[WARM_3, '$131M', '#fff'], [WARM_2, '$104M'], [WARM_2, '$96M'], [WARM_1, '$70M']] },
+    { y: 46, k: '496', cells: [[COOL_1, '$94M'], [COOL_1, '$81M'], [PALE, '$40M'], [PALE, '$22M']] },
+    { y: 74, k: '495', wall: 'call', cells: [[COOL_3, '$256M', '#fff', true], [COOL_3, '$231M', '#fff'], [COOL_2, '$188M'], [COOL_2, '$150M']] },
+    { y: 102, k: '494', cells: [[WARM_1, '$61M'], [PALE, '$38M'], [PALE, '$19M'], [PALE, '$9M']] },
+    { y: 130, k: '493', wall: 'put', cells: [[WARM_3, '$131M', '#fff'], [WARM_2, '$104M'], [WARM_2, '$96M'], [WARM_1, '$70M']] },
   ] as { y: number; k: string; wall?: string; cells: (string | boolean)[][] }[];
   return (
-    <svg viewBox="0 0 368 150" width="100%" role="img" aria-label="A grid of capsules: one strike per row, one expiry per column, the heaviest cell ringed in magenta with a star" data-guide-figure="grid">
+    <svg viewBox={`0 0 ${FIG_W} 196`} width={FIG_W} height={196} role="img" aria-label="A grid of capsules: one strike per row, one expiry per column, the heaviest cell ringed in magenta with a star" data-guide-figure="grid">
       {/* Column heads — the dates, today first */}
       {COLS.map((c, i) => (
-        <Label key={c.head} x={c.x + CELL_W / 2} y={18} anchor="middle" fill={i === 0 ? INK : INK_3} size={8.5} mono>
+        <Label key={c.head} x={c.x + CELL_W / 2} y={18} anchor="middle" fill={i === 0 ? INK : INK_3} mono>
           {c.head}
         </Label>
       ))}
-      <line x1={50} x2={368} y1={27.5} y2={27.5} stroke={GRID} />
+      <line x1={52} x2={FIG_W - 10} y1={29.5} y2={29.5} stroke={GRID} />
       {rows.map(r => (
         <g key={r.k}>
-          <Label x={40} y={r.y} anchor="end" fill={r.wall === 'put' ? SUPREME : r.wall === 'call' ? 'rgb(var(--bull))' : INK_2} size={9} mono>
+          <Label x={44} y={r.y} anchor="end" fill={r.wall === 'put' ? SUPREME : r.wall === 'call' ? 'rgb(var(--bull))' : INK_2} mono>
             {r.k}
           </Label>
           {r.cells.map((c, i) => (
@@ -89,28 +93,26 @@ const GridFigure = () => {
         </g>
       ))}
       {/* The heaviest cell's star, left of its strike; the supreme is the strike printed in magenta */}
-      <text x={12} y={66.5} textAnchor="middle" dominantBaseline="middle" fontFamily={SANS} fontSize="9" fill={INK}>
+      <text x={12} y={74.5} textAnchor="middle" dominantBaseline="middle" fontFamily={SANS} fontSize="11" fill={INK}>
         ★
       </text>
       {/* Spot, between the rows it sits between — the chip at the line's end */}
-      <line x1={50} x2={322} y1={99.5} y2={99.5} stroke={INK} strokeOpacity="0.35" strokeDasharray="2 3" />
-      <rect x={326} y={93.5} width={42} height={12} rx={3} fill={INK} />
+      <line x1={52} x2={338} y1={116} y2={116} stroke={INK} strokeOpacity="0.35" strokeDasharray="2 3" />
+      <rect x={342} y={110} width={48} height={12} rx={3} fill={INK} />
       {/* the chip is the page's ink, so its figure is the page's ground: on paper the dark figure sat on a dark chip, unread */}
-      <text x={347} y={99.5} textAnchor="middle" dominantBaseline="middle" fontFamily={MONO} fontSize={8} className="fill-[#0a0a0a] [[data-theme='light']_&]:fill-canvas">
+      <text x={366} y={116.5} textAnchor="middle" dominantBaseline="middle" fontFamily={MONO} fontSize="11" className="fill-[#0a0a0a] [[data-theme='light']_&]:fill-canvas">
         493.60
       </text>
-      <Label x={50} y={131} fill={INK_3} size={9}>
-        one strike per row, one date per column · the figure is the hedging there
+      <Label x={52} y={152} fill={INK_3}>
+        a strike per row, a date per column · the figure is hedging
       </Label>
-      <text x={50} y={144} dominantBaseline="middle" fontFamily={SANS} fontSize="9" fill={INK_2}>
-        ★ the heaviest cell
+      <text x={52} y={168} dominantBaseline="middle" fontFamily={SANS} fontSize="11" fill={INK_2}>
+        ★ heaviest cell
       </text>
-      {/* the three notes keep clear of each other (the second ran into the third), and the line is named by its
-          dots — it is white only on the dark page */}
-      <text x={136} y={144} dominantBaseline="middle" fontFamily={SANS} fontSize="9" fill={SUPREME}>
+      <text x={150} y={168} dominantBaseline="middle" fontFamily={SANS} fontSize="11" fill={SUPREME}>
         magenta strike: the supreme
       </text>
-      <Label x={264} y={144} fill={INK_3} size={9}>
+      <Label x={52} y={184} fill={INK_3}>
         dotted line: the market
       </Label>
     </svg>
@@ -119,37 +121,37 @@ const GridFigure = () => {
 
 /** FIGURE 2 — read across, read down: what stays, what expires at the bell */
 const ReadFigure = () => (
-  <svg viewBox="0 0 368 150" width="100%" role="img" aria-label="The same grid: one row stays heavy across every column, another is heavy only today; the today column expires at the bell" data-guide-figure="read">
+  <svg viewBox={`0 0 ${FIG_W} 164`} width={FIG_W} height={164} role="img" aria-label="The same grid: one row stays heavy across every column, another is heavy only today; the today column expires at the bell" data-guide-figure="read">
     {COLS.map((c, i) => (
-      <Label key={c.head} x={c.x + CELL_W / 2} y={18} anchor="middle" fill={i === 0 ? INK : INK_3} size={8.5} mono>
+      <Label key={c.head} x={c.x + CELL_W / 2} y={18} anchor="middle" fill={i === 0 ? INK : INK_3} mono>
         {c.head}
       </Label>
     ))}
-    <line x1={50} x2={368} y1={27.5} y2={27.5} stroke={GRID} />
+    <line x1={52} x2={FIG_W - 10} y1={29.5} y2={29.5} stroke={GRID} />
     {/* A wall that stays: heavy across the row */}
-    <Label x={40} y={48} anchor="end" fill="rgb(var(--bull))" size={9} mono>
+    <Label x={44} y={50} anchor="end" fill="rgb(var(--bull))" mono>
       495
     </Label>
     {COLS.map((c, i) => (
-      <Cell key={`a${i}`} x={c.x} y={48} w={CELL_W} fill={COOL_3} text={['$256M', '$231M', '$188M', '$150M'][i]} ink="#fff" />
+      <Cell key={`a${i}`} x={c.x} y={50} w={CELL_W} fill={COOL_3} text={['$256M', '$231M', '$188M', '$150M'][i]} ink="#fff" />
     ))}
-    <path d={`M${COLS[3].x + CELL_W + 4} 41 h5 v14 h-5`} fill="none" stroke={SILVER} />
+    <path d={`M${COLS[3].x + CELL_W + 3} 43 h5 v14 h-5`} fill="none" stroke={SILVER} />
     {/* A one-day wall: heavy today, gone after */}
-    <Label x={40} y={78} anchor="end" fill={INK_2} size={9} mono>
+    <Label x={44} y={80} anchor="end" fill={INK_2} mono>
       492
     </Label>
     {COLS.map((c, i) => (
-      <Cell key={`b${i}`} x={c.x} y={78} w={CELL_W} fill={i === 0 ? WARM_3 : PALE} text={['$148M', '$6M', '$3M', '$1M'][i]} ink={i === 0 ? '#fff' : '#0a0a0a'} />
+      <Cell key={`b${i}`} x={c.x} y={80} w={CELL_W} fill={i === 0 ? WARM_3 : PALE} text={['$148M', '$6M', '$3M', '$1M'][i]} ink={i === 0 ? '#fff' : '#0a0a0a'} />
     ))}
-    <Label x={50} y={104} fill={SILVER} size={9}>
+    <Label x={52} y={108} fill={SILVER}>
       read across → heavy in every column, the level stays for weeks
     </Label>
-    <Label x={50} y={117} fill={SILVER} size={9}>
+    <Label x={52} y={124} fill={SILVER}>
       heavy today only → a one-day wall, gone after the bell
     </Label>
     {/* The today column, bracketed */}
-    <path d={`M${COLS[0].x} 128 v4 h${CELL_W} v-4`} fill="none" stroke={INK_2} />
-    <Label x={50} y={141} fill={INK_2} size={9}>
+    <path d={`M${COLS[0].x} 136 v4 h${CELL_W} v-4`} fill="none" stroke={INK_2} />
+    <Label x={52} y={152} fill={INK_2}>
       read down today's column → what expires at the close
     </Label>
   </svg>
@@ -189,9 +191,9 @@ const LedgerGuide = ({ surface, greek }: LedgerGuideProps) => {
       <div>
         <p className="text-[12px] font-semibold text-textPrimary">The grid · one strike per row, one date per column</p>
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
-          Each row is a strike, a price level. Each column is an expiry date, today first and later dates to the right. Each cell is a capsule: the figure inside is how much dealer hedging sits at that strike for that date. Brighter and longer means more. Blue pushes back against a move there, orange pushes it along. The strike printed in magenta is the supreme, the heaviest strike of the whole book and the one the chart wears in magenta; the cell with the star is the heaviest single cell. The short tags after a strike: CW the call wall, PW the put wall, PIN the gamma pin, YOU a strike you hold.
+          Each row is a strike, a price level. Each column is an expiry date, today first and later dates to the right. Each cell is a capsule: the figure inside is how much dealer hedging sits at that strike for that date. Brighter and longer means more. Blue pushes back against a move there, orange pushes it along. The strike printed in magenta is the supreme, the heaviest strike of the whole book and the one the chart wears in magenta; the cell with the star is the heaviest single cell. The words after a strike name the call wall, the put wall, the gamma pin, and a strike you own.
         </p>
-        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2">
+        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2 overflow-x-auto scroll-row">
           <GridFigure />
         </div>
       </div>
@@ -200,7 +202,7 @@ const LedgerGuide = ({ surface, greek }: LedgerGuideProps) => {
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
           Read across a row to see how long a level lasts. Heavy in every column means the level stays for weeks. Heavy today and empty after means it is a one-day wall that is gone at the bell. Read down today's column to see what expires at the close. The "After the close" choice up top shows the same grid with today's column removed, the calendar as it will stand tomorrow morning.
         </p>
-        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2">
+        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2 overflow-x-auto scroll-row">
           <ReadFigure />
         </div>
       </div>

@@ -192,7 +192,7 @@ const MapDesk = () => {
       onClick={startReplay}
       title={`Replay ${marketOpen ? "today's" : 'the last'} session from the open — every box on the page reads the book as it stood`}
       /* sentence case, the cards' grammar since 2026-10-10 (the audit's M3) */
-      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted font-mono text-[11px] text-textSecondary hover:text-textPrimary transition-colors"
+      className="hit inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted font-mono text-[11px] text-textSecondary hover:text-textPrimary transition-colors"
       data-map-replay
     >
       <Play className="w-3 h-3" /> Replay

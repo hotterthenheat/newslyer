@@ -215,20 +215,22 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
             "held its first test" four times over two lines */}
         {rates.sessions > 0 && (
           <div className="mt-1.5" title="Each session's levels are read off the first book kept that morning, never a later one — no look-ahead; the rule for a test and a break is this report's" data-base-rates={rates.sessions}>
+            {/* the lead says what the figures are, once; the facts carry the figures (the re-audit's M6: "held its first
+                test" four times over was the sentence's fault, and it had come back as four labels) */}
             <p className="text-[11px] text-textMuted">
-              The {rates.sessions} {rates.sessions === 1 ? 'session' : 'sessions'} before today, each level as it stood at the open
+              The {rates.sessions} {rates.sessions === 1 ? 'session' : 'sessions'} before today, each level as it stood at the open · how often its first test held
             </p>
-            <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1">
+            <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 max-lg:grid max-lg:grid-cols-2 max-lg:gap-x-4">
               {RECORD_LEVELS.filter(k => rates.levels[k].tested > 0).map(k => (
                 <div key={k} className="flex items-baseline gap-1.5" data-base-rate={k}>
-                  <dt className="text-[11px] text-textMuted">{RECORD_WORDS[k].charAt(0).toUpperCase() + RECORD_WORDS[k].slice(1)} held its first test</dt>
+                  <dt className="text-[11px] text-textMuted">{RECORD_WORDS[k].charAt(0).toUpperCase() + RECORD_WORDS[k].slice(1)}</dt>
                   <dd className="font-mono text-[12px] tnum text-textPrimary">
                     {rates.levels[k].heldFirst} of {rates.levels[k].tested}
                   </dd>
                 </div>
               ))}
               {rates.insideMove.n > 0 && (
-                <div className="flex items-baseline gap-1.5" data-base-rate="close">
+                <div className="flex items-baseline gap-1.5 max-lg:col-span-2" data-base-rate="close">
                   <dt className="text-[11px] text-textMuted">Close inside one expected move</dt>
                   <dd className="font-mono text-[12px] tnum text-textPrimary">
                     {rates.insideMove.inside} of {rates.insideMove.n}
@@ -253,7 +255,8 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
             <li key={r.key} className={`border-t border-borderSubtle/50 ${isFocus ? 'bg-silver/[0.04]' : ''}`} data-level={r.key}>
               {/* One column on a phone (the phone pass, 2026-09-13): the level, its strip, its facts under each other */}
               <div className="grid grid-cols-[200px_minmax(0,1fr)_auto] items-center gap-6 px-5 py-3 max-lg:grid-cols-1 max-lg:gap-3">
-                <button onClick={() => onPick(r.price)} className="text-left min-w-0 group" title={`${r.label} ${fmtStrike(r.price)} — click to make this the strike`} data-level-pick>
+                {/* on a phone the name, the price and the chip share one line (the re-audit's M6): a 232px row became ~180 */}
+                <button onClick={() => onPick(r.price)} className="hit text-left min-w-0 group max-lg:flex max-lg:flex-wrap max-lg:items-center max-lg:gap-x-3 max-lg:gap-y-1" title={`${r.label} ${fmtStrike(r.price)} — click to make this the strike`} data-level-pick>
                   <span className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] font-semibold" data-level-labels={r.labels.length}>
                     {r.labels.map((l, i) => (
                       <span key={l.label} style={{ color: l.ink }}>
@@ -262,8 +265,8 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
                       </span>
                     ))}
                   </span>
-                  <span className={`block font-mono text-[15px] font-semibold tnum leading-tight ${isFocus ? 'text-silver' : 'text-textPrimary group-hover:text-silver'} transition-colors`}>{fmtStrike(r.price)}</span>
-                  <span className={`mt-1 inline-flex items-center h-5 px-2 rounded-full border text-[11px] font-medium ${TONE[r.grade.tone]}`} data-grade>
+                  <span className={`block max-lg:inline-block font-mono text-[15px] font-semibold tnum leading-tight ${isFocus ? 'text-silver' : 'text-textPrimary group-hover:text-silver'} transition-colors`}>{fmtStrike(r.price)}</span>
+                  <span className={`mt-1 max-lg:mt-0 inline-flex items-center h-5 px-2 rounded-full border text-[11px] font-medium ${TONE[r.grade.tone]}`} data-grade>
                     {r.grade.words}
                   </span>
                 </button>
@@ -275,7 +278,7 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
                   </div>
                 </div>
                 {/* Fixed tracks, so every row's strip ends on the same line whatever the words in the last fact */}
-                <dl className="grid grid-cols-[52px_52px_52px_88px_172px] gap-x-5 max-lg:flex max-lg:flex-wrap max-lg:gap-y-1.5">
+                <dl className="grid grid-cols-[52px_52px_52px_88px_172px] gap-x-5 max-lg:grid-cols-3 max-lg:gap-x-4 max-lg:gap-y-2">
                   {facts.map(f => (
                     <div key={f.k} className="min-w-0">
                       <dt className="text-[11px] text-textMuted whitespace-nowrap">{f.k}</dt>

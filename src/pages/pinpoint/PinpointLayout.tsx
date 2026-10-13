@@ -123,6 +123,9 @@ const PinpointLayout = () => {
       sigma: impliedDaySigma(marketData.spot, Simulator.TICKERS[marketData.ticker]?.iv ?? 0),
     };
   }, [marketData]);
+  /* THE KEPT STRIKE'S DISTANCE IN THE RULER'S UNIT (the re-audit's M3): the Ruler promises every distance on Pinpoint, and
+     the chip beside the title read percent whatever it said */
+  const keptLead = dist != null && focused != null && spot ? (unit === '%' ? `${dist > 0 ? '+' : ''}${dist.toFixed(2)}%` : fmtDistance(focused - spot, spot, unit, scales)) : null;
   const words = gauge?.regime ? REGIME_WORDS[gauge.regime] : null;
   const flipDist = gauge && gauge.distAbs !== null ? Math.abs(gauge.distAbs) : null;
   const flipLead =
@@ -162,10 +165,9 @@ const PinpointLayout = () => {
               <span data-focus-chip className="inline-flex items-center gap-2 rounded-md border border-silver/40 bg-silver/[0.06] pl-2.5 pr-1 py-0.5 font-mono">
                 <span className="text-[11px] font-bold uppercase tracking-widest text-silver">Kept</span>
                 <span className="text-[12px] font-semibold tnum text-textPrimary">{fmtStrike(focused)}</span>
-                {dist != null && (
-                  <span className={`text-[11px] tnum ${dist > 0 ? 'text-bull' : dist < 0 ? 'text-bear' : 'text-textMuted'}`}>
-                    {dist > 0 ? '+' : ''}
-                    {dist.toFixed(2)}%
+                {dist != null && keptLead && (
+                  <span className={`text-[11px] tnum ${dist > 0 ? 'text-bull' : dist < 0 ? 'text-bear' : 'text-textMuted'}`} data-kept-lead={unit}>
+                    {keptLead}
                   </span>
                 )}
                 <button

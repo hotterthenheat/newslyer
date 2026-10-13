@@ -518,7 +518,6 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
     }
     const box = boxRef.current;
     const key = keyOf(pinned);
-    const at = keptAt && keptAt.key === key ? keptAt : null;
     const read = () => {
       const el = box?.querySelector<HTMLElement>(`[data-cell-key="${key}"]`);
       if (!el) {
@@ -526,7 +525,9 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
         return;
       }
       const r = el.getBoundingClientRect();
-      setKeptPos({ x: r.left + (at ? at.dx : r.width), y: r.top + (at ? at.dy : r.height / 2) });
+      /* AT THE CELL'S RIGHT EDGE, whichever way it was kept (the re-audit's L2): anchored on the click it sat over the
+         cell it described */
+      setKeptPos({ x: r.right, y: r.top + r.height / 2 });
     };
     read();
     box?.addEventListener('scroll', read, { passive: true });
@@ -776,7 +777,9 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
   const kings = useMemo(() => new Map(greeks.map(g => [g, kingFor(g)] as const)), [greeks, kingFor]);
   const supremes = useMemo(() => new Map(greeks.map(g => [g, supremeFor(g)] as const)), [greeks, supremeFor]);
   const supremeStrike = surface.supreme[supremeGreek].strike;
-  /** A row's tags, most telling first, two at most: yours, the wall, the pin */
+  /** A row's tags, most telling first, two at most: yours, the wall, the pin — printed as the matrix prints them
+      (the re-audit's L1: "CW · PW PIN" here against "call wall · supreme" there was three spellings of one vocabulary) */
+  const TAG_WORD: Record<string, string> = { you: 'you own', cw: 'call wall', pw: 'put wall', pin: 'pin' };
   const tagsFor = (strike: number): string[] => {
     const t: string[] = [];
     if (marks?.has(strike)) t.push('you');
@@ -940,7 +943,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
                 <span className="inline-flex items-center gap-1 text-[11px] uppercase tracking-widest whitespace-nowrap" data-row-tags>
                   {tagsFor(strike).map(t => (
                     <span key={t} className={t === 'you' ? 'text-silver' : 'text-textMuted'} title={t === 'you' ? marks?.get(strike) : undefined} data-yours={t === 'you' ? '' : undefined}>
-                      {t}
+                      {TAG_WORD[t] ?? t}
                     </span>
                   ))}
                 </span>
@@ -999,6 +1002,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
           <div className={`absolute inset-x-0 bottom-0 z-30 flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1.5 border-t border-borderSubtle ${ground} font-mono text-[11px]`} data-ledger-focus-summary={exceptional.size}>
             <span className="text-textSecondary">
               {exceptional.size} biggest {exceptional.size === 1 ? 'move' : 'moves'} since the open
+              {keptStrikes.length < exceptional.size ? `, on ${keptStrikes.length} ${keptStrikes.length === 1 ? 'strike' : 'strikes'}` : ''}
             </span>
             <span className="text-textMuted">·</span>
             {keptStrikes.map(s => (
