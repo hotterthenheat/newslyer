@@ -213,8 +213,9 @@ const BAND_ONE_ROW_PX = 1672;
 const BAND_BARE_ROW_PX = 1390;
 const BAND_TIGHT_ROW_PX = 1140;
 const BAND_NAMED_ROW_PX = 1100; /* the named picks with Legs need ~1,090 (re-measured 2026-10-13: 1,080 wrapped, 1,114 held) */
-/** Under this the two rows scroll sideways with their words (a phone) — the re-audit's H2 */
-const BAND_SCROLL_PX = 640;
+/** Under this the two rows scroll sideways with their words (a phone, or a window narrower than the two tidy rows: at
+    682px of band they ran to four) — the re-audit's H2 */
+const BAND_SCROLL_PX = 700;
 /** The doors with their words (data, names, biggest moves, replay, export, the supreme with its date and figure, the
     read, how to read, fullscreen) measure ~912px; under this much band they go compact and the colours switch, which
     the bare picks' row cannot hold there either, leads their row — two rows on a 1024 desk, not four */
