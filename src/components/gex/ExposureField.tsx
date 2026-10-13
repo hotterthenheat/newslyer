@@ -215,6 +215,10 @@ const BAND_TIGHT_ROW_PX = 1140;
 const BAND_NAMED_ROW_PX = 1021;
 /** Under this the two rows scroll sideways with their words (a phone) — the re-audit's H2 */
 const BAND_SCROLL_PX = 640;
+/** The doors with their words (data, names, biggest moves, replay, export, the supreme with its date and figure, the
+    read, how to read, fullscreen) measure ~912px; under this much band they go compact and the colours switch, which
+    the bare picks' row cannot hold there either, leads their row — two rows on a 1024 desk, not four */
+const BAND_DOORS_WORDS_PX = 960;
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 const GREEK_LABEL: Record<Greek, string> = { gex: 'GEX', dex: 'DEX', vex: 'VEX', vanna: 'VANNA', charm: 'CHARM' };
 /*
@@ -853,7 +857,13 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const overNamed = bandOver && bandMode !== 'two';
   const bandScroll = toolbar === 'band' && bandW > 0 && bandW < BAND_SCROLL_PX;
   const stripsBare = toolbar === 'band' && !overNamed && !bandScroll && (bandMode === 'bare' || bandMode === 'tight' || (bandMode === 'two' && bandW < BAND_NAMED_ROW_PX));
-  const doorsTight = toolbar === 'band' && !overNamed && bandMode === 'tight';
+  /* …and on the two rows under BAND_NAMED_ROW_PX (a 1024 desk, the picks already bare) the doors go compact too: with
+     their words they ran to four rows there, the read, the guide and the fullscreen door alone on the last */
+  const doorsTightTwo = toolbar === 'band' && !overNamed && !bandScroll && bandMode === 'two' && bandW < BAND_DOORS_WORDS_PX;
+  const doorsTight = (toolbar === 'band' && !overNamed && bandMode === 'tight') || doorsTightTwo;
+  /* …and the colours switch, the one pick the first row cannot hold there, leads the compact doors' row instead of
+     sitting alone on a row of its own (a 1024 desk: two rows, not three) */
+  const coloursSwitch = !paper ? <ColoursSwitch palette={palette} onChange={setPalette} paper={paper} bare={stripsBare} testId="ledger-colours" /> : null;
   const strips = (
     <>
       <DropdownSelect label="View" value={view} options={VIEWS_FOR[viewHost].map(v => VIEW_OPTION[v])} onChange={pickView} title="The matrix or the calendar" testId="ledger-view" bare={stripsBare} />
@@ -882,7 +892,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       {/* NO COLOURS CARD ON PAPER (Noah, 2026-10-04, with the light Map: "the color pallete should not even be a thing for
           light theme because its practically invisible") — on paper every heat surface walks one tint-to-pole journey
           (heatmap.ts), so the two palettes differ by nothing the eye can use; the card stays a dark-page control */}
-      {!paper && <ColoursSwitch palette={palette} onChange={setPalette} paper={paper} bare={stripsBare} testId="ledger-colours" />}
+      {!doorsTightTwo && coloursSwitch}
     </>
   );
   const supremeDoor = (
@@ -938,6 +948,34 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      name, view, greek, expiries, strikes, show, colours) on the first, the doors (names, replay, the supreme, the
      read, how to read, fullscreen) on the second, the fullscreen door last on either. See BAND_*_ROW_PX. */
   const bandRows: 'one' | 'two' = bandMode === 'two' || bandOver ? 'two' : 'one';
+  /* THE PHONE'S ROWS SAY THEY GO ON: a fade at the edge with more behind it, none at the end (data-scroll-more, index.css) */
+  useEffect(() => {
+    if (!bandScroll) return;
+    const el = bandEl.current;
+    if (!el) return;
+    const rows = [...el.querySelectorAll<HTMLElement>('[data-ledger-toolbar-row]')];
+    const mark = (row: HTMLElement) => {
+      const more: string[] = [];
+      if (row.scrollLeft > 1) more.push('left');
+      if (row.scrollLeft + row.clientWidth < row.scrollWidth - 1) more.push('right');
+      if (more.length) row.setAttribute('data-scroll-more', more.join(' '));
+      else row.removeAttribute('data-scroll-more');
+    };
+    const ro = new ResizeObserver(() => rows.forEach(mark));
+    const offs = rows.map(row => {
+      const on = () => mark(row);
+      row.addEventListener('scroll', on, { passive: true });
+      ro.observe(row);
+      mark(row);
+      return () => row.removeEventListener('scroll', on);
+    });
+    return () => {
+      ro.disconnect();
+      offs.forEach(off => off());
+      rows.forEach(row => row.removeAttribute('data-scroll-more'));
+    };
+  }, [bandScroll, bandRows]);
+
   const leadFold = lead ? (
     <Fold open={!many} gap={8} testId="data-band-lead">
       <span className="shrink-0 inline-flex items-center">{lead}</span>
@@ -1005,6 +1043,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   /* the supreme and the read are one name's — they step down into the columns' heads with the chip */
   const doors = (
     <>
+      {doorsTightTwo && coloursSwitch}
       {dataDoor}
       {namesDoor}
       {focusDoor}

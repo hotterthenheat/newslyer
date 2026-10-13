@@ -146,12 +146,25 @@
   background: rgb(var(--text-muted) / 0.6);
 }
 
-/* A row that scrolls sideways without a bar — the Map's band on a phone (the re-audit's H2) */
+/* A row that scrolls sideways without a bar — the Map's band on a phone (the re-audit's H2). The edge with more
+   behind it fades (data-scroll-more, set as the row scrolls); an edge at its end does not. */
 .scroll-row {
   scrollbar-width: none;
 }
 .scroll-row::-webkit-scrollbar {
   display: none;
+}
+.scroll-row[data-scroll-more='right'] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+}
+.scroll-row[data-scroll-more='left'] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 36px);
+  mask-image: linear-gradient(to right, transparent, #000 36px);
+}
+.scroll-row[data-scroll-more='left right'] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
 }
 
 /* Tabular figures for aligned numeric columns */
