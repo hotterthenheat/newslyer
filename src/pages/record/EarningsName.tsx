@@ -1,0 +1,664 @@
+/*
+==================================================
+  SLAYER TERMINAL - A NAME'S EARNINGS PAGE
+  (pages/record/EarningsName.tsx)
+
+  Everything on the record about one name before it
+  reports (/record/earnings/:ticker), in reading
+  order and in the house grammar (2026-09-09; the
+  old dossier's uppercase panels and dotted-leader
+  facts are gone, its charts kept):
+
+    THE NAME       the mark, the company, when and
+                   whether the date is set, the
+                   facts — the options price, the
+                   usual move, how it is priced, the
+                   beat count
+    TODAY'S PRICE, today's straddle replayed over
+    REPLAYED       the last eight real prints — money,
+                   not statistics — with the odds
+    BEATS AND      estimate against actual, and the
+    MISSES ·       stock's move after each of the
+    PAST MOVES     last eight reports
+    AFTER THE      what the options lose overnight
+    PRINT
+    THE BUSIEST    the three busiest calls and puts
+    CONTRACTS      into the print, facts not picks
+    ON THE RECORD  what this name's insiders did and
+                   what Congress reported in it — the
+                   other two pages of the Record,
+                   read for one name
+
+  Everything speaks the engines that were here
+  (data/earnings.ts, data/insiders.ts,
+  data/congress.ts).
+
+  FROM THE FEED (2026-10-12): when the Dossier reads
+  the vendors (data/feed/rooms.ts), the next report and
+  the last eight are UW's record of the name — the
+  estimate, the actual, the session's move after each
+  — the price is UW's, the company's name Massive's,
+  and the insiders and Congress rows are filed rows
+  (data/feed/dossier.ts). The usual move, the pricing
+  and the beat count are worked from those rows; the
+  odds, the overnight deflation, revenue and the
+  busiest contracts are not in the feed — a dash.
+==================================================
+*/
+
+import { SESSION_CLOSE_MIN, SESSION_OPEN_MIN, nyMinutes } from '../../core/nyTime';
+import { useEffect, useMemo, useState } from 'react';
+import { fillDossier, useDossierFeed, useFeedCongressFor, useFeedEarningsFor, useFeedInsidersFor, useFeedNameRecord } from '../../data/feed/dossier';
+import { useFeedStockDays } from '../../data/feed/stockDay';
+import { useFeedNameBook } from '../../data/feed/trace';
+import { Missing, MissingLine, missing } from '../../components/record/Missing';
+import { EarningsNameSkeleton } from './recordSkeletons';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, ArrowUpRight, LayoutGrid } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import AnimatedNumber from '../../components/ui/AnimatedNumber';
+import CompanyLogo from '../../components/ui/CompanyLogo';
+import HoverReadout from '../../components/ui/HoverReadout';
+import { BULL } from '../../components/gex/paletteInk';
+import { changeTicker } from '../../context/MarketDataContext';
+import Simulator from '../../core/simulator';
+import { fmtDollars } from '../../data/ahead';
+import { bracketLabel, buildCongress, seatOf } from '../../data/congress';
+import { When } from '../../components/record/when';
+import { buildEarningsDossier, type ActiveContract, type EarningsDossier } from '../../data/earnings';
+import { TX_CODES, flowFrom, insiderFlow, isChosenBuy } from '../../data/insiders';
+import { PRICED_WORD, SlotMark, pricedInk, pricedOf, slotWord } from './Earnings';
+
+const AXIS = { stroke: 'transparent', tick: { fill: 'rgb(var(--text-secondary))', fontSize: 10, fontFamily: 'inherit' } };
+const GRID = { stroke: 'rgb(var(--ink) / 0.05)', vertical: false };
+const BEAR = 'rgb(var(--bear))';
+/* the estimate's grey bar and the charts' hairlines in the page's ink — they were white, and on paper the estimates the
+   legend names were not there (2026-09-30) */
+const WHITE_DIM = 'rgb(var(--text-primary) / 0.28)';
+
+const TooltipShell = ({ children }: { children: React.ReactNode }) => <div className="border border-borderMuted bg-panel rounded-md px-2.5 py-2 shadow-xl shadow-black/60 font-mono text-[11px] text-textPrimary">{children}</div>;
+
+/** A box in the house grammar: the 15px title, the 11px line, whatever follows */
+const Box = ({ title, sub, children, testId, className = '' }: { title: string; sub?: React.ReactNode; children: React.ReactNode; testId: string; className?: string }) => (
+  <div className={`border border-borderSubtle rounded-md bg-panel flex flex-col ${className}`} data-earnings-box={testId}>
+    <div className="px-5 pt-4 pb-3">
+      <h3 className="text-[15px] font-semibold leading-tight text-textPrimary">{title}</h3>
+      {sub && <p className="mt-0.5 text-[11px] text-textMuted whitespace-nowrap truncate">{sub}</p>}
+    </div>
+    {children}
+  </div>
+);
+
+const Fact = ({ label, children, testId }: { label: string; children: React.ReactNode; testId?: string }) => (
+  <div>
+    <dt className="text-[11px] text-textMuted whitespace-nowrap">{label}</dt>
+    <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap" data-name-fact={testId}>
+      {children}
+    </dd>
+  </div>
+);
+
+/** A door out — small, labelled */
+const Door = ({ onClick, onWarm, children }: { onClick: () => void; onWarm?: () => void; children: React.ReactNode }) => (
+  <button type="button" onClick={onClick} onMouseEnter={onWarm} className="hit inline-flex items-center gap-1 h-6 px-2 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted font-mono text-[11px] uppercase tracking-widest text-textSecondary hover:text-textPrimary transition-colors">
+    <ArrowUpRight className="w-3 h-3" />
+    {children}
+  </button>
+);
+
+/* ---- today's price, replayed ---------------------------------------------------- */
+/* The question a person asks is "is ±6.3% a fair price?" — answered with money: take
+   today's price for the move and replay it over the last eight real prints. One bar
+   per quarter, the actual move's dollar value minus today's cost. Green above the
+   line covered it; red below fell short. (Noah, 2026-08-19: "so simple yet unique") */
+const PriceReplay = ({ d }: { d: EarningsDossier }) => {
+  const e = d.event;
+  const cost = (e.price * e.impliedMovePct) / 100;
+  const rows = useMemo(
+    () =>
+      d.quarters.filter(q => !missing(q.movePct)).map(q => {
+        const moved = (e.price * Math.abs(q.movePct)) / 100;
+        return { label: q.label, movePct: q.movePct, moved, pl: moved - cost };
+      }),
+    [d.quarters, e.price, cost]
+  );
+  const maxAbs = useMemo(() => Math.max(...rows.map(r => Math.abs(r.pl)), 0.01), [rows]);
+  const winners = rows.filter(r => r.pl > 0).length;
+  const avg = rows.reduce((a, r) => a + r.pl, 0) / (rows.length || 1);
+  const [hover, setHover] = useState<{ r: (typeof rows)[number]; x: number; y: number } | null>(null);
+  const H = 56;
+  if (missing(cost) || rows.length === 0) return <MissingLine what="Today's price, or the moves after the last reports" />;
+  return (
+    <div className="px-5 pb-4 flex flex-col gap-3" data-name-replay>
+      <div className="flex items-baseline gap-2.5 flex-wrap font-mono tnum">
+        <span className="text-[11px] text-textMuted">Today's price for the move</span>
+        <span className="text-[16px] font-bold text-textPrimary">${cost.toFixed(2)}</span>
+        <span className="text-[11px] text-textSecondary">per share · ±{e.impliedMovePct.toFixed(1)}%</span>
+      </div>
+      <div className="mx-auto w-full max-w-[640px] select-none">
+        <div className="relative" style={{ height: 2 * H }} onMouseLeave={() => setHover(null)}>
+          <span className="absolute inset-x-0 top-1/2 h-px bg-ink/25" />
+          <span className="absolute left-0 -translate-y-full top-1/2 pb-0.5 font-mono text-[11px] uppercase tracking-widest text-textMuted">covered it</span>
+          <span className="absolute left-0 top-1/2 pt-0.5 font-mono text-[11px] uppercase tracking-widest text-textMuted">fell short</span>
+          <div className="absolute inset-y-0 left-24 right-0 flex items-stretch gap-1.5">
+            {rows.map(r => (
+              <button
+                key={r.label}
+                type="button"
+                onMouseEnter={ev => setHover({ r, x: ev.clientX, y: ev.clientY })}
+                onMouseMove={ev => setHover({ r, x: ev.clientX, y: ev.clientY })}
+                className="hit relative flex-1 min-w-0 rounded hover:bg-ink/[0.04] transition-colors cursor-default"
+                aria-label={`${r.label}: moved ${r.movePct >= 0 ? '+' : ''}${r.movePct.toFixed(1)}%, ${r.pl >= 0 ? 'covered' : 'fell short of'} today's price by $${Math.abs(r.pl).toFixed(2)} per share`}
+                data-replay-bar={r.label}
+              >
+                <span className={`absolute left-1/2 -translate-x-1/2 w-[22px] rounded-[2px] ${r.pl >= 0 ? 'bg-bull/90' : 'bg-bear/80'}`} style={r.pl >= 0 ? { bottom: '50%', height: Math.max(3, (Math.abs(r.pl) / maxAbs) * H) } : { top: '50%', height: Math.max(3, (Math.abs(r.pl) / maxAbs) * H) }} />
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex gap-1.5 mt-1 pl-24">
+          {rows.map(r => (
+            <span key={r.label} className="flex-1 min-w-0 text-center font-mono text-[11px] text-textMuted truncate">
+              {r.label}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-2.5 flex-wrap font-mono tnum">
+        <span className="text-[13px] font-bold text-textPrimary">covered today's price {winners} of {rows.length} times</span>
+        <span className={`text-[11px] font-semibold ${avg >= 0 ? 'text-bull' : 'text-bear'}`}>
+          avg {avg >= 0 ? '+' : '−'}${Math.abs(avg).toFixed(2)} per share
+        </span>
+      </div>
+      {/* THE ODDS the pricing implies, and the smaller facts */}
+      <dl className="grid grid-cols-5 gap-x-6 pt-3 border-t border-borderSubtle/60">
+        <Fact label={`Closes inside ±${e.impliedMovePct.toFixed(1)}%`}>{missing(d.probInsidePct) ? <Missing className="text-[12px]" /> : `${d.probInsidePct}%`}</Fact>
+        <Fact label="Moves beyond it">
+          {missing(d.probBeyondPct) ? <Missing className="text-[12px]" /> : <span className="text-textSecondary">{d.probBeyondPct}%</span>}
+        </Fact>
+        <Fact label="Up against down" testId="updown">
+          {missing(d.probUpPct) ? (
+            <Missing className="text-[12px]" />
+          ) : (
+            <>
+              <span className={d.probUpPct >= 56 ? 'text-bull' : d.probUpPct <= 44 ? 'text-bear' : 'text-textPrimary'}>{d.probUpPct}% up</span> <span className="text-textMuted">· {100 - d.probUpPct}% down</span>
+            </>
+          )}
+        </Fact>
+        <Fact label="Estimates">
+          {missing(e.revisionTrend) ? (
+            <Missing className="text-[12px]" />
+          ) : (
+            <span className={e.revisionTrend > 0.15 ? 'text-bull' : e.revisionTrend < -0.15 ? 'text-bear' : 'text-textSecondary'}>{e.revisionTrend > 0.15 ? 'rising' : e.revisionTrend < -0.15 ? 'falling' : 'flat'}</span>
+          )}
+        </Fact>
+        <Fact label="IV rank">
+          {missing(e.ivRank) ? (
+            <Missing className="text-[12px]" />
+          ) : (
+            <>
+              <span className={e.ivRank >= 80 ? 'text-warn' : 'text-textPrimary'}>{e.ivRank}</span> <span className="text-textMuted">of 100</span>
+            </>
+          )}
+        </Fact>
+      </dl>
+      {hover && (
+        <HoverReadout x={hover.x} y={hover.y}>
+          <div className="font-mono text-[11px] font-bold text-textPrimary tnum">
+            {hover.r.label} · moved {hover.r.movePct > 0 ? '+' : hover.r.movePct < 0 ? '−' : ''}
+            {Math.abs(hover.r.movePct).toFixed(1)}%
+          </div>
+          <div className="font-mono text-[11px] text-textSecondary tnum">
+            that move was worth ${hover.r.moved.toFixed(2)} · today's price ${cost.toFixed(2)}
+          </div>
+          <div className={`font-mono text-[11px] font-bold tnum ${hover.r.pl >= 0 ? 'text-bull' : 'text-bear'}`}>
+            {hover.r.pl >= 0 ? '+' : '−'}${Math.abs(hover.r.pl).toFixed(2)} per share against today's price
+          </div>
+        </HoverReadout>
+      )}
+    </div>
+  );
+};
+
+/* ---- a busy contract ------------------------------------------------------------ */
+/* Facts only — the contract's own arithmetic, no "why" (Noah, 2026-08-19: "we simply
+   provide information like bloomberg"). The volume bar ranks it against the busiest. */
+/* THE ROW IS A DOOR (Noah, 2026-09-12: "should these bring the user to another
+   page?") — to the Weigher with THE CONTRACT picked (name · strike · side ·
+   expiry), the house's workstation for one contract; the Weigher's own Compass
+   button is the next step, so the row stays one door. Silver on hover like
+   every door, the destination named at the row's end before the click. */
+const ActiveRow = ({ c, maxVol, onOpen, onWarm }: { c: ActiveContract; maxVol: number; onOpen: () => void; onWarm?: () => void }) => (
+  <button
+    type="button"
+    onClick={onOpen}
+    onMouseEnter={onWarm}
+    onFocus={onWarm}
+    title="Weigh this contract"
+    className="hit group/door w-full text-left px-5 py-2.5 border-t border-borderSubtle/40 flex flex-col gap-1 hover:bg-ink/[0.03] focus-visible:bg-ink/[0.03] outline-none transition-colors"
+    data-name-contract={c.id}
+    data-contract-strike={c.strike}
+    data-contract-right={c.right}
+  >
+    <div className="flex items-baseline gap-2">
+      <span className="font-mono text-[12px] font-bold text-textPrimary group-hover/door:text-silver group-focus-visible/door:text-silver transition-colors">{c.label}</span>
+      <span className="ml-auto font-mono text-[12px] font-semibold text-textPrimary tnum">
+        ~<AnimatedNumber value={c.mid} format={v => `$${v.toFixed(2)}`} />
+      </span>
+      <span className="inline-flex items-center gap-1 pl-2 font-mono text-[11px] uppercase tracking-widest text-textMuted group-hover/door:text-silver group-focus-visible/door:text-silver transition-colors" data-contract-door>
+        <ArrowUpRight className="w-3 h-3" />
+        Weigh it
+      </span>
+    </div>
+    <div className="flex items-center gap-2">
+      <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted shrink-0">vol</span>
+      <span className="relative w-24 h-[4px] rounded-full bg-ink/[0.06] shrink-0">
+        <span className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-700 ease-out ${c.right === 'CALL' ? 'bg-bull/80' : 'bg-bear/70'}`} style={{ width: `${Math.max(6, (c.volume / maxVol) * 100)}%` }} />
+      </span>
+      <span className="font-mono text-[11px] font-semibold text-textPrimary tnum">
+        <AnimatedNumber value={c.volume} format={v => Math.round(v).toLocaleString()} />
+      </span>
+      <span className="font-mono text-[11px] text-textSecondary tnum">
+        open interest {c.oi.toLocaleString()} · <AnimatedNumber value={c.volOverOi} format={v => `${v.toFixed(2)}×`} /> · IV {c.ivPct}%
+      </span>
+    </div>
+    <span className="font-mono text-[11px] text-textMuted tnum">
+      {c.fromSpotPct === 0 ? 'at the money' : `${c.fromSpotPct > 0 ? '+' : '−'}${Math.abs(c.fromSpotPct)}% from spot`} · breaks even {c.right === 'CALL' ? '+' : '−'}
+      {c.breakevenPct}% by expiry
+    </span>
+  </button>
+);
+
+/* ---- the page ------------------------------------------------------------------- */
+
+const EarningsName = () => {
+  const { ticker = '' } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const fromDesk = (location.state as { from?: string } | null)?.from === 'desk';
+  /* The busiest contracts refresh on the scan tier (10s); everything structural is tick-stable */
+  const [scanTick, setScanTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setScanTick(t => t + 1), 10_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const T = ticker.toUpperCase();
+  /* ALL OR NOTHING (data/feed/rooms.ts): UW's record of the name when the Dossier reads the feed, else the house's */
+  const fromFeed = useDossierFeed();
+  const fedName = useFeedEarningsFor(fromFeed, T);
+  /* the company's name, asked of Massive only for a name the record knows */
+  const fedRecord = useFeedNameRecord(fromFeed && !!fedName?.ok && fedName.data.rows > 0, T);
+  const fedInsiders = useFeedInsidersFor(fromFeed, T);
+  const fedDay = useFeedStockDays(fromFeed, [T]);
+  const fedRows = useFeedNameBook(fromFeed, T);
+  const fedCongress = useFeedCongressFor(fromFeed, T);
+  const houseDossier = useMemo(() => (fromFeed ? null : buildEarningsDossier(ticker, scanTick)), [fromFeed, ticker, scanTick]);
+  const dossier = useMemo(() => {
+    if (!fromFeed) return houseDossier;
+    const raw = fedName?.ok ? fedName.data.dossier : null;
+    if (!raw) return null;
+    /* the page's every figure the answers carry: the priced move, the IV rank, the record's odds, the busiest contracts */
+    const d = fillDossier(raw, fedDay?.get(T), fedRows?.rows ?? []);
+    /* the company's name as Massive files it (the earnings rows carry none for one name) */
+    const name = fedRecord?.ok && fedRecord.data.details?.name ? fedRecord.data.details.name : d.event.name;
+    return { ...d, event: { ...d.event, name } };
+  }, [fromFeed, houseDossier, fedName, fedRecord, fedDay, fedRows, T]);
+  /* A busiest row → the Weigher with THE contract picked, this page as the way back */
+  const weigh = (c: ActiveContract) =>
+    navigate('/weigher', { state: { weigh: { ticker: T, strike: c.strike, right: c.right === 'CALL' ? 'C' : 'P', expiry: c.expiry }, wayBack: location.pathname } });
+  /* ON THE RECORD — the other two pages read for this one name */
+  const insiders = useMemo(() => (fromFeed ? (fedInsiders?.ok ? fedInsiders.data : flowFrom(T, [], 90)) : insiderFlow(T, 90)), [fromFeed, fedInsiders, T]);
+  const congress = useMemo(() => (fromFeed ? (fedCongress?.ok ? fedCongress.data : []) : buildCongress(180).trades.filter(t => t.ticker === T).sort((a, b) => a.filedDaysAgo - b.filedDaysAgo)), [fromFeed, fedCongress, T]);
+
+  const back = (
+    <div className="flex items-center gap-4" data-name-back>
+      <Link to="/dossier/earnings" className="hit group inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-textSecondary hover:text-textPrimary transition-colors">
+        <ArrowLeft className="w-3.5 h-3.5 transition-transform duration-200 ease-out group-hover:-translate-x-0.5" /> The calendar
+      </Link>
+      {fromDesk && (
+        <Link to="/pulse" className="hit inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-textSecondary hover:text-textPrimary transition-colors">
+          <LayoutGrid className="w-3.5 h-3.5" /> The desk
+        </Link>
+      )}
+    </div>
+  );
+
+  if (fromFeed && fedName === null)
+    return (
+      <>
+        {back}
+        <EarningsNameSkeleton />
+      </>
+    );
+  if (!dossier) {
+    /* the feed can say more: a name it has no reports for at all, or one with no date ahead */
+    const why = !fromFeed ? "no report on the next two weeks' calendar" : fedName?.ok && fedName.data.rows === 0 ? 'not found — no report on the record for this name' : fedName?.ok ? 'no report date ahead on the record' : 'no answer came back — asked again in ten minutes';
+    return (
+      <>
+        {back}
+        <div className="border border-borderSubtle rounded-md bg-panel h-40 flex flex-col items-center justify-center gap-2" data-name-missing>
+          <span className="font-mono text-[13px] font-bold text-textPrimary">{T}</span>
+          <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">{why}</span>
+        </div>
+      </>
+    );
+  }
+
+  const { event: e, quarters } = dossier;
+  const priced = pricedOf(e);
+  const epsBeats = quarters.filter(q => q.epsBeat).length;
+  const revBeats = quarters.filter(q => q.revBeat).length;
+  /* the feed's record carries what it carries — the count is of the quarters on hand */
+  const of = quarters.length;
+  const cost = (e.price * e.impliedMovePct) / 100;
+  const moveData = quarters.map(q => ({ label: q.label, move: q.movePct }));
+  const epsData = quarters.map(q => ({ label: q.label, est: q.epsEst, actual: q.epsActual, beat: q.epsBeat }));
+  const maxActiveVol = Math.max(...dossier.activeCalls.map(c => c.volume), ...dossier.activePuts.map(c => c.volume), 1);
+  const openOnMap = () => {
+    changeTicker(e.ticker);
+    navigate('/pinpoint/map');
+  };
+  const marketInsiders = insiders.trades.filter(t => TX_CODES[t.code].openMarket).slice(0, 6);
+
+  /* A REPORT THAT IS OUT (the audit's DO-5: at 13:50 a before-the-open report still read "today", an upcoming move): a
+     morning report is out from the 09:30 open, an evening one from the 16:00 bell — New York's clock */
+  const out = e.daysOut === 0 && nyMinutes() >= (e.slot === 'BMO' ? SESSION_OPEN_MIN : SESSION_CLOSE_MIN);
+  return (
+    <>
+      {back}
+
+      {/* THE NAME */}
+      <div className="border border-borderSubtle rounded-md bg-panel" data-earnings-name={e.ticker}>
+        <div className="px-5 pt-4 pb-4 flex items-start gap-6 flex-wrap">
+          <div className="min-w-0 flex-1 flex items-center gap-3">
+            <CompanyLogo ticker={e.ticker} size={34} />
+            <div className="min-w-0">
+              <div className="h-6 flex items-center gap-2.5">
+                <h3 className="min-w-0 truncate text-[15px] font-semibold leading-tight text-textPrimary">{e.name}</h3>
+                <span className="font-mono text-[11px] font-bold text-textSecondary">{e.ticker}</span>
+              </div>
+              {/* max-lg:flex-wrap — an inline-flex line does not truncate, it spills; on a phone it folds instead (the phone pass, 2026-09-13) */}
+              {/* a line that folds where it must, its words kept together (the audit's DO-12: "· today" fell under the facts) */}
+              <p className="mt-0.5 text-[11px] text-textMuted flex flex-wrap items-center gap-x-1.5 gap-y-0.5" data-earnings-when={out ? 'reported' : 'coming'}>
+                {out ? (
+                  <>
+                    <span className="whitespace-nowrap inline-flex items-center gap-1.5">
+                      Reported {e.slot === 'BMO' ? 'this morning, before the open' : 'today, after the close'} <SlotMark slot={e.slot} className="w-3 h-3" />
+                    </span>
+                    <span className="text-textMuted">·</span>
+                    <span className="whitespace-nowrap">the move below is what the options priced before the print</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="whitespace-nowrap inline-flex items-center gap-1.5">
+                      Reports {e.dateLabel} <SlotMark slot={e.slot} className="w-3 h-3" /> {slotWord(e)}
+                    </span>
+                    <span className="text-textMuted">·</span>
+                    <span className={`whitespace-nowrap ${e.confirmed ? 'text-textMuted' : 'text-warn'}`}>{e.confirmed ? 'the company has confirmed the date' : 'the date is still an estimate'}</span>
+                    {e.daysOut === 0 && (
+                      <>
+                        <span className="text-textMuted">·</span>
+                        <span className="text-silver whitespace-nowrap">today</span>
+                      </>
+                    )}
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+          <dl className="grid grid-cols-5 gap-x-6">
+            <Fact label="Options price" testId="price">
+              {missing(e.impliedMovePct) ? (
+                <Missing className="text-[12px]" />
+              ) : (
+                <>
+                  ±{e.impliedMovePct.toFixed(1)}% {!missing(cost) && <span className="text-textMuted">· ${cost.toFixed(2)}</span>}
+                </>
+              )}
+            </Fact>
+            <Fact label="Usually moves" testId="usual">
+              {missing(e.histAvgMovePct) ? <Missing className="text-[12px]" /> : `±${e.histAvgMovePct.toFixed(1)}%`}
+            </Fact>
+            <Fact label="Priced" testId="priced">
+              {priced ? (
+                <span className={pricedInk(e)}>
+                  {e.richness.toFixed(2)}× {PRICED_WORD[priced]}
+                </span>
+              ) : (
+                <Missing className="text-[12px]" />
+              )}
+            </Fact>
+            <Fact label="Beat the estimate" testId="beat">
+              {epsBeats} of {of}{' '}
+              <span className="text-textMuted">
+                · revenue {fromFeed ? <Missing /> : `${revBeats} of ${of}`}
+              </span>
+            </Fact>
+            <Fact label="Last eight" testId="last8">
+              <span className="inline-flex gap-[3px] align-middle" title="each square one quarter, oldest first — green beat, red missed">
+                {quarters.map(q => (
+                  <span key={q.label} className={`w-2 h-2 rounded-[2px] ${q.epsBeat ? 'bg-bull' : 'bg-bear/60'}`} />
+                ))}
+              </span>
+            </Fact>
+          </dl>
+        </div>
+        <div className="px-5 pb-3 flex items-center gap-2 flex-wrap" data-name-doors>
+          <Door onWarm={() => Simulator.ensureTicker(e.ticker)} onClick={openOnMap}>
+            The Map
+          </Door>
+          <Door onWarm={() => Simulator.ensureTicker(e.ticker)} onClick={() => navigate('/weigher', { state: { weigh: { ticker: e.ticker } } })}>
+            Weigh it
+          </Door>
+          <Door onWarm={() => Simulator.ensureTicker(e.ticker)} onClick={() => navigate('/compass', { state: { tickerFilter: e.ticker } })}>
+            Compass
+          </Door>
+          <Door onClick={() => navigate('/dossier/news')}>The wire</Door>
+        </div>
+      </div>
+
+      {/* TODAY'S PRICE, REPLAYED */}
+      <Box title="Today's price, replayed" sub="What the options charge now, tested against the last eight prints — hover a bar" testId="replay">
+        <PriceReplay d={dossier} />
+      </Box>
+
+      {/* THE RECEIPTS */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+        <Box title="Beats and misses" sub={`Earnings per share, the estimate against the actual · beat ${epsBeats} of ${of} on earnings${fromFeed ? '' : `, ${revBeats} of ${of} on revenue`}`} testId="beats">
+          <div className="px-5 pb-4">
+            <div className="h-[132px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={epsData} margin={{ top: 4, right: 8, bottom: 0, left: 8 }} barGap={2}>
+                  <CartesianGrid {...GRID} />
+                  <XAxis dataKey="label" {...AXIS} />
+                  <YAxis {...AXIS} width={40} tickFormatter={(v: number) => `$${v}`} />
+                  <Tooltip
+                    isAnimationActive={false}
+                    cursor={{ fill: 'rgb(var(--ink) / 0.04)' }}
+                    content={({ active, payload, label }) =>
+                      active && payload?.length ? (
+                        <TooltipShell>
+                          <div className="text-textSecondary">{label}</div>
+                          <div>estimate ${Number(payload[0]?.value).toFixed(2)}</div>
+                          <div>actual ${Number(payload[1]?.value).toFixed(2)}</div>
+                        </TooltipShell>
+                      ) : null
+                    }
+                  />
+                  <Bar dataKey="est" fill={WHITE_DIM} radius={[2, 2, 0, 0]} barSize={9} isAnimationActive={false} />
+                  <Bar dataKey="actual" radius={[2, 2, 0, 0]} barSize={9} isAnimationActive={false}>
+                    {epsData.map(q => (
+                      <Cell key={q.label} fill={q.beat ? BULL : BEAR} fillOpacity={q.beat ? 0.9 : 0.8} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="mt-2 font-mono text-[11px] uppercase tracking-widest text-textMuted">
+              grey the estimate · <span className="text-bull">green beat</span> · <span className="text-bear">red missed</span>
+            </p>
+          </div>
+        </Box>
+        <Box title="Past moves" sub={`The stock's move the session after each of its last ${of === 8 ? 'eight' : of} reports`} testId="moves">
+          <div className="px-5 pb-4">
+            <div className="h-[132px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={moveData} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
+                  <CartesianGrid {...GRID} />
+                  <XAxis dataKey="label" {...AXIS} />
+                  <YAxis {...AXIS} width={40} tickFormatter={(v: number) => `${v > 0 ? '+' : ''}${v}%`} />
+                  <Tooltip
+                    isAnimationActive={false}
+                    cursor={{ fill: 'rgb(var(--ink) / 0.04)' }}
+                    content={({ active, payload, label }) =>
+                      active && payload?.length ? (
+                        <TooltipShell>
+                          <div className="text-textSecondary">{label}</div>
+                          <div>
+                            {Number(payload[0]?.value) > 0 ? '+' : Number(payload[0]?.value) < 0 ? '−' : ''}
+                            {Math.abs(Number(payload[0]?.value)).toFixed(1)}% next session
+                          </div>
+                        </TooltipShell>
+                      ) : null
+                    }
+                  />
+                  <ReferenceLine y={e.impliedMovePct} stroke="rgb(var(--silver) / 0.55)" strokeDasharray="4 3" />
+                  <ReferenceLine y={-e.impliedMovePct} stroke="rgb(var(--silver) / 0.55)" strokeDasharray="4 3" />
+                  <ReferenceLine y={0} stroke="rgb(var(--ink) / 0.15)" />
+                  <Bar dataKey="move" radius={[2, 2, 0, 0]} barSize={16} isAnimationActive={false}>
+                    {moveData.map(q => (
+                      <Cell key={q.label} fill={q.move >= 0 ? BULL : BEAR} fillOpacity={q.move >= 0 ? 0.9 : 0.8} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="mt-2 font-mono text-[11px] uppercase tracking-widest text-textMuted">
+              the dashed lines are the ±{e.impliedMovePct.toFixed(1)}% priced for this print
+            </p>
+          </div>
+        </Box>
+      </div>
+
+      {/* AFTER THE PRINT */}
+      <Box title="After the print" sub="What the options lose overnight once the number is out — a long option has to beat the move and this" testId="after">
+        <dl className="px-5 pb-4 grid grid-cols-4 gap-x-6">
+          <Fact label="Implied vol deflates" testId="crush">
+            {missing(dossier.ivCrushPct) ? <Missing className="text-[12px]" /> : <span className="text-warn">−{dossier.ivCrushPct}%</span>}
+          </Fact>
+          <Fact label="Extrinsic kept by next open">{missing(dossier.premiumLostPct) ? <Missing className="text-[12px]" /> : `~${100 - dossier.premiumLostPct}%`}</Fact>
+          <Fact label="Straddle today">{missing(cost) ? <Missing className="text-[12px]" /> : `$${cost.toFixed(2)}`}</Fact>
+          <Fact label="The stock">{missing(e.price) ? <Missing className="text-[12px]" /> : `$${e.price.toFixed(2)}`}</Fact>
+        </dl>
+      </Box>
+
+      {/* THE BUSIEST CONTRACTS — a pair shares one bottom edge (Noah, 2026-09-09);
+          every row a door to the Weigher with the contract picked, and the way
+          back to this page on the shell's pill (2026-09-12) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+        <Box title="Busiest calls" sub="The three busiest by volume into the print · refreshes every ten seconds · click one to weigh it" testId="calls">
+          <div className="pb-2">
+            {dossier.activeCalls.map(c => (
+              <ActiveRow key={c.id} c={c} maxVol={maxActiveVol} onWarm={() => Simulator.ensureTicker(T)} onOpen={() => weigh(c)} />
+            ))}
+          </div>
+        </Box>
+        <Box title="Busiest puts" sub="The three busiest by volume into the print · refreshes every ten seconds · click one to weigh it" testId="puts">
+          <div className="pb-2">
+            {dossier.activePuts.map(c => (
+              <ActiveRow key={c.id} c={c} maxVol={maxActiveVol} onWarm={() => Simulator.ensureTicker(T)} onOpen={() => weigh(c)} />
+            ))}
+          </div>
+        </Box>
+      </div>
+
+      {/* ON THE RECORD — the other two pages, read for this name. The pair shares
+          one bottom edge: a name with two insider rows beside one Congress row
+          used to leave the boxes different lengths (Noah, 2026-09-09: "do you
+          think thats a design flaw to push publicly?" — it was). The rows sit at
+          the top, the door at the foot, the room between reads as room. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch" data-name-record>
+        <Box title="What its insiders did" sub={`Open-market trades in the last 90 days · ${insiders.trades.length ? insiders.signal : 'nothing filed'}`} testId="insiders">
+          {marketInsiders.length === 0 ? (
+            <div className="px-5 pb-5 pt-1 font-mono text-[11px] uppercase tracking-widest text-textMuted">Nothing on the record in 90 days</div>
+          ) : (
+            <>
+              {/* Below lg: when, who, the trade and its value — the shares and the plan go (the phone pass, 2026-09-13) */}
+              <div className="px-5 h-[22px] grid items-center gap-x-3 text-[11px] uppercase tracking-widest text-textMuted grid-cols-[64px_minmax(0,1fr)_64px_80px_80px_72px] max-lg:grid-cols-[64px_minmax(0,1fr)_64px_80px]">
+                <span>When</span>
+                <span>Who</span>
+                <span>Trade</span>
+                <span className="text-right max-lg:hidden">Shares</span>
+                <span className="text-right">Value</span>
+                <span className="text-right max-lg:hidden">Chose to?</span>
+              </div>
+              {marketInsiders.map(t => (
+                <div key={t.id} className="px-5 h-[38px] grid items-center gap-x-3 border-t border-borderSubtle/40 grid-cols-[64px_minmax(0,1fr)_64px_80px_80px_72px] max-lg:grid-cols-[64px_minmax(0,1fr)_64px_80px]" data-name-insider={t.id}>
+                  <When days={t.daysAgo} size={10} iso={t.tradedOn} />
+                  <span className="min-w-0 flex flex-col leading-tight">
+                    <span className="text-[11px] font-semibold text-textPrimary truncate">{t.person}</span>
+                    <span className="text-[11px] text-textMuted truncate">{t.title || t.role}</span>
+                  </span>
+                  <span className={`font-mono text-[11px] ${t.kind === 'BUY' ? 'text-bull' : 'text-bear'}`}>{t.kind === 'BUY' ? 'Bought' : 'Sold'}</span>
+                  <span className="text-right font-mono text-[11px] tnum text-textPrimary max-lg:hidden">{Math.round(t.shares).toLocaleString('en-US')}</span>
+                  <span className="text-right font-mono text-[11px] tnum font-semibold text-textPrimary">{missing(t.value) ? <Missing /> : fmtDollars(t.value)}</span>
+                  <span className={`text-right font-mono text-[11px] uppercase tracking-widest max-lg:hidden ${t.plan === 'discretionary' ? (isChosenBuy(t) ? 'text-textPrimary font-bold' : 'text-textSecondary') : 'text-textMuted'}`}>
+                    {t.plan === 'discretionary' ? 'chosen' : t.plan === 'plan' ? 'planned' : 'unstated'}
+                  </span>
+                </div>
+              ))}
+              <div className="mt-auto px-5 py-2.5 border-t border-borderSubtle/40 flex items-center gap-4 font-mono text-[11px] tnum" data-name-foot="insiders">
+                <span className="text-textSecondary">
+                  bought <span className={insiders.bought > 0 ? 'text-bull' : 'text-textMuted'}>{insiders.bought > 0 ? fmtDollars(insiders.bought) : 'nothing'}</span> · sold{' '}
+                  <span className={insiders.sold > 0 ? 'text-bear' : 'text-textMuted'}>{insiders.sold > 0 ? fmtDollars(insiders.sold) : 'nothing'}</span>
+                </span>
+                <Link to="/dossier/insiders" className="hit ml-auto inline-flex items-center gap-1 text-[11px] uppercase tracking-widest text-textSecondary hover:text-textPrimary transition-colors">
+                  <ArrowUpRight className="w-3 h-3" /> every insider
+                </Link>
+              </div>
+            </>
+          )}
+        </Box>
+        <Box title="What Congress reported" sub="STOCK Act reports naming this stock in the last 180 days" testId="congress">
+          {congress.length === 0 ? (
+            <div className="px-5 pb-5 pt-1 font-mono text-[11px] uppercase tracking-widest text-textMuted">Nothing on the record in 180 days</div>
+          ) : (
+            <>
+              {/* On a phone: filed, member, type — the amount and the lag go (the phone pass, 2026-09-13) */}
+              <div className="px-5 h-[22px] grid items-center gap-x-3 text-[11px] uppercase tracking-widest text-textMuted grid-cols-[64px_minmax(0,1fr)_88px_132px_64px] max-lg:grid-cols-[64px_minmax(0,1fr)_88px]">
+                <span>Filed</span>
+                <span>Member</span>
+                <span>Type</span>
+                <span className="max-lg:hidden">Amount disclosed</span>
+                <span className="text-right max-lg:hidden">Lag</span>
+              </div>
+              {congress.slice(0, 6).map(t => (
+                <div key={t.id} className="px-5 h-[38px] grid items-center gap-x-3 border-t border-borderSubtle/40 grid-cols-[64px_minmax(0,1fr)_88px_132px_64px] max-lg:grid-cols-[64px_minmax(0,1fr)_88px]" data-name-congress={t.id}>
+                  <When days={t.filedDaysAgo} size={10} iso={t.filedOn} />
+                  <span className="min-w-0 flex flex-col leading-tight">
+                    <span className="text-[11px] font-semibold text-textPrimary truncate">{t.member.name}</span>
+                    <span className="text-[11px] text-textMuted truncate">
+                      {[seatOf(t.member), t.committeeOverlap ? `${t.committeeOverlap} · own committee` : t.member.chamber].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                  <span className={`font-mono text-[11px] ${t.type === 'Purchase' ? 'text-bull' : t.type === 'Exchange' ? 'text-textMuted' : 'text-bear'}`}>{t.type === 'Purchase' ? 'Purchase' : t.type === 'Exchange' ? 'Exchange' : t.type === 'Sale (Partial)' ? 'Sale · partial' : 'Sale'}</span>
+                  <span className="font-mono text-[11px] tnum text-textPrimary truncate max-lg:hidden">{bracketLabel(t.bracket)}</span>
+                  <span className={`text-right font-mono text-[11px] tnum max-lg:hidden ${t.late ? 'text-bear' : 'text-textSecondary'}`}>
+                    {t.lagDays}d{t.late ? ' late' : ''}
+                  </span>
+                </div>
+              ))}
+              <div className="mt-auto px-5 py-2.5 border-t border-borderSubtle/40 flex items-center font-mono text-[11px]" data-name-foot="congress">
+                <Link to="/dossier/congress" className="hit ml-auto inline-flex items-center gap-1 text-[11px] uppercase tracking-widest text-textSecondary hover:text-textPrimary transition-colors">
+                  <ArrowUpRight className="w-3 h-3" /> every report
+                </Link>
+              </div>
+            </>
+          )}
+        </Box>
+      </div>
+    </>
+  );
+};
+
+export default EarningsName;

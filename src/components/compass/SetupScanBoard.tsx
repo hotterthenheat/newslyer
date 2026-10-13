@@ -1,0 +1,315 @@
+/*
+==================================================
+  SLAYER TERMINAL - THE BOARD'S BODY (SetupScanBoard.tsx)
+  The ranked setups under the box's head: the cards
+  two across, or the same rows as THE GRID (the
+  Trace walk's AG Grid). The box GROWS with what
+  the sweep found and the page scrolls (Noah,
+  2026-09-11: "the board box should be a box that
+  can be lengthened when new cards are added") —
+  the rail beside it sticks, the page carries its
+  own door home.
+
+  The walk (2026-09-11): the old Panel head, its
+  Cards/Table tabs, the fixed window and the
+  20-a-page pager are gone — the head is the box's
+  (TraceBox), the layout is a card on the box's line.
+==================================================
+*/
+
+import { useMemo, useRef } from 'react';
+import { ArrowUpRight } from 'lucide-react';
+import type { Setup } from '../../types/compass';
+import { SCANNERS, TAGS } from '../../types/compass';
+import type { FiledSetup } from '../../data/compassStandIn';
+import { breakevenWords, isSingleLeg, kindWords, netWords, structureName, structureStats, structureTone, whenTitle, whenWords } from './SetupFiling';
+import type { Column } from '../ui/DataTable';
+import SignalBadge from '../ui/SignalBadge';
+import ContractLabel from '../ui/ContractLabel';
+import { TraceGrid } from '../trace/TraceBox';
+import SetupScanCard from './SetupScanCard';
+import { processState, PROCESS_META } from './setupProcess';
+import { recordOf, statusOf } from './campaignStore';
+
+export type ScanLayout = 'cards' | 'table';
+
+type Ranked = Setup & { rank: number };
+
+/** Which lens found a setup — the id carries it (`TICKER-strike-R-kind-sleeve`, a dated contract after it) */
+const lensOf = (s: Setup): string => {
+  const m = s.id.match(/-[CP]-(.+)-(odte|weekly|swing|leaps)(?:-\d+d|-\d{4}-\d{2}-\d{2}(?:am)?)?$/);
+  const key = m?.[1];
+  return SCANNERS.find(k => k.key === key)?.label ?? '';
+};
+
+interface SetupScanBoardProps {
+  /** Flat, already-ranked (rank = index + 1). */
+  setups: Setup[];
+  layout: ScanLayout;
+  selectedId: string | null;
+  onSelect: (setup: Setup) => void;
+  onAnalysis: (setup: Setup) => void;
+  /** Real-date chip for the active sleeve, e.g. "08/04/26". */
+  expiryChip: string;
+  /** Under Top Setups and All Setups the grid says which kind each row is */
+  showKind?: boolean;
+  /** Where the board filed each setup (2026-10-11) — its category, structure and tags */
+  filingOf?: (id: string) => FiledSetup | undefined;
+}
+
+/* THE TABLE FITS ITS BOX (the audit's CO-2: the contract was cut to "NVDA 120…", Open fell off the right edge and the
+   expiry — the same on every row — took 150 px). The contract gets the room it needs, the expiry is said once by the
+   Expiry card over the board, Open stands last at its own width, and the kind (under All kinds) takes what is left. */
+/* SINCE THE FILTERS (2026-10-11) the expiry differs row to row, so it has a column again, with the structure and the tags
+   beside it; the grid's sideways scroller carries what the box cannot hold, the contract pinned at the left */
+const WIDTHS: Record<string, number> = { rank: 44, contract: 220, when: 176, structure: 176, tags: 150, state: 104, targets: 86, sigma: 80, premium: 110, figures: 220, breakeven: 150, breaks: 92, open: 72 };
+const TOOLTIPS: Record<string, string> = {
+  sigma: 'The one-sigma move of the stock to expiry — what the options price in',
+  premium: "A single leg: the contract at the bid/ask midpoint, now. A structure: what its legs net, per share — the debit or cost paid, or the credit taken",
+  figures: "A structure's own figures, per share: a debit spread's max loss and max gain, a credit spread's max loss, a cash-secured put's cash set aside (per contract)",
+  breakeven: "A structure's breakeven at expiry — two for a straddle or a strangle",
+  targets: 'The highest target a candle has crossed since the sweep found the setup',
+  breaks: "A single leg's retire line: the stock price that retires the setup — a close through it and the thesis is gone",
+  state: 'Watch · proving itself. Active · the structure is in place. Moving · the contract trades like its trade. Fading · retiring',
+  when: 'The expiration category and the date the contract is listed under',
+  structure: 'The structure this setup is shown as, with its legs',
+  tags: `${TAGS.unusual.label}: ${TAGS.unusual.line} · ${TAGS.penny.label}: ${TAGS.penny.line}`,
+};
+
+/* A chip inside a grid cell keeps its OWN line height — the cell's is the
+   row's 39px, and a chip that inherits it stands taller than its row (Noah,
+   2026-09-11: "boxes bleeding into each other") */
+const Chip = ({ children }: { children: React.ReactNode }) => <span className="inline-flex leading-normal">{children}</span>;
+
+const SetupScanBoard = ({ setups, layout, selectedId, onSelect, onAnalysis, expiryChip, showKind = false, filingOf }: SetupScanBoardProps) => {
+  const ranked = useMemo<Ranked[]>(() => setups.map((s, i) => ({ ...s, rank: i + 1 })), [setups]);
+  /* THE COLUMNS HOLD STILL (the audit's CO-9: the page hands a fresh `onAnalysis` every render, the columns were rebuilt
+     with it, and the grid re-applied the first sort on top of the reader's — "2 ·", "CO… 1 ↑", a sort that changed
+     nothing). The door is read through a ref, so the columns are built once per shape. */
+  const openRef = useRef(onAnalysis);
+  openRef.current = onAnalysis;
+  const filingRef = useRef(filingOf);
+  filingRef.current = filingOf;
+  const filed = !!filingOf;
+
+  const columns = useMemo<Column<Ranked>[]>(() => {
+    const cols: Column<Ranked>[] = [
+      { key: 'rank', header: '#', sortValue: r => r.rank, render: r => <span className="font-mono text-[11px] text-textMuted tnum">{r.rank}</span> },
+      {
+        key: 'contract',
+        header: 'Contract',
+        sortValue: r => r.ticker,
+        render: r => (
+          <span className="inline-flex items-center gap-2 min-w-0">
+            {/* the structure on its name, in its lean's ink — the card's own chip */}
+            <ContractLabel contract={structureName(r, filingRef.current?.(r.id))} right={r.right} tone={structureTone(r, filingRef.current?.(r.id))} logo={r.ticker} size="sm" />
+            {r.rank === 1 && (
+              <Chip>
+                <SignalBadge tone="crown">Top pick</SignalBadge>
+              </Chip>
+            )}
+          </span>
+        ),
+      },
+      ...(filed
+        ? ([
+            {
+              key: 'when',
+              header: 'Expiry',
+              sortValue: r => filingRef.current?.(r.id)?.listing.last.getTime() ?? 0,
+              render: r => {
+                const f = filingRef.current?.(r.id);
+                return f ? (
+                  <span className="font-mono text-[11px] text-textSecondary" title={whenTitle(f)}>
+                    {whenWords(f)}
+                  </span>
+                ) : null;
+              },
+            },
+            {
+              key: 'structure',
+              header: 'Structure',
+              sortValue: r => filingRef.current?.(r.id)?.legs ?? '',
+              render: r => <span className="font-mono text-[11px] text-textSecondary">{filingRef.current?.(r.id)?.legs ?? ''}</span>,
+            },
+            {
+              key: 'tags',
+              header: 'Tags',
+              sortValue: r => filingRef.current?.(r.id)?.tags.length ?? 0,
+              render: r => {
+                const tags = filingRef.current?.(r.id)?.tags ?? [];
+                return tags.length ? (
+                  <span className="text-[11px] text-textPrimary" title={tags.map(t => `${TAGS[t].label}: ${TAGS[t].line}`).join(' · ')}>
+                    {tags.map(t => TAGS[t].label).join(' · ')}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-textMuted">—</span>
+                );
+              },
+            },
+          ] as Column<Ranked>[])
+        : []),
+      {
+        key: 'state',
+        header: 'State',
+        sortValue: r => processState(r),
+        render: r => {
+          const state = processState(r);
+          const meta = PROCESS_META[state];
+          return (
+            <Chip>
+              {statusOf(recordOf(r.id)).brk ? (
+                <SignalBadge tone="bear">Retired</SignalBadge>
+              ) : (
+                <SignalBadge tone={meta.tone} dot pulse={meta.pulse}>
+                  {state}
+                </SignalBadge>
+              )}
+            </Chip>
+          );
+        },
+      },
+      {
+        key: 'targets',
+        header: 'Targets',
+        sortValue: r => statusOf(recordOf(r.id)).hitLevel ?? 0,
+        render: r => {
+          const hit = statusOf(recordOf(r.id)).hitLevel;
+          return hit != null ? (
+            <Chip>
+              <SignalBadge tone="bull">TP{hit} HIT</SignalBadge>
+            </Chip>
+          ) : (
+            <span className="font-mono text-[11px] text-textMuted">{r.takeProfits.length ? `0 of ${r.takeProfits.length}` : '—'}</span>
+          );
+        },
+      },
+      { key: 'sigma', header: '1σ move', align: 'right', sortValue: r => r.sigmaMovePct, render: r => <span className="font-mono text-[11px] tnum text-textPrimary">±{r.sigmaMovePct.toFixed(1)}%</span> },
+      {
+        key: 'premium',
+        header: 'Premium',
+        align: 'right',
+        sortValue: r => {
+          const g = filingRef.current?.(r.id)?.figures;
+          return !g ? r.mid : g.kind === 'debit-spread' ? g.debit : g.kind === 'long-vol' ? g.cost : g.credit;
+        },
+        render: r => <span className="font-mono text-[11px] tnum text-textPrimary">{netWords(r, filingRef.current?.(r.id))}</span>,
+      },
+      ...(filed
+        ? ([
+            {
+              key: 'figures',
+              header: 'Structure figures',
+              sortValue: r => {
+                const g = filingRef.current?.(r.id)?.figures;
+                return !g ? -1 : g.kind === 'cash-secured' ? g.cash : g.kind === 'long-vol' ? g.cost : g.maxLoss;
+              },
+              render: r => {
+                const f = filingRef.current?.(r.id);
+                const stats = f && !isSingleLeg(f) ? structureStats(f)?.filter(st => st.key !== 'debit' && st.key !== 'credit' && st.key !== 'cost') : null;
+                return stats && stats.length ? (
+                  <span className="font-mono text-[11px] tnum text-textSecondary" title={stats.map(st => st.title).join(' · ')}>
+                    {stats.map(st => `${st.label} ${st.value}`).join(' · ')}
+                  </span>
+                ) : (
+                  <span className="font-mono text-[11px] text-textMuted">—</span>
+                );
+              },
+            },
+            {
+              key: 'breakeven',
+              header: 'Breakeven',
+              align: 'right',
+              sortValue: r => filingRef.current?.(r.id)?.figures?.breakevens[0] ?? 0,
+              render: r => {
+                const f = filingRef.current?.(r.id);
+                const be = f && !isSingleLeg(f) ? breakevenWords(f) : null;
+                return be ? (
+                  <span className="font-mono text-[11px] tnum text-textPrimary" title={be.title}>
+                    {be.value.replace(' and ', ' · ')}
+                  </span>
+                ) : (
+                  <span className="font-mono text-[11px] text-textMuted">—</span>
+                );
+              },
+            },
+          ] as Column<Ranked>[])
+        : []),
+      {
+        key: 'breaks',
+        header: 'Breaks at',
+        align: 'right',
+        sortValue: r => (isSingleLeg(filingRef.current?.(r.id)) ? r.invalidationPrice : 0),
+        /* the retire line is a single leg's; a structure stands on its breakeven(s) */
+        render: r =>
+          isSingleLeg(filingRef.current?.(r.id)) ? <span className="font-mono text-[11px] tnum text-warn">${r.invalidationPrice.toFixed(2)}</span> : <span className="font-mono text-[11px] text-textMuted">—</span>,
+      },
+    ];
+    const kindOf = (r: Ranked) => {
+      const f = filingRef.current?.(r.id);
+      return f ? kindWords(f) : lensOf(r);
+    };
+    if (showKind) cols.push({ key: 'kind', header: 'Kind', sortValue: r => kindOf(r), render: r => <span className="text-[11px] text-textSecondary">{kindOf(r)}</span> });
+    cols.push({
+      key: 'open',
+      header: '',
+      align: 'right',
+      render: r => (
+        <button
+          type="button"
+          onClick={() => openRef.current(r)}
+          title="Open the setup's page"
+          aria-label={`Open ${structureName(r, filingRef.current?.(r.id))}'s page`}
+          className="hit inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+        >
+          Open <ArrowUpRight className="w-3 h-3" />
+        </button>
+      ),
+    });
+    return cols;
+  }, [showKind, filed]);
+
+  if (setups.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-[200px] border-t border-borderSubtle" data-compass-board="empty">
+        <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Nothing cleared the bar on this sweep</span>
+      </div>
+    );
+  }
+
+  if (layout === 'table') {
+    return (
+      <div data-compass-board="table">
+        <TraceGrid
+          rows={ranked}
+          columns={columns}
+          widths={WIDTHS}
+          tooltips={TOOLTIPS}
+          rowKey={r => r.id}
+          onRowClick={onSelect}
+          selectedKey={selectedId}
+          autoHeight
+          /* a sweep re-ranks in place — the rows never slide or dim under the reader (CO-2's vanishing rows) */
+          animate={false}
+          initialSort={{ key: 'rank', dir: 'asc' }}
+          emptyText="Nothing cleared the bar on this sweep"
+          testId="compass-board"
+          pinLeft={filed ? ['rank', 'contract'] : undefined}
+        />
+      </div>
+    );
+  }
+
+  /* The cards, two across — the box grows with them */
+  return (
+    <div key="cards" className="border-t border-borderSubtle px-5 pt-4 pb-5 animate-soft-in" data-compass-board="cards">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+        {ranked.map(s => (
+          <SetupScanCard key={s.id} setup={s} rank={s.rank} selected={s.id === selectedId} onSelect={onSelect} onAnalysis={onAnalysis} expiryChip={expiryChip} filing={filingOf?.(s.id)} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default SetupScanBoard;

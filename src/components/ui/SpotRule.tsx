@@ -1,0 +1,36 @@
+interface SpotRuleProps {
+  ticker: string;
+  price: number;
+  /** The pill in the MIDDLE of the rule, the line running out both ways — the book's two views (Noah, 2026-10-12:
+      "the ticker price thing to be in the middle and not far left or right for both matrix and calendar") */
+  centre?: boolean;
+}
+
+/**
+ * Current-price marker: a rule with an inverted axis pill (the primary ink as
+ * the tag, the panel's ink as the text — so the light terminal gets a dark
+ * pill with white figures; a literal dark text vanished on it, found
+ * 2026-09-13) — the TradingView price-label idiom. Shared by every strike
+ * list the live price crosses. The inverted pill = "where the market is".
+ */
+const SpotRule = ({ ticker, price, centre = false }: SpotRuleProps) => (
+  <span className={`flex items-center gap-1.5 select-none ${centre ? 'w-full' : ''}`} aria-label={`${ticker} spot ${price.toFixed(2)}`}>
+    <span className="h-px flex-grow bg-gradient-to-r from-textPrimary/10 via-textPrimary/40 to-textPrimary/50" />
+    <span className="font-mono text-[11px] uppercase tracking-wider text-textSecondary whitespace-nowrap">{ticker}</span>
+    <span className="inline-flex items-center rounded-[3px] bg-textPrimary px-1.5 py-px font-mono text-[11px] font-bold tnum text-panel whitespace-nowrap">
+      {price.toFixed(2)}
+    </span>
+    {centre ? (
+      <>
+        {/* the ticker's width again, unseen, so the PILL is at the middle — not the pair (Noah, 2026-10-12: "centered
+            in the middle in relation to the amount of nodes") */}
+        <span aria-hidden className="invisible font-mono text-[11px] uppercase tracking-wider whitespace-nowrap">{ticker}</span>
+        <span className="h-px flex-grow bg-gradient-to-l from-textPrimary/10 via-textPrimary/40 to-textPrimary/50" />
+      </>
+    ) : (
+      <span className="h-px w-3 shrink-0 bg-textPrimary/50" />
+    )}
+  </span>
+);
+
+export default SpotRule;
