@@ -37,6 +37,7 @@
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { buildExposureProfile } from '../../data/exposure';
 import { buildLevelRead, sessionBars } from '../../data/levelview';
+import { nyClock } from '../../core/nyTime';
 import { CALL_WALL, FLIP, PUT_WALL, SUPREME } from './paletteInk';
 import GuideFocus, { GuideDoor } from '../ui/GuideFocus';
 import ReportGuide from './ReportGuide';
@@ -46,7 +47,8 @@ const SILVER = 'rgb(var(--silver))'; /* the silver token — deep steel on the l
 const GREEN = 'rgb(var(--bull))';
 const RED = 'rgb(var(--bear))';
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
-const hhmm = (unix: number) => new Date(unix * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+/* NEW YORK'S CLOCK, like "Last touched" beside it (the audit's H2, 2026-10-13): the browser's zone put 05:43 and 01:36 on one row for the same minute */
+const hhmm = (unix: number) => nyClock(unix * 1000);
 
 interface Tick {
   /** Index into the session's bars — the strip's x */
@@ -81,6 +83,8 @@ interface Row {
   key: string;
   label: string;
   ink: string;
+  /** The names on this row — more than one where levels share a strike (see the merge below) */
+  labels: { label: string; ink: string }[];
   price: number;
   side: 'call' | 'put';
   ticks: Tick[];
@@ -122,7 +126,8 @@ const SessionStrip = ({ row, bars }: { row: Row; bars: readonly Candle[] }) => {
     <div className="relative" onPointerLeave={() => setHover(null)}>
       <svg ref={ref} viewBox={`0 0 ${SW} ${SH}`} width="100%" height={SH} preserveAspectRatio="none" data-session-strip onPointerMove={onMove} style={{ display: 'block', cursor: row.ticks.length ? 'crosshair' : 'default' }} role="img" aria-label={`${row.label}: ${row.tests} tests along the session`}>
         {/* the session, as a hairline from the first bar to the newest */}
-        <line x1={8} x2={SW - 8} y1={SH / 2} y2={SH / 2} stroke="#ffffff" strokeOpacity={0.1} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        {/* the ink token, not white: on paper a white hairline was no hairline (the audit's H1) */}
+        <line x1={8} x2={SW - 8} y1={SH / 2} y2={SH / 2} stroke="rgb(var(--ink))" strokeOpacity={0.1} strokeWidth={1} vectorEffect="non-scaling-stroke" />
         {/* one tick per test */}
         {row.ticks.map(t => (
           <line
@@ -179,18 +184,31 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
       const trend = !read || read.trend === 'FLAT' ? 'flat since the open' : read.trend === 'NEW' ? 'new since the open' : `${read.trend === 'BUILDING' ? 'growing' : 'shrinking'}${size}`;
       const grade: Row['grade'] =
         tests === 0 ? { words: 'untested', tone: 'quiet' } : broke === 0 ? { words: `held every test`, tone: 'good' } : held === 0 ? { words: 'broke every test', tone: 'bad' } : { words: `broke ${broke} of ${tests}`, tone: broke * 2 >= tests ? 'bad' : 'quiet' };
-      return { key, label, ink, price, side, ticks, tests, held, broke, last: read?.lastTouch ?? null, trend, grade };
+      return { key, label, ink, labels: [{ label, ink }], price, side, ticks, tests, held, broke, last: read?.lastTouch ?? null, trend, grade };
     };
     const spot = levels.spot;
     const out: Row[] = [
       mk('call', 'Call wall', CALL_WALL, levels.callWall, 'call'),
       mk('flip', 'Gamma flip', FLIP, levels.flip, levels.flip >= spot ? 'call' : 'put'),
       mk('put', 'Put wall', PUT_WALL, levels.putWall, 'put'),
-      mk('pin', 'Gamma pin', '#EDEDED', levels.pin, levels.pin >= spot ? 'call' : 'put'),
+      mk('pin', 'Gamma pin', 'rgb(var(--text-primary))', levels.pin, levels.pin >= spot ? 'call' : 'put'),
       mk('supreme', 'Supreme', SUPREME, levels.supreme, levels.supreme >= spot ? 'call' : 'put'),
     ];
     // Highest price first — the section reads like the ladder above it
-    return out.sort((a, b) => b.price - a.price || a.key.localeCompare(b.key));
+    const sorted = out.sort((a, b) => b.price - a.price || a.key.localeCompare(b.key));
+    /* ONE ROW WHERE LEVELS COINCIDE (the audit's M5, 2026-10-13): the pin, the put wall and the supreme on one strike
+       printed three rows with the same price, strip, chip and facts. Levels that share a strike and a side share a row,
+       their names stacked in their own inks — the levels are the levels, only the presentation merges. */
+    const merged: Row[] = [];
+    for (const r of sorted) {
+      const last = merged[merged.length - 1];
+      if (last && Math.abs(last.price - r.price) < 1e-9 && last.side === r.side) {
+        last.labels.push({ label: r.label, ink: r.ink });
+        last.key = `${last.key}+${r.key}`;
+        last.label = `${last.label} · ${r.label}`;
+      } else merged.push(r);
+    }
+    return merged;
   }, [snapshot, bars]);
 
   const first = bars[0]?.time;
@@ -228,8 +246,13 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
               {/* One column on a phone (the phone pass, 2026-09-13): the level, its strip, its facts under each other */}
               <div className="grid grid-cols-[200px_minmax(0,1fr)_auto] items-center gap-6 px-5 py-3 max-lg:grid-cols-1 max-lg:gap-3">
                 <button onClick={() => onPick(r.price)} className="text-left min-w-0 group" title={`${r.label} ${fmtStrike(r.price)} — click to make this the strike`} data-level-pick>
-                  <span className="block text-[11px] font-semibold" style={{ color: r.ink }}>
-                    {r.label}
+                  <span className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] font-semibold" data-level-labels={r.labels.length}>
+                    {r.labels.map((l, i) => (
+                      <span key={l.label} style={{ color: l.ink }}>
+                        {i > 0 && <span className="font-normal text-textMuted">· </span>}
+                        {l.label}
+                      </span>
+                    ))}
                   </span>
                   <span className={`block font-mono text-[15px] font-semibold tnum leading-tight ${isFocus ? 'text-silver' : 'text-textPrimary group-hover:text-silver'} transition-colors`}>{fmtStrike(r.price)}</span>
                   <span className={`mt-1 inline-flex items-center h-5 px-2 rounded-full border text-[11px] font-medium ${TONE[r.grade.tone]}`} data-grade>

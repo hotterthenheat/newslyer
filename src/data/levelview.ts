@@ -167,7 +167,8 @@ export function sinceOpenRead(ratio: number | null | undefined): SinceOpenRead |
   const dir: 1 | -1 | 0 = pct >= TREND_THRESHOLD ? 1 : pct <= -TREND_THRESHOLD ? -1 : 0;
   const whole = Math.round(pct) || 0;
   return {
-    figure: `${whole > 0 ? '+' : ''}${whole.toLocaleString('en-US')}%`,
+    /* the true minus, as every other negative on the page prints it (the Pinpoint audit's L5, 2026-10-13) */
+    figure: `${whole > 0 ? '+' : whole < 0 ? '−' : ''}${Math.abs(whole).toLocaleString('en-US')}%`,
     dir,
     text: dir === 1 ? 'gamma building' : dir === -1 ? 'gamma bleeding' : 'about where it opened',
     short: dir === 1 ? 'building' : dir === -1 ? 'bleeding' : 'about flat',

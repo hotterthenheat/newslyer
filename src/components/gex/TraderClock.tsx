@@ -154,11 +154,16 @@ export const PHASES: Phase[] = [
     name: 'The close',
     weight: 1,
     pressure: 'amplifies',
-    words: f => `the closing auction — ${f.bellShare != null ? `${f.bellShare}% of today's gamma expires at 4:00` : 'today’s gamma expires at 4:00'}`,
+    /* "at the close", not "4:00": the box prints its hours as 09:30 … 16:00 (the audit's M6, 2026-10-13) */
+    words: f => `the closing auction — ${f.bellShare != null ? `${f.bellShare}% of today's gamma expires at the close` : 'today’s gamma expires at the close'}`,
   },
 ];
 
 const phaseAt = (min: number) => PHASES.find(p => min >= p.from && min < p.to) ?? PHASES[PHASES.length - 1];
+/* THE NAMES ON A PHONE (the audit's C1, 2026-10-13): under `lg` the six names stand on two rows, in one word each, the
+   close's anchored to the strip's right edge — on one row at 390px "The open" ran into "The morning" and "Charm window"
+   into "The turn". The desk keeps its one row of full names. */
+const SHORT_NAME: Record<string, string> = { open: 'Open', morning: 'Morning', lunch: 'Lunch', charm: 'Charm', turn: 'Turn', auction: 'Close' };
 const PRESSURE_WORDS = { absorbs: 'absorbs moves', amplifies: 'amplifies moves' } as const;
 
 /** What the reader has kept: one block, or one whole phase */
@@ -307,7 +312,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
             </>
           )}
           <div>
-            <dt className="text-[11px] text-textMuted">Expires at 4:00</dt>
+            <dt className="text-[11px] text-textMuted">Expires at the close</dt>
             <dd className="mt-0.5 font-mono text-[12px] tnum whitespace-nowrap" style={{ color: SUPREME }} data-clock-bell>
               {facts.bellShare != null ? `${facts.bellShare}% of today's gamma` : '—'}
             </dd>
@@ -320,8 +325,8 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
             phase's start, except the last two: the turn is twenty minutes wide
             and the close ten, so the turn's name ends at 15:50 and the close's
             starts there — the same line, no overlap. */}
-        <div className="relative h-5" data-clock-phases>
-          {PHASES.map(p => {
+        <div className="relative h-5 max-lg:h-10" data-clock-phases>
+          {PHASES.map((p, i) => {
             const active = current?.key === p.key;
             const kept = keptPhase?.key === p.key || (keptBlock != null && phaseAt(OPEN_MIN + keptBlock * BLOCK_MIN).key === p.key);
             const turn = p.key === 'turn';
@@ -334,8 +339,9 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
                 data-phase-name={p.key}
                 aria-pressed={keptPhase?.key === p.key}
                 onClick={() => onNameClick(p.key)}
-                /* The close's name, ten minutes wide at the far right, ran 8px past a phone's strip — it goes there (the phone pass, 2026-09-13) */
-                className={`absolute top-0 text-[11px] font-medium whitespace-nowrap transition-colors ${nameCls} ${last ? 'max-lg:hidden' : ''}`}
+                /* Under lg: every other name on the second row, the close's name on the strip's right edge (it ran 8px past a
+                   phone's strip from its own start, so the phone pass of 2026-09-13 hid it) */
+                className={`absolute top-0 text-[11px] font-medium whitespace-nowrap transition-colors ${nameCls} ${i % 2 === 1 ? 'max-lg:top-5' : ''} ${last ? 'max-lg:!left-auto max-lg:!right-0 max-lg:!translate-x-0' : ''}`}
                 style={{
                   left: `${pct(turn ? p.to : p.from)}%`,
                   transform: turn ? 'translateX(calc(-100% - 6px))' : last ? 'translateX(2px)' : undefined,
@@ -343,7 +349,8 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
                 }}
                 title={`${hhmm(p.from)}–${hhmm(p.to)} — click to keep this phase`}
               >
-                {p.name}
+                <span className="max-lg:hidden">{p.name}</span>
+                <span className="lg:hidden">{SHORT_NAME[p.key]}</span>
               </button>
             );
           })}
@@ -399,7 +406,8 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
             {[OPEN_MIN, 10 * 60, 11 * 60, 12 * 60, 13 * 60, 14 * 60, 15 * 60, CLOSE_MIN].map(t => (
               <span
                 key={t}
-                className="absolute top-0 font-mono text-[11px] tnum text-textMuted"
+                /* a phone's strip holds four hours, not eight: 09:30 overprinted 10:00 (the audit's C1) */
+                className={`absolute top-0 font-mono text-[11px] tnum text-textMuted ${t === 10 * 60 || t === 11 * 60 || t === 13 * 60 || t === 15 * 60 ? 'max-lg:hidden' : ''}`}
                 style={{ left: `${pct(t)}%`, transform: t === CLOSE_MIN ? 'translateX(-100%)' : t === OPEN_MIN ? undefined : 'translateX(-50%)' }}
               >
                 {hhmm(t)}
@@ -413,7 +421,9 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
               data-clock-card
               data-kept={keptBlock === shownBlock ? 'true' : 'false'}
               className="absolute z-10 pointer-events-none rounded-lg border border-borderMuted bg-card/95 backdrop-blur-sm shadow-[0_8px_24px_rgba(0,0,0,0.5)] px-3 py-2 w-[300px] animate-soft-in"
-              style={{ left: `${cardPct}%`, bottom: 'calc(100% + 6px)', transform: cardOnRight ? 'translateX(12px)' : 'translateX(calc(-100% - 12px))' }}
+              /* UNDER THE STRIP, over the sentence that says the same (the audit's M7, 2026-10-13): risen above the strip, a card
+                 for a block in the right half covered the box's own facts (Now · Next · Expires) */
+              style={{ left: `${cardPct}%`, top: 'calc(100% + 4px)', transform: cardOnRight ? 'translateX(12px)' : 'translateX(calc(-100% - 12px))' }}
             >
               <div className="flex items-baseline gap-2">
                 <span className="font-mono text-[12px] font-semibold tnum" style={{ color: keptBlock === shownBlock ? SILVER : undefined }}>

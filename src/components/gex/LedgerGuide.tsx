@@ -22,7 +22,7 @@ const INK_2 = 'rgb(var(--text-secondary))';
 const INK_3 = 'rgb(var(--text-muted))';
 const SILVER = 'rgb(var(--silver))'; /* the silver token — deep steel on the light terminal (2026-09-12) */
 const SUPREME = 'rgb(var(--supreme))';
-const GRID = 'rgba(255,255,255,0.07)';
+const GRID = 'rgb(var(--ink) / 0.07)'; /* the ink token: on paper the white hairline was none */
 const COOL_1 = '#ABD9E9';
 const COOL_2 = '#74ADD1';
 const COOL_3 = '#4575B4';
@@ -150,7 +150,7 @@ const ReadFigure = () => (
     {/* The today column, bracketed */}
     <path d={`M${COLS[0].x} 128 v4 h${CELL_W} v-4`} fill="none" stroke={INK_2} />
     <Label x={50} y={141} fill={INK_2} size={9}>
-      read down today's column → what expires at 4:00
+      read down today's column → what expires at the close
     </Label>
   </svg>
 );
@@ -189,7 +189,7 @@ const LedgerGuide = ({ surface, greek }: LedgerGuideProps) => {
       <div>
         <p className="text-[12px] font-semibold text-textPrimary">The grid · one strike per row, one date per column</p>
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
-          Each row is a strike, a price level. Each column is an expiry date, today first and later dates to the right. Each cell is a capsule: the figure inside is how much dealer hedging sits at that strike for that date. Brighter and longer means more. Blue pushes back against a move there, orange pushes it along. The strike printed in magenta is the supreme, the heaviest strike of the whole book and the one the chart wears in magenta; the cell with the star is the heaviest single cell.
+          Each row is a strike, a price level. Each column is an expiry date, today first and later dates to the right. Each cell is a capsule: the figure inside is how much dealer hedging sits at that strike for that date. Brighter and longer means more. Blue pushes back against a move there, orange pushes it along. The strike printed in magenta is the supreme, the heaviest strike of the whole book and the one the chart wears in magenta; the cell with the star is the heaviest single cell. The short tags after a strike: CW the call wall, PW the put wall, PIN the gamma pin, YOU a strike you hold.
         </p>
         <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2">
           <GridFigure />
@@ -198,7 +198,7 @@ const LedgerGuide = ({ surface, greek }: LedgerGuideProps) => {
       <div>
         <p className="text-[12px] font-semibold text-textPrimary">Reading it · across for how long, down for what expires</p>
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
-          Read across a row to see how long a level lasts. Heavy in every column means the level stays for weeks. Heavy today and empty after means it is a one-day wall that is gone at the bell. Read down today's column to see what expires at 4:00. The "After the close" choice up top shows the same grid with today's column removed, the calendar as it will stand tomorrow morning.
+          Read across a row to see how long a level lasts. Heavy in every column means the level stays for weeks. Heavy today and empty after means it is a one-day wall that is gone at the bell. Read down today's column to see what expires at the close. The "After the close" choice up top shows the same grid with today's column removed, the calendar as it will stand tomorrow morning.
         </p>
         <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2">
           <ReadFigure />
@@ -217,7 +217,7 @@ const LedgerGuide = ({ surface, greek }: LedgerGuideProps) => {
           </li>
           {share != null && (
             <li className="text-[11.5px] leading-relaxed text-textSecondary">
-              <span className="font-mono tnum text-textPrimary">{share}%</span> of the hedging on this calendar expires today at 4:00. The rest is still there tomorrow.
+              <span className="font-mono tnum text-textPrimary">{share}%</span> of the hedging on this calendar expires today at the close. The rest is still there tomorrow.
             </li>
           )}
           {wallIdx >= 0 && wallToday > 0 && (
@@ -228,7 +228,7 @@ const LedgerGuide = ({ surface, greek }: LedgerGuideProps) => {
           )}
         </ul>
       </div>
-      <p className="text-[11px] text-textMuted">Click a cell for its card · click it again to let go · Focus, up on the band, keeps only the biggest moves since the open.</p>
+      <p className="text-[11px] text-textMuted">Click a cell for its card · click it again, or anywhere off the grid, to let go · Biggest moves, up on the band, keeps only the badged cells sharp — the biggest moves since the open.</p>
     </div>
   );
 };

@@ -73,11 +73,14 @@ interface ExpiryRangeCardProps {
   testId?: string;
   /** The card WITHOUT its printed name — for a line that measured itself too short */
   bare?: boolean;
+  /** WHAT THE HOST DRAWS when its fit cuts the window short (the audit's H4, 2026-10-13): the last expiry drawn and
+      the count, so the trigger says "Today → Oct 16 · 4 of 7" rather than a window the grid under it does not draw */
+  cut?: { through: number; shown: number; wanted: number };
 }
 
 type Side = 'from' | 'through';
 
-const ExpiryRangeCard = ({ label = 'Expiries', days, from, through, onChange, ceiling, ceilingWhy, shortcuts, note, title, align = 'start', testId, bare = false }: ExpiryRangeCardProps) => {
+const ExpiryRangeCard = ({ label = 'Expiries', days, from, through, onChange, ceiling, ceilingWhy, shortcuts, note, title, align = 'start', testId, bare = false, cut }: ExpiryRangeCardProps) => {
   const [open, setOpen] = useState(false);
   const [side, setSide] = useState<Side>('through');
   const t = today();
@@ -87,8 +90,11 @@ const ExpiryRangeCard = ({ label = 'Expiries', days, from, through, onChange, ce
   const a = at(from);
   const b = at(through);
   const one = a.value === b.value;
-  /* what the trigger prints: "Today" · "Today → Oct 12" · "Sep 23 → Oct 12" */
-  const words = one ? a.label : `${a.label} → ${b.label}`;
+  /* what the trigger prints: "Today" · "Today → Oct 12" · "Sep 23 → Oct 12" — and, cut short by the fit, the window DRAWN with the count */
+  const isCut = !!cut && !one && cut.shown < cut.wanted;
+  const drawnTo = isCut ? at(cut!.through) : b;
+  /* cut to one column (a phone), the trigger says the one day, not "Today → Today" */
+  const words = one || drawnTo.value === a.value ? a.label : `${a.label} → ${drawnTo.label}`;
   const count = Math.max(1, b.value - a.value + 1);
 
   const commit = (f: number, g: number) => {
@@ -130,7 +136,7 @@ const ExpiryRangeCard = ({ label = 'Expiries', days, from, through, onChange, ce
           data-dropdown={testId ?? label}
           data-expiry-card
           data-expiry-range={`${from}-${through}`}
-          aria-label={`${label}: ${words}`}
+          aria-label={`${label}: ${words}${isCut ? ` · ${cut!.shown} of ${cut!.wanted} fit` : ''}`}
           title={note ?? (bare ? label : undefined)}
           data-expiry-note={note ? '' : undefined}
           className="hit group inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted data-[state=open]:border-silver/50 transition-colors font-mono select-none"
@@ -138,6 +144,11 @@ const ExpiryRangeCard = ({ label = 'Expiries', days, from, through, onChange, ce
           <CalendarDays className="w-3 h-3 shrink-0 text-textMuted" aria-hidden="true" data-dropdown-icon />
           {!bare && <span className="text-[11px] text-textMuted">{label}</span>}
           <span className="text-[11px] font-semibold text-textPrimary whitespace-nowrap">{words}</span>
+          {isCut && (
+            <span className="text-[11px] tnum text-textMuted whitespace-nowrap" data-expiry-cut={`${cut!.shown}/${cut!.wanted}`}>
+              · {cut!.shown} of {cut!.wanted}
+            </span>
+          )}
           <ChevronDown className="w-3 h-3 text-textMuted" />
         </button>
       </Popover.Trigger>
@@ -233,11 +244,12 @@ const ExpiryRangeCard = ({ label = 'Expiries', days, from, through, onChange, ce
               {note}
             </p>
           )}
-          <div className="mt-2 pt-2 border-t border-borderSubtle/70 flex items-center justify-between gap-3">
+          {/* two lines, not one row forced onto three (the audit's M13, 2026-10-13) */}
+          <div className="mt-2 pt-2 border-t border-borderSubtle/70 flex flex-col gap-0.5">
             <p className="text-[11px] text-textMuted">
               {count} {count === 1 ? 'expiry' : 'expiries'} · {ceilingWhy}
             </p>
-            <p className="text-[11px] text-textMuted whitespace-nowrap">The lit days are the book's expiries.</p>
+            <p className="text-[11px] text-textMuted">The lit days are the book's expiries.</p>
           </div>
         </Popover.Content>
       </Popover.Portal>

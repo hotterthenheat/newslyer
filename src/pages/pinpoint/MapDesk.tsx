@@ -42,7 +42,9 @@ import ExposureField from '../../components/gex/ExposureField';
 import TraderClock from '../../components/gex/TraderClock';
 import WallReportCard from '../../components/gex/WallReportCard';
 import ReplayStrip from '../../components/gex/ReplayStrip';
-import { barsAt, replayDay, replayMinute, replayRange, snapPos, snapshotAt, type ReplayRange } from '../../data/replay';
+import { barsAt, replayDay, replayLabel, replayMinute, replayRange, snapPos, snapshotAt, type ReplayRange } from '../../data/replay';
+import { readSessionClock } from '../../data/moc';
+import { setReplayLabel } from './replayState';
 import { readPosition, usePositions } from '../../data/positions';
 import { buildExposureProfile, type StrikeWindow } from '../../data/exposure';
 import type { ExposureExpiry } from '../../types/gex';
@@ -163,6 +165,17 @@ const MapDesk = () => {
   }, [replayOn]);
   /* A replay was recorded in one name's world — a new name ends it */
   useEffect(() => setReplay(null), [scan?.ticker]);
+  /* THE SHELL HEAD SAYS IT TOO (the audit's M8, 2026-10-13): the moment replayed, as a tag beside the page's name */
+  const replayWords = playing && range ? `${replayDay(range)} · ${replayLabel(framePos, range)}` : null;
+  useEffect(() => {
+    setReplayLabel(replayWords);
+    return () => setReplayLabel(null);
+  }, [replayWords]);
+  /* outside the session the door replays the LAST session, and says so (the audit's L4) */
+  const marketOpen = (() => {
+    const c = readSessionClock();
+    return c.phase === 'OPEN' || c.phase === 'AUCTION';
+  })();
   /* Replay opens at the OPEN, paused — the strip's own scrubber takes it from there */
   const startReplay = () => {
     if (!scan) return;
@@ -189,8 +202,9 @@ const MapDesk = () => {
     <button
       type="button"
       onClick={startReplay}
-      title="Replay today's session from the open — every box on the page reads the book as it stood"
-      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+      title={`Replay ${marketOpen ? "today's" : 'the last'} session from the open — every box on the page reads the book as it stood`}
+      /* sentence case, the cards' grammar since 2026-10-10 (the audit's M3) */
+      className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted font-mono text-[11px] text-textSecondary hover:text-textPrimary transition-colors"
       data-map-replay
     >
       <Play className="w-3 h-3" /> Replay
@@ -293,7 +307,10 @@ const MapDesk = () => {
           floor) with the toolbar and the read line, no scrolling — the lock
           walk's first fix (Noah, 2026-09-09: "the heatmap length is a bit
           short so make it taller"; at 600 only 25 of the 40 rows showed) */}
-      <div ref={calRef} className="border border-borderSubtle rounded-md overflow-hidden h-[870px] flex flex-col" data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
+      {/* …AND NEVER PAST THE FOLD (the audit's M9, 2026-10-13): on a 900px screen the fixed box ran 62px under the fold
+          and the matrix inside it scrolled in a box that was itself cut — two scroll regions nested. The box is the
+          first screen's (the shell's chrome above it is ~174px, 16 of air under), 870 at most, never under 640. */}
+      <div ref={calRef} className="border border-borderSubtle rounded-md overflow-hidden h-[clamp(640px,calc(100dvh-190px),870px)] flex flex-col" data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
         <Deferred index={0} frames={0} fallback={<CalendarInner />} className="h-full min-h-0 flex flex-col animate-fade-in">
           <ExposureField
             snapshot={calSnap ?? scan}

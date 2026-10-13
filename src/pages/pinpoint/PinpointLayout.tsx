@@ -16,6 +16,7 @@ import { setDistanceUnit, useDistanceUnit } from '../../data/distanceUnits';
 import { readSessionClock } from '../../data/moc';
 import { FLIP, LONG_GAMMA, SHORT_GAMMA } from '../../components/gex/paletteInk';
 import { GEX_SUBPAGES } from './subnav';
+import { useReplayLabel } from './replayState';
 
 /*
 ==================================================
@@ -122,6 +123,8 @@ const PinpointLayout = () => {
     return () => window.clearInterval(id);
   }, []);
   const open = clock.phase === 'OPEN' || clock.phase === 'AUCTION';
+  /* THE REPLAY, SAID HERE TOO (the audit's M8, 2026-10-13): the boxes below are rewound, these facts are not */
+  const replaying = useReplayLabel();
 
   return (
     <>
@@ -132,15 +135,17 @@ const PinpointLayout = () => {
           sidebar carries the ticker and the Map · Ahead · … choice, so this head
           no longer repeats them. It names the page and reads the market. */}
       <header className="flex items-start gap-6 flex-wrap pb-3 border-b border-borderSubtle" data-shell>
-        <div className="min-w-0 flex-1">
-          <div className="h-6 flex items-center gap-2.5" data-shell-page>
+        {/* THE LINE IS NEVER CUT MID-WORD (the audit's H8, 2026-10-13): the column keeps room for it, so under ~1,200px the
+            facts wrap under the title instead of the title column shrinking to "The book by s…" */}
+        <div className="min-w-[min(100%,560px)] flex-1">
+          <div className="h-6 flex items-center gap-2.5 flex-wrap" data-shell-page>
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-borderSubtle text-textSecondary shrink-0" aria-hidden="true">
               <PageIcon className="w-3.5 h-3.5" />
             </span>
             <h1 className="text-[15px] font-semibold leading-tight text-textPrimary">{page.label}</h1>
             {focused != null && (
               <span data-focus-chip className="inline-flex items-center gap-2 rounded-md border border-silver/40 bg-silver/[0.06] pl-2.5 pr-1 py-0.5 font-mono">
-                <span className="text-[11px] font-bold uppercase tracking-widest text-silver">Focus</span>
+                <span className="text-[11px] font-bold uppercase tracking-widest text-silver">Kept</span>
                 <span className="text-[12px] font-semibold tnum text-textPrimary">{fmtStrike(focused)}</span>
                 {dist != null && (
                   <span className={`text-[11px] tnum ${dist > 0 ? 'text-bull' : dist < 0 ? 'text-bear' : 'text-textMuted'}`}>
@@ -162,14 +167,25 @@ const PinpointLayout = () => {
                 </button>
               </span>
             )}
+            {replaying && (
+              <span data-replay-tag className="inline-flex items-center gap-1.5 rounded-md border border-silver/40 bg-silver/[0.06] px-2 py-0.5 font-mono text-[11px]" title="The boxes below are rewound to this minute; the facts on the right are live">
+                <span className="font-semibold text-silver">Replaying</span>
+                <span className="tnum text-textPrimary">{replaying}</span>
+              </span>
+            )}
           </div>
-          <p className="mt-0.5 text-[11px] text-textMuted whitespace-nowrap truncate">{page.subtitle}</p>
+          <p className="mt-0.5 text-[11px] text-textMuted">{page.subtitle}</p>
         </div>
 
         <div className="flex items-center gap-6 flex-wrap">
           {/* THE FACTS, each named: which way dealers hedge, the flip and how far, how often it was crossed, the clock */}
           {gauge && (
-            <dl className="flex flex-wrap gap-x-6 gap-y-2" data-shell-facts>
+            <dl className={`flex flex-wrap gap-x-6 gap-y-2 ${replaying ? 'opacity-70' : ''}`} data-shell-facts data-shell-facts-live={replaying ? '' : undefined} title={replaying ? 'Live — the replay rewinds the boxes, not these facts' : undefined}>
+              {replaying && (
+                <div className="self-end">
+                  <span className="inline-flex h-5 items-center rounded-full border border-borderSubtle px-2 text-[11px] text-textMuted">live</span>
+                </div>
+              )}
               {words && gauge.regime ? (
                 <>
                   <Fact label="Dealers" title={words.blurb} testId="dealers">

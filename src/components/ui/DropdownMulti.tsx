@@ -58,6 +58,8 @@ interface DropdownMultiProps {
   /** The card WITHOUT its printed name — for a line that measured itself too short for four named cards (the Weigher's
       chain head on a laptop, 2026-09-20). The name stays in the tooltip, the aria-label and the open card's heading. */
   bare?: boolean;
+  /** The foot's clearing row, where the host's empty word is not "everything" (the Map's Greek card: "All five") */
+  clearWord?: string;
 }
 
 /** The trigger's summary: nothing · one name · two names · two names +N */
@@ -68,7 +70,7 @@ const summarise = (values: string[], groups: MultiGroup[], emptyWord: string): s
   return `${labels.slice(0, 2).join(', ')} +${labels.length - 2}`;
 };
 
-const DropdownMulti = ({ label, values, groups, onChange, title, emptyWord = 'Everything', align = 'end', testId, bare = false, tone }: DropdownMultiProps) => {
+const DropdownMulti = ({ label, values, groups, onChange, title, emptyWord = 'Everything', align = 'end', testId, bare = false, tone, clearWord = 'Clear · show everything' }: DropdownMultiProps) => {
   const picked = new Set(values);
   const toggle = (v: string) => onChange(picked.has(v) ? values.filter(x => x !== v) : [...values, v]);
   const summary = summarise(values, groups, emptyWord);
@@ -136,7 +138,7 @@ const DropdownMulti = ({ label, values, groups, onChange, title, emptyWord = 'Ev
                 className="px-2 py-1.5 rounded outline-none cursor-pointer font-mono text-[11px] uppercase tracking-widest text-textSecondary data-[highlighted]:bg-ink/[0.04] data-[highlighted]:text-textPrimary"
                 data-multi-clear
               >
-                Clear · show everything
+                {clearWord}
               </DropdownMenu.Item>
             </>
           )}

@@ -161,7 +161,8 @@ export const ReadDoor = ({ open, onClick, compact = false, name, testId = 'data-
     aria-pressed={open}
     aria-label={open ? `Close ${name ? `${name}'s` : 'the'} read` : `${name ? `${name}'s` : 'The'} read`}
     title={open ? `Close ${name ? `${name}'s` : 'the'} read (Esc)` : `${name ? `${name}'s` : "The book's"} read — the net, the levels, the heaviest strikes and what they did, the strike under the pointer, the move to the close`}
-    className={`inline-flex items-center gap-1.5 h-7 rounded-md border font-mono text-[11px] uppercase tracking-wider transition-colors ${compact ? 'w-7 justify-center' : 'px-2.5'} ${
+    /* sentence case, the cards' grammar (the audit's M3, 2026-10-13) */
+    className={`inline-flex items-center gap-1.5 h-7 rounded-md border font-mono text-[11px] transition-colors ${compact ? 'w-7 justify-center' : 'px-2.5'} ${
       open ? 'border-silver/50 text-silver bg-silver/[0.08]' : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted'
     }`}
     {...{ [testId]: name ?? '' }}
@@ -304,7 +305,9 @@ const BookRead = ({ surface, snapshot, greek, mode = HEAT_MODE, expiries, afterB
   return (
     <aside
       className={`absolute inset-y-0 right-0 z-20 flex flex-col bg-card/85 backdrop-blur-md backdrop-saturate-150 animate-soft-in transition-opacity duration-200 motion-reduce:transition-none ${
-        fill ? 'w-full' : 'w-[400px] max-w-[62%] border-l border-borderMuted shadow-[-16px_0_48px_rgba(0,0,0,0.45)]'
+        /* 460, the guide cards' width: at 400 the rail's five names wrapped inside their buttons and the head cut its
+           own words (the audit's H6, 2026-10-13) */
+        fill ? 'w-full' : 'w-[460px] max-w-[62%] border-l border-borderMuted shadow-[-16px_0_48px_rgba(0,0,0,0.45)]'
       } ${closing ? 'opacity-0 pointer-events-none' : ''}`}
       aria-label={`${surface.ticker}'s read`}
       data-book-read={surface.ticker}
@@ -343,7 +346,7 @@ const BookRead = ({ surface, snapshot, greek, mode = HEAT_MODE, expiries, afterB
             key={s.id}
             onClick={() => go(s.id)}
             aria-current={current === s.id || undefined}
-            className={`px-2 h-6 rounded font-mono text-[11px] uppercase tracking-widest transition-colors ${current === s.id ? 'text-silver bg-silver/[0.08]' : 'text-textMuted hover:text-textPrimary'}`}
+            className={`shrink-0 px-2 h-6 rounded font-mono text-[11px] whitespace-nowrap transition-colors ${current === s.id ? 'text-silver bg-silver/[0.08]' : 'text-textMuted hover:text-textPrimary'}`}
           >
             {s.label}
           </button>
@@ -442,7 +445,8 @@ const BookRead = ({ surface, snapshot, greek, mode = HEAT_MODE, expiries, afterB
               one expected move · {shut ? 'a full session' : `${Math.round(minLeft)} min left`} · vol {(iv * 100).toFixed(1)}%
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+          {/* one column: "one move down · 512.34 · 512 put wall" wrapped to two lines in half the card (the audit's H6) */}
+          <div className="grid grid-cols-1 gap-y-1 text-[11px]">
             {[
               { word: 'one move up', price: surface.spot + w1, ink: CALL_WALL },
               { word: 'one move down', price: surface.spot - w1, ink: PUT_WALL },

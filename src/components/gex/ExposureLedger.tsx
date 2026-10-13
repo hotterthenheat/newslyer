@@ -44,7 +44,7 @@
 ==================================================
 */
 
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import HeatPill from './HeatPill';
 import { HEAT_MODE, heatLaneColor, type HeatMode } from './heatmap';
 import SpotRule from '../ui/SpotRule';
@@ -104,7 +104,10 @@ export const STRIKE_W = 104;
     an empty capsule "reads as a website bug/flaw" (Noah, 2026-09-14, three names through Oct 26),
     so it is never drawn: the ledger draws only the columns that fit its box, and the band's
     Expiries card offers only those (see `onFit`). */
-export const CELL_MIN_W = 42;
+/* …AND NEVER NARROWER THAN ITS DATE HEAD (the audit's H3, 2026-10-13): at 42 a 1920 desk with the rail open drew
+   43px columns under 44px of "OCT 14" and every head lost its first letter. A column that cannot print its head does
+   not fit: the narrow head is 40px of mono at its natural tracking inside 4px of padding. */
+export const CELL_MIN_W = 48;
 /** How many columns a pane this wide can print figures in */
 export const columnsThatFit = (paneW: number) => Math.max(1, Math.floor((paneW - STRIKE_W) / CELL_MIN_W));
 /** A row never thinner than this — past it the grid scrolls */
@@ -183,6 +186,8 @@ interface LedgerCellProps {
   paper?: boolean;
   /** The pinned cell — the one the focus mode keeps sharp */
   pinned?: boolean;
+  /** The pane's id stem — the cell's own id is `${idBase}-${g}-${e}-${strike}`, the keys' active descendant */
+  idBase: string;
   onHover: (f: Focus | null, x: number, y: number) => void;
   onPick: (f: Focus, x: number, y: number) => void;
 }
@@ -190,16 +195,20 @@ interface LedgerCellProps {
 /** The badge's ink: green building, red bleeding, quiet otherwise — the Building page's own colours for what today added
     and what left */
 const sinceInk = (dir: 1 | -1 | 0) => (dir === 1 ? 'rgb(var(--bull))' : dir === -1 ? 'rgb(var(--bear))' : 'rgb(var(--text-muted))');
+/* at the house's 11px floor (the audit's H5b, 2026-10-13 — it was 7.5px); the chip stands only where the column has room
+   for its own words (`laneFor` below), the dot everywhere else */
 const SinceBadge = ({ text, dir }: { text: string; dir: 1 | -1 | 0 }) => (
-  <span className="rounded-full px-1 py-px font-mono text-[7.5px] font-bold tnum leading-[1.1] whitespace-nowrap" style={{ background: 'rgb(var(--panel) / 0.88)', color: sinceInk(dir), textShadow: 'none' }} data-since={dir}>
+  <span className="rounded-full px-1 py-0 font-mono text-[11px] font-semibold tnum leading-none whitespace-nowrap" style={{ background: 'rgb(var(--panel) / 0.88)', color: sinceInk(dir), textShadow: 'none' }} data-since={dir}>
     {text}
   </span>
 );
 
-const LedgerCell = memo(({ strike, e, g, v, maxAbs, date, first, wash, isKing, ring, star, since, sinceDir, sinceLane, dotBeside, kept, fontSize, figure, mode, paper, pinned, onHover, onPick }: LedgerCellProps) => (
+const LedgerCell = memo(({ strike, e, g, v, maxAbs, date, first, wash, isKing, ring, star, since, sinceDir, sinceLane, dotBeside, kept, fontSize, figure, mode, paper, pinned, idBase, onHover, onPick }: LedgerCellProps) => (
   <div
     data-cell
     data-cell-key={`${g}|${e}|${strike}`}
+    id={`${idBase}-${g}-${e}-${strike}`.replace(/\./g, '_')}
+    aria-label={`${fmtStrike(strike)} on ${date} · ${fmtUsd(v)}${since ? ` · ${since} since the open` : ''}`}
     data-pinned={pinned ? '' : undefined}
     data-kept={kept ? '' : undefined}
     /* the group's first cell pays its 1px rule out of its own padding, so its capsule is as wide as the rest — at
@@ -397,7 +406,9 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
   const cellW = (box.w - strikeW) / Math.max(1, cols);
   /* the floor is 10px, not 9 (the partner, 2026-09-14: the figures "difficult to see") — a 20px
      row held 9px type; a short figure at 10px bold is 32px in a 42px cell, the full one 65 in 71 */
-  const fontSize = clamp(Math.min(rowH * 0.46, (cellW - 22) / (8 * 0.68)), 10, 13);
+  /* …AND 11 SINCE 2026-10-13 (the audit's M10): the terminal's floor, which every other word on the page keeps — the
+     short figure at 11px bold is 35px in a 48px cell; the full one switches to the short one a little earlier */
+  const fontSize = clamp(Math.min(rowH * 0.46, (cellW - 22) / (8 * 0.68)), 11, 13);
   /* Under 71px the full figure no longer fits at 9px (All at forty columns
      on a page-width calendar): print the short one on half the padding. Under
      CELL_MIN_W the colour would stand alone — unreachable now that the columns
@@ -405,6 +416,8 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
      heads lose their "· 2d" the same way. */
   const figure: Figure = cellW >= 71 ? 'full' : cellW >= CELL_MIN_W ? 'short' : 'none';
   const narrowHead = cellW < 60;
+  /* a greek's group head too narrow for its unit (a phone's five groups of one column) prints the greek alone */
+  const narrowGroup = cellW * shownIdx.length < 96;
   const rowsTemplate = [
     `${HEAD_H / 2}px ${HEAD_H / 2}px`,
     above.length ? `repeat(${above.length}, minmax(${ROW_MIN}px, 1fr))` : '',
@@ -531,6 +544,54 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
     return () => document.removeEventListener('click', h);
   }, [pinned]);
 
+  /* THE KEYS REACH THE CELLS (the audit's H10, 2026-10-13): the grid is one tab stop; the arrows walk the cells — up and
+     down the strikes, left and right along the dates and the greeks — Home and End jump to a row's ends, Enter or Space
+     keeps the cell: the same ring, wash and card a pointer gives, through the same hover and pick. The walk starts on
+     the kept cell, else the first cell of the strike just over spot, and only from the keys (:focus-visible) — a click
+     inside the box focuses it too, and changes nothing. */
+  const [keyCell, setKeyCell] = useState<Focus | null>(null);
+  const idBase = `ledger-${surface.ticker}`;
+  const cellId = (f: Focus) => `${idBase}-${f.greek}-${f.e}-${f.strike}`.replace(/\./g, '_');
+  const columnsList = useMemo(() => greeks.flatMap(g => shownIdx.map(e => ({ g, e }))), [greeks, shownIdx]);
+  const cellBox = (f: Focus) => {
+    const el = boxRef.current?.querySelector<HTMLElement>(`[data-cell-key="${keyOf(f)}"]`);
+    const r = el?.getBoundingClientRect();
+    return el && r ? { el, x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+  };
+  const walkTo = (f: Focus) => {
+    setKeyCell(f);
+    const c = cellBox(f);
+    c?.el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    hoverCell(f, c?.x ?? 0, c?.y ?? 0);
+  };
+  const leaveKeys = () => {
+    setKeyCell(null);
+    hoverCell(null, 0, 0);
+  };
+  const firstCell = (): Focus | null => (strikes.length ? { strike: above[above.length - 1] ?? strikes[0], e: shownIdx[0] ?? 0, greek: greeks[0] } : null);
+  const onKeys = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget || e.altKey || e.ctrlKey || e.metaKey || !strikes.length || !columnsList.length) return;
+    const cur = keyCell ?? pinned ?? firstCell()!;
+    const si = Math.max(0, strikes.indexOf(cur.strike));
+    const ci = Math.max(0, columnsList.findIndex(c => c.g === cur.greek && c.e === cur.e));
+    const col = (i: number) => columnsList[Math.max(0, Math.min(columnsList.length - 1, i))];
+    let next: Focus | null = null;
+    if (e.key === 'ArrowDown') next = { ...cur, strike: strikes[Math.min(strikes.length - 1, si + 1)] };
+    else if (e.key === 'ArrowUp') next = { ...cur, strike: strikes[Math.max(0, si - 1)] };
+    else if (e.key === 'ArrowRight') next = { ...cur, greek: col(ci + 1).g, e: col(ci + 1).e };
+    else if (e.key === 'ArrowLeft') next = { ...cur, greek: col(ci - 1).g, e: col(ci - 1).e };
+    else if (e.key === 'Home') next = { ...cur, greek: col(0).g, e: col(0).e };
+    else if (e.key === 'End') next = { ...cur, greek: col(columnsList.length - 1).g, e: col(columnsList.length - 1).e };
+    else if ((e.key === 'Enter' || e.key === ' ') && keyCell) {
+      e.preventDefault();
+      const c = cellBox(keyCell);
+      pick(keyCell, c?.x, c?.y);
+      return;
+    } else return;
+    e.preventDefault();
+    if (next) walkTo(next);
+  };
+
   const supremeGreek = greeks[0];
   const supremeDefault = supremeFor(supremeGreek);
   const focus: Focus = pinned ?? hovered ?? { strike: supremeDefault.strike, e: supremeDefault.e, greek: supremeGreek };
@@ -562,7 +623,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
       }
     return total > 0 ? Math.round((100 * dies) / total) : 0;
   })();
-  const bellWords = bell == null ? null : afterBell ? `after the close · today's ${bell}% has expired` : `${bell}% of this expires today at 4:00`;
+  const bellWords = bell == null ? null : afterBell ? `after the close · today's ${bell}% has expired` : `${bell}% of this expires today at the close`;
   const verdict =
     focus.greek === 'gex'
       ? gexV >= 0
@@ -634,9 +695,13 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
   /* while the focus door is open, the kept nodes' strike labels and date heads stay readable above the scrim too */
   const keptRows = useMemo(() => new Set(focusOn ? [...exceptional].map(k => Number(k.split('|')[2])) : []), [focusOn, exceptional]);
   const keptCols = useMemo(() => new Set(focusOn ? [...exceptional].map(k => k.split('|').slice(0, 2).join('|')) : []), [focusOn, exceptional]);
+  /* the kept strikes, highest first — the summary line names them (the audit's M12) */
+  const keptStrikes = useMemo(() => [...keptRows].sort((a, b) => b - a), [keptRows]);
   /* the chip beside a full figure needs ~128px (the figure at 13px is 60, the chip 26, the padding 16, the star's
      lane after that); under it the dot rides the capsule's edge wherever a figure prints at all */
-  const sinceLane: 'figure' | 'dot' | 'none' = cellW >= 128 ? 'figure' : figure !== 'none' ? 'dot' : 'none';
+  /* …at 11px the chip's width is its words' ("−45%" 35px, "flipped sides" 96): the chip where the column holds the figure,
+     the chip and their air, the dot where it does not (the audit's H5b) */
+  const laneFor = (text: string | null): 'figure' | 'dot' | 'none' => (text && cellW >= 60 + text.length * 6.8 + 8 + 24 ? 'figure' : figure !== 'none' ? 'dot' : 'none');
   /* the dot beside the figure from 56px — under that the short figure fills the capsule and the dot rides the edge */
   const dotBeside = cellW >= 56;
   const focusSince = sinceCell(focus.greek, focus.e, focus.strike);
@@ -664,7 +729,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
       <CardRow k={`Net · ${GREEK_LABEL[focus.greek]}`} v={fmtUsd(netV)} sub={netV >= 0 ? 'put-heavy' : 'call-heavy'} ink={heatLaneColor(netV, surface.maxAbs[focus.greek], mode ?? HEAT_MODE, 0.35, paper)} />
       {oi > 0 && <CardRow k="Open interest" v={oi.toLocaleString('en-US')} sub="contracts" />}
       {focusSince && <CardRow k="Since the open" v={focusSince.text} sub={focusSince.dir === 1 ? 'building' : focusSince.dir === -1 ? 'bleeding' : undefined} ink={sinceInk(focusSince.dir)} />}
-      {bell != null && <CardRow k={afterBell ? 'Expired at the close' : 'Expires today'} v={`${bell}%`} sub={afterBell ? 'of this book' : 'of this book, at 4:00'} />}
+      {bell != null && <CardRow k={afterBell ? 'Expired at the close' : 'Expires today'} v={`${bell}%`} sub={afterBell ? 'of this book' : 'of this book, at the close'} />}
     </>
   );
   const cardTitle = fmtStrike(focus.strike);
@@ -729,6 +794,19 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
           /* Invisible for the one frame before its box is measured (see the effect above); no sideways scrollbar
              flashing while the grid holds its promised width through a glide */
           style={box.w ? (gliding ? { overflowX: 'hidden' } : undefined) : { visibility: 'hidden' }}
+          tabIndex={0}
+          role="group"
+          aria-label="The book by strike and expiry — the arrow keys walk the cells, Enter keeps one"
+          aria-activedescendant={keyCell ? cellId(keyCell) : undefined}
+          onFocus={e => {
+            if (e.target !== e.currentTarget || keyCell || !e.currentTarget.matches(':focus-visible')) return;
+            const start = pinned ?? firstCell();
+            if (start) walkTo(start);
+          }}
+          onBlur={e => {
+            if (e.target === e.currentTarget) leaveKeys();
+          }}
+          onKeyDown={onKeys}
           onPointerEnter={() => {
             inBoxRef.current = true;
           }}
@@ -773,10 +851,15 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
           {greeks.map(g => (
             <div
               key={`g-${g}`}
-              className={`sticky top-0 z-10 ${ground} px-2 flex items-center justify-center font-mono text-[11px] font-bold uppercase tracking-widest text-textPrimary border-l border-borderSubtle`}
+              /* min-w-0 and a cut: on a phone five groups of one 45px column overprinted each other's words (the audit's 2.13) */
+              className={`sticky top-0 z-10 ${ground} ${narrowGroup ? 'px-0.5 tracking-wider' : 'px-2 tracking-widest'} flex items-center justify-center min-w-0 overflow-hidden font-mono text-[11px] font-bold uppercase text-textPrimary border-l border-borderSubtle`}
               style={{ gridColumn: `span ${shownIdx.length}` }}
+              title={`${GREEK_LABEL[g]} · ${GREEK_UNIT[g]}`}
             >
-              {GREEK_LABEL[g]} <span className="ml-1 font-normal text-textMuted">· {GREEK_UNIT[g]}</span>
+              <span className="truncate">
+                {GREEK_LABEL[g]}
+                {!narrowGroup && <span className="ml-1 font-normal text-textMuted">· {GREEK_UNIT[g]}</span>}
+              </span>
             </div>
           ))}
           {greeks.map(g =>
@@ -788,7 +871,8 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
                   data-exp-head
                   data-pinned-col={pinned && pinned.greek === g && pinned.e === e ? '' : undefined}
                   data-kept-col={keptCols.has(`${g}|${e}`) ? '' : undefined}
-                  className={`sticky z-10 ${ground} ${narrowHead ? 'px-1 overflow-hidden' : 'px-2'} flex items-center justify-end font-mono text-[11px] uppercase tracking-wider text-textSecondary border-b border-borderSubtle whitespace-nowrap ${
+                  /* narrow: the date at its natural tracking in 2px of padding — 40px in a 48px column (the audit's H3) */
+                  className={`sticky z-10 ${ground} ${narrowHead ? 'px-0.5 overflow-hidden tracking-normal' : 'px-2 tracking-wider'} flex items-center justify-end font-mono text-[11px] uppercase text-textSecondary border-b border-borderSubtle whitespace-nowrap ${
                     ci === 0 ? 'border-l' : ''
                   } ${(pinned ? pinned.greek === g && pinned.e === e : hovered && hovered.greek === g && hovered.e === e) ? 'text-textPrimary' : ''}`}
                   style={{ top: HEAD_H / 2 }}
@@ -856,6 +940,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
                   const isHover = !pinned && !!hovered && hovered.strike === strike && hovered.e === e && hovered.greek === g;
                   const colWash = !pinned && hovered && hovered.greek === g && hovered.e === e && !isHoverRow ? 'bg-silver/[0.05]' : '';
                   const ring = isHover || isPinned ? SILVER : isSupremeCell ? SUPREME : undefined;
+                  const sc = exceptional.has(`${g}|${e}|${strike}`) ? sinceCell(g, e, strike) : null;
                   return (
                     <LedgerCell
                       key={`c-${g}-${exp.dte}-${strike}`}
@@ -870,9 +955,10 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
                       isKing={isKing}
                       ring={ring}
                       star={isKing && showStar}
-                      since={exceptional.has(`${g}|${e}|${strike}`) ? (sinceCell(g, e, strike)?.text ?? null) : null}
-                      sinceDir={sinceCell(g, e, strike)?.dir ?? 0}
-                      sinceLane={sinceLane}
+                      since={sc?.text ?? null}
+                      sinceDir={sc?.dir ?? 0}
+                      sinceLane={laneFor(sc?.text ?? null)}
+                      idBase={idBase}
                       dotBeside={dotBeside}
                       kept={focusOn && exceptional.has(`${g}|${e}|${strike}`)}
                       fontSize={fontSize}
@@ -890,6 +976,27 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
           })}
           </div>
         </div>
+        {/* WHAT THE FOCUS KEPT, IN WORDS (the audit's M12, 2026-10-13): the scrim softened the board and left the sharp cells
+            to be found by eye; this names them — the count and the strikes, highest first, each a keep */}
+        {focusOn && keptStrikes.length > 0 && (
+          <div className={`absolute inset-x-0 bottom-0 z-30 flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1.5 border-t border-borderSubtle ${ground} font-mono text-[11px]`} data-ledger-focus-summary={exceptional.size}>
+            <span className="text-textSecondary">
+              {exceptional.size} biggest {exceptional.size === 1 ? 'move' : 'moves'} since the open
+            </span>
+            <span className="text-textMuted">·</span>
+            {keptStrikes.map(s => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onSelectStrike?.(s)}
+                title={`Keep ${fmtStrike(s)}`}
+                className={`tnum rounded px-1 transition-colors ${pinned?.strike === s ? 'text-silver' : 'text-textPrimary hover:text-silver'}`}
+              >
+                {fmtStrike(s)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {/* THE CARD — on the clicked node (see `keptPos`) until the next click; never on a hover */}
       {pinned && keptPos && (

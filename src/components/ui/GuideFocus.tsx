@@ -40,10 +40,13 @@ interface GuideDoorProps {
   title: string;
   testId: string;
   className?: string;
+  /** 24px by rest (a card head's 24px title row); `md` is the 28px of a toolbar's cards, so the door stands on one
+      baseline with them (the Map's band, the audit's M2, 2026-10-13) */
+  size?: 'sm' | 'md';
 }
 
 /** The door: a quiet "How to read" with the info mark, lit while the guide is open */
-export const GuideDoor = ({ open, onClick, title, testId, className = '', compact = false }: GuideDoorProps) => (
+export const GuideDoor = ({ open, onClick, title, testId, className = '', compact = false, size = 'sm' }: GuideDoorProps) => (
   <button
     type="button"
     onClick={onClick}
@@ -52,7 +55,7 @@ export const GuideDoor = ({ open, onClick, title, testId, className = '', compac
     aria-label={compact ? 'How to read' : undefined}
     data-guide-door={testId}
     data-guide-door-compact={compact || undefined}
-    className={`hit shrink-0 inline-flex items-center gap-1 h-6 rounded-md text-[11px] text-textMuted hover:text-textPrimary hover:bg-ink/[0.05] aria-pressed:text-textPrimary transition-colors ${compact ? 'w-6 justify-center' : 'px-1.5'} ${className}`}
+    className={`hit shrink-0 inline-flex items-center gap-1 ${size === 'md' ? 'h-7' : 'h-6'} rounded-md text-[11px] text-textMuted hover:text-textPrimary hover:bg-ink/[0.05] aria-pressed:text-textPrimary transition-colors ${compact ? `${size === 'md' ? 'w-7' : 'w-6'} justify-center` : size === 'md' ? 'px-2' : 'px-1.5'} ${className}`}
   >
     <Info className="w-3 h-3" />
     {!compact && ' How to read'}

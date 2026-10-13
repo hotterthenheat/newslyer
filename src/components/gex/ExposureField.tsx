@@ -47,7 +47,7 @@ import GuideFocus, { GuideDoor } from '../ui/GuideFocus';
 import LedgerGuide from './LedgerGuide';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Crosshair, Maximize2, Minimize2, Plus, X } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Crosshair, Maximize2, Minimize2, Plus, X } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import TickerLookup from '../ui/TickerLookup';
 import useFocusTrap from '../ui/useFocusTrap';
@@ -222,7 +222,8 @@ const SINGLE_GREEK_OPTIONS: DropdownOption<string>[] = GREEK_PICK_OPTIONS.filter
    doesn't work as i would like". The arriving view fades in over the house's 200ms; nothing is cloned, measured or
    flown. */
 const VIEW_OPTION: Record<LedgerView, DropdownOption<LedgerView>> = {
-  matrix: { value: 'matrix', label: 'Matrix', hint: 'One row per strike — every greek split put · call · net, a figure and its bar in each cell' },
+  /* the net alone since 2026-10-12 — the hint says what the table draws (the audit's H7, 2026-10-13) */
+  matrix: { value: 'matrix', label: 'Matrix', hint: "One row per strike — each greek's net, a figure and its bar; put and call on the card" },
   calendar: { value: 'calendar', label: 'Calendar', hint: 'Strike by expiry — every cell a capsule' },
 };
 const SHOW_OPTIONS: DropdownOption<'now' | 'after'>[] = [
@@ -300,15 +301,39 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      the head never opens ragged and then mends itself */
   const bandRO = useRef<ResizeObserver | null>(null);
   const [bandW, setBandW] = useState(0);
+  const bandEl = useRef<HTMLDivElement | null>(null);
   const bandRef = useCallback((el: HTMLDivElement | null) => {
     bandRO.current?.disconnect();
     bandRO.current = null;
+    bandEl.current = el;
     if (!el) return;
     setBandW(Math.round(el.getBoundingClientRect().width));
     const ro = new ResizeObserver(entries => setBandW(Math.round(entries[0].contentRect.width)));
     ro.observe(el);
     bandRO.current = ro;
   }, []);
+  /* …AND WHAT ITS PIECES NEED (the audit's M1, 2026-10-13): the thresholds were measured with the picks bare and assume
+     the doors fit, so fullscreen at 1440 — the Back door added, the width just over BAND_BARE_ROW_PX — wrapped "How to
+     read" and the exit under the row, the ragged case the modes were written against. Measured after every commit: the
+     sum of the pieces' widths and their gaps against the band's room; over it, the two tidy rows. The pieces' widths are
+     their own in either layout, so the answer holds still. */
+  const [bandOver, setBandOver] = useState(false);
+  useLayoutEffect(() => {
+    const el = bandEl.current;
+    if (!el) return;
+    let need = 0;
+    let n = 0;
+    el.querySelectorAll<HTMLElement>(':scope > :not([data-ledger-toolbar-row]), :scope > [data-ledger-toolbar-row] > *').forEach(it => {
+      const w = it.offsetWidth;
+      if (w > 0) {
+        need += w;
+        n++;
+      }
+    });
+    need += Math.max(0, n - 1) * 8; /* gap-x-2 */
+    const over = need > el.clientWidth - 24; /* px-3 each side */
+    setBandOver(prev => (prev === over ? prev : over));
+  });
   /* THE STRIKES: each side of spot — the ledger's own presets, 20 by rest; a host may seed its own */
   const seed: number = halfProp ?? LEDGER_REST;
   const [rings, setRings] = useState<number>(seed);
@@ -764,9 +789,10 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       <DropdownSelect label="View" value={view} options={VIEWS_FOR[viewHost].map(v => VIEW_OPTION[v])} onChange={pickView} title="The matrix or the calendar" testId="ledger-view" bare={stripsBare} />
       {/* with names side by side the greek steps down to each column's head */}
       <Fold open={!many} gap={8} testId="data-band-greek">
-        <DropdownMulti label="Greek" values={pick} groups={GREEK_GROUPS} onChange={setPick} emptyWord="All" title="One, some, or all five" testId="ledger-greek" align="start" bare={stripsBare} />
+        <DropdownMulti label="Greek" values={pick} groups={GREEK_GROUPS} onChange={setPick} emptyWord="All" clearWord="Clear · all five" title="One, some, or all five" testId="ledger-greek" align="start" bare={stripsBare} />
       </Fold>
-      <ExpiryRangeCard label="Expiries" days={expiryDays} from={range.from} through={range.through} onChange={(from, through) => setRange({ from, through })} ceiling={ceiling} ceilingWhy={ceilingWhy} shortcuts={shortcuts} title="Which expiries the book reads" testId="ledger-expiries" note={fitNote} bare={stripsBare} />
+      {/* the trigger says the window DRAWN when the fit cuts the one chosen — "Today → Oct 16 · 4 of 7" (the audit's H4) */}
+      <ExpiryRangeCard label="Expiries" days={expiryDays} from={range.from} through={range.through} onChange={(from, through) => setRange({ from, through })} ceiling={ceiling} ceilingWhy={ceilingWhy} shortcuts={shortcuts} title="Which expiries the book reads" testId="ledger-expiries" note={fitNote} bare={stripsBare} cut={{ through: shownIdx[shownIdx.length - 1] ?? range.through, shown: shownIdx.length, wanted }} />
       <DropdownSelect
         label="Strikes"
         value={rings}
@@ -776,7 +802,8 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
         testId="ledger-strikes"
         bare={stripsBare}
       />
-      <DropdownSelect label="Show" value={afterBell ? 'after' : 'now'} options={SHOW_OPTIONS} onChange={v => setAfterBell(v === 'after')} title="Which calendar" testId="ledger-show" bare={stripsBare} />
+      {/* a face of its own, so "Now" alone on a bare band still says which card it is (the audit's L2) */}
+      <DropdownSelect label="Show" value={afterBell ? 'after' : 'now'} options={SHOW_OPTIONS} onChange={v => setAfterBell(v === 'after')} title="Which calendar" testId="ledger-show" bare={stripsBare} icon={CalendarClock} />
       {/* NO COLOURS CARD ON PAPER (Noah, 2026-10-04, with the light Map: "the color pallete should not even be a thing for
           light theme because its practically invisible") — on paper every heat surface walks one tint-to-pole journey
           (heatmap.ts), so the two palettes differ by nothing the eye can use; the card stays a dark-page control */}
@@ -786,11 +813,12 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const supremeDoor = (
     <button
       onClick={() => onSelectStrike?.(supreme.strike)}
-      title={`The heaviest strike of the whole book by ${GREEK_LABEL[supremeGreek]} — the one the chart wears in magenta — most of it on ${supremeEx?.date ?? ''} · click to pin the strike`}
-      className="ml-auto inline-flex items-center gap-2.5 px-3 py-1.5 rounded-md border border-supreme/40 bg-supreme/[0.06] hover:bg-supreme/[0.12] font-mono transition-colors"
+      title={`The heaviest strike of the whole book by ${GREEK_LABEL[supremeGreek]} — the one the chart wears in magenta — most of it on ${supremeEx?.date ?? ''} · click to keep the strike`}
+      /* the cards' 28px (it stood 32 on a 28px row), sentence case like them, and a button's hover edge (the audit's M2, M3, L10) */
+      className="ml-auto inline-flex items-center gap-2.5 h-7 px-2.5 rounded-md border border-supreme/40 bg-supreme/[0.06] hover:bg-supreme/[0.12] hover:border-supreme/70 font-mono transition-colors"
       data-ledger-supreme={doorsTight ? 'compact' : 'full'}
     >
-      <span className="text-[11px] font-bold uppercase tracking-widest text-supreme">Supreme</span>
+      <span className="text-[11px] font-bold text-supreme">Supreme</span>
       <span className="text-[12px] font-semibold tnum text-textPrimary whitespace-nowrap">
         {fmtStrike(supreme.strike)}
         {/* tight: the strike alone — the date and the amount stay in the title */}
@@ -803,7 +831,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       </span>
     </button>
   );
-  const guideButton = <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the grid means" testId="ledger-guide" compact={doorsTight} />;
+  const guideButton = <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the grid means" testId="ledger-guide" compact={doorsTight} size={toolbar === 'band' ? 'md' : 'sm'} />;
   /* THE READ's door — beside the guide's; lit while the card is up. The band's opens the host's read */
   const readDoor = <ReadDoor open={readOf(surface.ticker) === 'open'} onClick={() => toggleRead(surface.ticker)} compact={doorsTight} />;
   const fullButton =
@@ -832,7 +860,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      it can be one — the picks bare, then the doors compact — and only under that TWO TIDY ROWS: the picks (the
      name, view, greek, expiries, strikes, show, colours) on the first, the doors (names, replay, the supreme, the
      read, how to read, fullscreen) on the second, the fullscreen door last on either. See BAND_*_ROW_PX. */
-  const bandRows: 'one' | 'two' = bandMode === 'two' ? 'two' : 'one';
+  const bandRows: 'one' | 'two' = bandMode === 'two' || bandOver ? 'two' : 'one';
   const leadFold = lead ? (
     <Fold open={!many} gap={8} testId="data-band-lead">
       <span className="shrink-0 inline-flex items-center">{lead}</span>
@@ -840,18 +868,21 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   ) : null;
   /* THE FOCUS DOOR — beside Names: the calendar's biggest moves since the open, sharp over a softened board. Only on
      the calendar, never in the replay (no badges there); the word says what it keeps. */
-  const focusDoor = view === 'calendar' && (
+  /* NAMED FOR WHAT IT KEEPS (the audit's H9, 2026-10-13): "Focus" was also the shell chip's word for a kept strike, so one
+     word named two things on one screen; the door says "Biggest moves". And it STAYS on the matrix, disabled, rather
+     than coming and going with the view and shifting the doors beside it (the audit's L9). */
+  const focusDoor = (
     <button
       type="button"
       onClick={() => setFocusOn(v => !v)}
       aria-pressed={focusOn}
-      disabled={fresh}
-      title={fresh ? 'Not while the replay runs' : focusOn ? 'Back to the whole board (Esc)' : 'Keep only the biggest moves since the open sharp — the badged nodes'}
+      disabled={fresh || view !== 'calendar'}
+      title={view !== 'calendar' ? 'On the calendar only' : fresh ? 'Not while the replay runs' : focusOn ? 'Back to the whole board (Esc)' : 'Keep only the biggest moves since the open sharp — the badged nodes'}
       className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border bg-chip transition-colors font-mono select-none disabled:opacity-50 ${focusOn ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
       data-ledger-focus-door={focusOn ? 'on' : 'off'}
     >
       <Crosshair className={`w-3 h-3 ${focusOn ? 'text-silver' : 'text-textMuted'}`} />
-      <span className={`text-[11px] uppercase tracking-widest ${focusOn ? 'text-textPrimary' : 'text-textMuted'}`}>Focus</span>
+      <span className={`text-[11px] ${focusOn ? 'text-textPrimary' : 'text-textMuted'}`}>Biggest moves</span>
     </button>
   );
   const namesDoor = multi && (
@@ -867,8 +898,9 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
             data-ledger-add
           >
             <Plus className="w-3 h-3 text-textMuted" />
-            <span className="text-[11px] uppercase tracking-widest text-textMuted">Names</span>
-            <span className="text-[11px] font-semibold text-textPrimary tnum">{1 + names.length}</span>
+            {/* sentence case (the audit's M3); the count only once there is one — "Names 1" said nothing (L1) */}
+            <span className="text-[11px] text-textMuted">Names</span>
+            {names.length > 0 && <span className="text-[11px] font-semibold text-textPrimary tnum">{1 + names.length}</span>}
           </button>
           {adding &&
             addPlaced &&
@@ -1197,7 +1229,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                     className="shrink-0 inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-supreme/40 bg-supreme/[0.06] hover:bg-supreme/[0.12] font-mono transition-colors"
                     data-column-supreme={sup.strike}
                   >
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-supreme">Supreme</span>
+                    <span className="text-[11px] font-bold text-supreme">Supreme</span>
                     <span className="text-[11px] font-semibold tnum text-textPrimary whitespace-nowrap">
                       {fmtStrike(sup.strike)}
                       {!tight && (

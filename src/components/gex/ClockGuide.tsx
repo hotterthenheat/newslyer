@@ -118,7 +118,8 @@ const FocusFigure = () => {
       })}
       {/* The card above the hovered block, clear of the names */}
       <path d={`M${bx(hov) + BW / 2} 76 v-18`} stroke={SILVER} strokeOpacity="0.6" />
-      <rect x={bx(hov) - 120} y={16} width={196} height={40} rx={6} fill="#141416" stroke="#2a2a2c" />
+      {/* the card's own tokens — on paper it was a black card with the page's ink on it, unread (the audit's M14) */}
+      <rect x={bx(hov) - 120} y={16} width={196} height={40} rx={6} fill="rgb(var(--card))" stroke="rgb(var(--border-muted))" />
       <Label x={bx(hov) - 110} y={28} fill={INK} size={9} mono weight={700}>
         14:35
       </Label>
@@ -154,7 +155,7 @@ const ClockGuide = ({ nowBlock, line, bellShare, pin, supreme, charmStrike }: Cl
     <div>
       <p className="text-[12px] font-semibold text-textPrimary">The strip · the trading day, five minutes at a time</p>
       <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
-        The strip runs from 9:30 to 4:00 New York time, one block per five minutes. Brighter blocks are the parts of the day when dealer hedging pushes hardest on price: the open, the last ninety minutes, the close. Dim blocks are the quiet middle, when price tends to sit still. The silver block is right now. The names above are the day's phases, a rule of thumb; the numbers in them are today's.
+        The strip runs from 09:30 to 16:00 New York time, one block per five minutes. Brighter blocks are the parts of the day when dealer hedging pushes hardest on price: the open, the last ninety minutes, the close. Dim blocks are the quiet middle, when price tends to sit still. The silver block is right now. The names above are the day's phases, a rule of thumb; the numbers in them are today's.
       </p>
       <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2">
         <StripFigure nowBlock={nowBlock} />
@@ -175,7 +176,7 @@ const ClockGuide = ({ nowBlock, line, bellShare, pin, supreme, charmStrike }: Cl
         <li className="text-[11.5px] leading-relaxed text-textSecondary">{line}</li>
         {bellShare != null && (
           <li className="text-[11.5px] leading-relaxed text-textSecondary">
-            <span className="font-mono tnum text-textPrimary">{bellShare}%</span> of today's hedging expires at 4:00, which is why the close is the loudest block.
+            <span className="font-mono tnum text-textPrimary">{bellShare}%</span> of today's hedging expires at the close, which is why it is the loudest block.
           </li>
         )}
         {(pin != null || supreme != null) && (

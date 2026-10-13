@@ -37,7 +37,7 @@
 ==================================================
 */
 
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { HEAT_MODE, heatLadderColor, type HeatMode } from './heatmap';
 import SpotRule from '../ui/SpotRule';
 import PointerCard, { CardRow, PointerFollowCard } from '../ui/PointerCard';
@@ -77,6 +77,9 @@ const PUT_INK = PUT_WALL;
 const CALL_INK = CALL_WALL;
 const ROW_H = 27;
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
+/* the wall words on the strike at the house's 11px floor (the audit's H5, 2026-10-13 — they were 7.5px, the smallest type
+   on the terminal); the column's reserve below prints the same words, so it grows with them */
+const TAG = 'ml-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider';
 const head = 'font-mono text-[11px] font-semibold uppercase tracking-widest';
 
 interface Row {
@@ -251,7 +254,7 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
       </>
     );
     return still ? (
-      <PointerCard x={start.x} y={start.y} still width={212} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside} foot={<span className="text-[11px] uppercase tracking-widest text-textMuted">kept · click it again to let go</span>}>
+      <PointerCard x={start.x} y={start.y} still width={212} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside} foot={<span className="text-[11px] uppercase tracking-widest text-textMuted">kept · click it again, or anywhere off the grid, to let go</span>}>
         {body}
       </PointerCard>
     ) : (
@@ -262,6 +265,52 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
   };
   const cardRow = card && !pinned ? rows.find(r => Math.abs(r.strike - card.strike) < 1e-9) ?? null : null;
   const keptRow = pinned ? rows.find(r => Math.abs(r.strike - keptStrike) < 1e-9) ?? null : null;
+
+  /* THE KEYS REACH THE ROWS (the audit's H10, 2026-10-13): the table is one tab stop; ↑ ↓ walk the strikes, Home and End
+     jump to the ends, Enter or Space keeps the row — the same card and the same keep a click gives. The walked row lights
+     as a hovered one does and wears the house ring; the walk starts on the kept strike, else the strike just over spot,
+     and only from the keys (:focus-visible) — a click inside the box focuses it too, and changes nothing. */
+  const [keyRow, setKeyRow] = useState<number | null>(null);
+  const rowId = (strike: number) => `matrix-${surface.ticker}-${String(strike).replace('.', '_')}`;
+  const walkTo = (strike: number) => {
+    setKeyRow(strike);
+    const row = scrollRef.current?.querySelector<HTMLElement>(`[data-matrix-row="${strike}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: 'nearest' });
+    const b = row.getBoundingClientRect();
+    const td = row.firstElementChild?.getBoundingClientRect();
+    const x = b.left + (td?.width ?? 80) + 8;
+    const y = b.top + b.height / 2;
+    setHovered(strike);
+    setCard({ strike, x, y });
+    onPointer?.({ strike, e: shownIdx[0] ?? 0 }, x, y);
+  };
+  const leaveKeys = () => {
+    setKeyRow(null);
+    setHovered(null);
+    setCard(null);
+    onPointer?.(null, 0, 0);
+  };
+  const onKeys = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget || e.altKey || e.ctrlKey || e.metaKey || !rows.length) return;
+    const i = keyRow == null ? -1 : rows.findIndex(r => Math.abs(r.strike - keyRow) < 1e-9);
+    let next: Row | undefined;
+    if (e.key === 'ArrowDown') next = rows[Math.min(rows.length - 1, i + 1)];
+    else if (e.key === 'ArrowUp') next = rows[Math.max(0, i - 1)];
+    else if (e.key === 'Home') next = rows[0];
+    else if (e.key === 'End') next = rows[rows.length - 1];
+    else if ((e.key === 'Enter' || e.key === ' ') && keyRow != null) {
+      e.preventDefault();
+      const row = scrollRef.current?.querySelector<HTMLElement>(`[data-matrix-row="${keyRow}"]`);
+      const b = row?.getBoundingClientRect();
+      const td = row?.firstElementChild?.getBoundingClientRect();
+      if (b) setKeptAt({ strike: keyRow, dx: (td?.width ?? 80) + 8, dy: b.height / 2 });
+      onSelectStrike?.(keyRow);
+      return;
+    } else return;
+    e.preventDefault();
+    if (next) walkTo(next.strike);
+  };
 
   /* the box opens with price in the middle of it, once per name */
   const spotRef = useRef<HTMLTableRowElement | null>(null);
@@ -296,11 +345,14 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
   const renderRow = (r: Row) => {
     const on = keptStrike === r.strike;
     const lit = hoverStrike === r.strike || hovered === r.strike;
+    const walked = keyRow != null && Math.abs(keyRow - r.strike) < 1e-9;
     const tag = tagFor(r.strike);
     const you = marks?.get(r.strike);
     return (
       <tr
         key={r.strike}
+        id={rowId(r.strike)}
+        aria-label={`${fmtStrike(r.strike)}${tag ? ` · ${tag.word}` : ''}${you ? ' · you own' : ''} · net ${GREEK_LABEL[lead]} ${fmtUsd(r.legs[lead].net)}`}
         onPointerEnter={ev => {
           if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
           leaveTimer.current = 0;
@@ -323,9 +375,10 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
           onSelectStrike?.(r.strike);
         }}
         className={`relative border-b border-borderSubtle/30 transition-colors ${onSelectStrike ? 'cursor-pointer' : ''} ${on ? 'bg-ink/[0.05]' : lit ? 'bg-ink/[0.04]' : ''} ${pinned && !on ? 'opacity-60' : ''}`}
-        style={{ height: ROW_H, ...(on ? { boxShadow: `inset 2px 0 0 0 ${SILVER}` } : {}) }}
+        style={{ height: ROW_H, ...(on ? { boxShadow: `inset 2px 0 0 0 ${SILVER}` } : walked ? { boxShadow: 'inset 0 0 0 2px rgb(var(--silver) / var(--ring-a))' } : {}) }}
         data-matrix-row={r.strike}
         data-kept={on || undefined}
+        data-walked={walked || undefined}
         title={you}
       >
         {/* THE STRIKE AT THE FAR LEFT, ITS TAGS AFTER IT, THE COLUMN NO WIDER THAN ITS WIDEST ROW (Noah, 2026-10-12:
@@ -334,11 +387,11 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
         <td className="pl-2 pr-1 py-1 bg-inset border-r border-borderSubtle/40 font-mono text-[11px] font-semibold tnum text-textSecondary whitespace-nowrap">
           <span className={on || lit ? 'text-textPrimary' : ''}>{fmtStrike(r.strike)}</span>
           {tag && (
-            <span className="ml-1.5 font-mono text-[7.5px] font-bold uppercase tracking-[0.12em]" style={{ color: tag.ink }} data-matrix-role={tag.word}>
+            <span className={TAG} style={{ color: tag.ink }} data-matrix-role={tag.word}>
               {tag.word}
             </span>
           )}
-          {you && <span className="ml-1.5 font-mono text-[7.5px] font-bold uppercase tracking-[0.12em] text-silver">you own</span>}
+          {you && <span className={`${TAG} text-silver`}>you own</span>}
         </td>
         {shownGreeks.map((g, gi) => LEGS.map(leg => <Cell key={`${g}-${leg}`} value={r.legs[g][leg]} leg={leg} cap={caps[g][leg]} mode={mode} paper={paper} gi={gi} />))}
       </tr>
@@ -346,7 +399,26 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
   };
 
   return (
-    <div ref={scrollRef} className="overflow-auto h-full min-h-0" data-matrix-scroll data-exposure-matrix={surface.ticker} data-matrix-palette={palette}>
+    <div
+      ref={scrollRef}
+      className="overflow-auto h-full min-h-0"
+      tabIndex={0}
+      role="group"
+      aria-label="The book by strike — the arrow keys walk the strikes, Enter keeps one"
+      aria-activedescendant={keyRow != null ? rowId(keyRow) : undefined}
+      onFocus={e => {
+        if (e.target !== e.currentTarget || keyRow != null || !e.currentTarget.matches(':focus-visible')) return;
+        const start = keptStrike ?? above[above.length - 1] ?? rows[0]?.strike;
+        if (start != null) walkTo(start);
+      }}
+      onBlur={e => {
+        if (e.target === e.currentTarget) leaveKeys();
+      }}
+      onKeyDown={onKeys}
+      data-matrix-scroll
+      data-exposure-matrix={surface.ticker}
+      data-matrix-palette={palette}
+    >
       <table className="w-full border-collapse" style={{ minWidth: (strikeColW || 84) + shownGreeks.length * LEGS.length * 76, tableLayout: strikeColW ? 'fixed' : 'auto' }}>
         {strikeColW > 0 && (
           <colgroup>
@@ -361,27 +433,40 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
                   invisibly, so a wall's words moving from row to row never move the column or the cells beside it */}
               <span ref={setReserve} aria-hidden className="invisible block h-0 w-max overflow-hidden whitespace-nowrap normal-case tracking-normal text-[11px] font-semibold tnum">
                 {rows.map(r => fmtStrike(r.strike)).reduce((a, b) => (b.length > a.length ? b : a), '')}
-                <span className="ml-1.5 text-[7.5px] font-bold uppercase tracking-[0.12em]">call wall</span>
-                <span className="ml-1.5 text-[7.5px] font-bold uppercase tracking-[0.12em]">you own</span>
+                <span className={TAG}>call wall</span>
+                <span className={TAG}>you own</span>
               </span>
               Strike
             </th>
             {shownGreeks.map((g, gi) => (
-              <th key={g} colSpan={LEGS.length} className={`${head} px-2 pt-2 pb-1 text-center border-b border-l ${paper ? 'border-borderSubtle' : 'border-borderMuted'} ${groupWash(gi, paper)} ${g === lead && shownGreeks.length > 1 ? 'text-silver' : 'text-textPrimary'}`} data-matrix-group={g} data-lead={g === lead || undefined}>
-                {GREEK_LABEL[g]} <span className="text-textSecondary font-medium normal-case tracking-normal">· {GREEK_UNIT[g]}</span>
+              <th
+                key={g}
+                colSpan={LEGS.length}
+                className={`${head} px-2 pt-2 pb-1 text-center border-b border-l ${paper ? 'border-borderSubtle' : 'border-borderMuted'} ${groupWash(gi, paper)} ${g === lead && shownGreeks.length > 1 ? 'text-silver' : 'text-textPrimary'}`}
+                data-matrix-group={g}
+                data-lead={g === lead || undefined}
+                /* the silver head is the greek the pointer card reads — said, not left to be guessed (the audit's L8) */
+                title={g === lead && shownGreeks.length > 1 ? 'The greek the card reads' : undefined}
+              >
+                {/* ONE LEG, ONE HEAD (the audit's M4, 2026-10-13): with the net alone on the table the leg's name rides the
+                    greek's head — "GEX · net · 1% move" — and the row that said "NET" five times is gone; it comes back
+                    with the legs if they ever return */}
+                {GREEK_LABEL[g]} <span className="text-textSecondary font-medium normal-case tracking-normal">· {LEGS.length === 1 ? `${LEGS[0]} · ` : ''}{GREEK_UNIT[g]}</span>
               </th>
             ))}
           </tr>
-          <tr>
-            <th className="border-b border-borderSubtle" />
-            {shownGreeks.map((g, gi) =>
-              LEGS.map(leg => (
-                <th key={`${g}-${leg}`} className={`${head} px-2 py-1 text-right text-textSecondary border-b border-borderSubtle ${groupSkin(gi, leg, paper)}`}>
-                  {leg}
-                </th>
-              ))
-            )}
-          </tr>
+          {LEGS.length > 1 && (
+            <tr>
+              <th className="border-b border-borderSubtle" />
+              {shownGreeks.map((g, gi) =>
+                LEGS.map(leg => (
+                  <th key={`${g}-${leg}`} className={`${head} px-2 py-1 text-right text-textSecondary border-b border-borderSubtle ${groupSkin(gi, leg, paper)}`}>
+                    {leg}
+                  </th>
+                ))
+              )}
+            </tr>
+          )}
         </thead>
         <tbody>
           {rowsAbove.map(renderRow)}
