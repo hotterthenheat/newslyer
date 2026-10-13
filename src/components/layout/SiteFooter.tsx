@@ -263,7 +263,7 @@ const SiteFooter = ({ home = false }: { home?: boolean }) => {
               <Signature rule={false} detail={`· ${market.words === 'market open' || market.words === 'closed' ? '' : `${market.words} · `}${market.clock} New York`} className="text-[11px]" />
             </span>
             <span className="footer-word order-last lg:order-none basis-full lg:basis-auto" data-footer-lit>
-              For informational purposes only. Not investment advice. Preview data is simulated.
+              For informational purposes only. Not investment advice.
             </span>
             <span className="footer-word ml-auto whitespace-nowrap" data-footer-lit>
               {/* the year is the calendar's, not a number typed once (2026-09-19) */}© {new Date().getFullYear()} Slayer Terminal

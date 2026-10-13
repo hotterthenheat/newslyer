@@ -45,7 +45,7 @@ const WeigherPage = () => (
     intro={
       <>
         The Weigher is one desk for the contracts you care about. The chart and the chain on top, with every strike carrying the dealer book behind it; under them, your positions and your watchlist, and the card for whichever
-        one you press. The card is simulated returns the way a trader actually asks the question: what does this contract make or lose if the stock is here, by then — with a ruler you drag by the cent and a curve that
+        one you press. The card is projected returns the way a trader actually asks the question: what does this contract make or lose if the stock is here, by then — with a ruler you drag by the cent and a curve that
         moves with it. A contract on the watchlist is marked at the price the moment you add it and tracked from there as if bought.
       </>
     }

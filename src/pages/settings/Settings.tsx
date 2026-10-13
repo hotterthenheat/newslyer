@@ -1116,7 +1116,7 @@ const DataBox = () => {
     }
   };
   return (
-    <Section id="data" title="Data" line="What's yours on this machine — the board, the marks, the alerts, the desks, these settings — and where the feed stands" aside={<Tag>preview · the feed is simulated</Tag>}>
+    <Section id="data" title="Data" line="What's yours on this machine — the board, the marks, the alerts, the desks, these settings — and where the feed stands">
       <Row name="The feed" line="Live options and quotes, the tape and the record — delayed while a payment is due" testId="feed">
         <span className="inline-flex items-center gap-2">
           <span className="tone-live rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-widest font-semibold">live</span>

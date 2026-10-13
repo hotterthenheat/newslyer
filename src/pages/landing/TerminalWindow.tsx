@@ -325,13 +325,12 @@ const TerminalWindow = ({ path, theme, desk, natural = false, film, boot, bootSw
       data-window-film={reels.length ? (rolling ? 'rolling' : 'held') : 'still'}
       className={`landing-window relative flex flex-col overflow-hidden rounded-[14px] border border-borderMuted bg-canvas text-textPrimary transition-[border-color,box-shadow] duration-500 ${className}`}
     >
-      {/* THE BAR — which page this is, and that its numbers are simulated */}
+      {/* THE BAR — which page this is */}
       <div className="shrink-0 h-10 pl-3.5 pr-3.5 flex items-center gap-1.5 sm:gap-3 border-b border-borderSubtle bg-panel font-mono transition-colors duration-500">
         {/* the house mark where the prompt stood (Noah, 2026-09-30: "put the S in the window title bar too") — the bare S|
             since the switch to his partner's logo system (2026-10-03) */}
         <SlayerMark size={16} bare label="" />
         <Prompt path={drawn} />
-        <span className="ml-auto text-[9.5px] uppercase tracking-[0.16em] text-textMuted whitespace-nowrap">simulated data</span>
       </div>
 
       {/* THE SCREEN */}

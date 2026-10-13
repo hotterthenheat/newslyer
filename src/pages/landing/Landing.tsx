@@ -349,7 +349,7 @@ const PLAN_GROUPS: { key: PlanKey; says: string }[] = [
 ];
 
 const FAQ: { q: string; a: string }[] = [
-  { q: 'Are the pictures on this page real?', a: 'Yes. Every picture and every recording is the terminal itself, taken from the real page, not a mock-up. The recordings run a little faster than real time, and the numbers in them are simulated data.' },
+  { q: 'Are the pictures on this page real?', a: 'Yes. Every picture and every recording is the terminal itself, taken from the real page, not a mock-up. The recordings run a little faster than real time.' },
   { q: 'Does it tell me what to trade?', a: 'No. It shows where dealer hedging sits, and it reads a contract against that in a plain word: strong, good, caution or poor. What you do with that is yours. It is not a broker and it is not financial advice.' },
   { q: 'Do I need to be an expert?', a: 'No. Every page explains itself in plain English: what a wall is, why the flip matters, what dealers are forced to do at each level.' },
   { q: 'Can I get a refund?', a: 'We do not offer refunds, so please take your time and be sure before you subscribe. You can cancel whenever you like, and you keep your access until the end of the period you paid for. If a charge ever looks wrong, write to info@slayerterminal.com and a person will look into it.' },

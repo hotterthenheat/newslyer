@@ -196,7 +196,7 @@ const PositionDeskCard = ({ picked, row, profile, contractKey, onWatch, onClose,
         ) : (
           <div key={contractKey} className="flex-1 min-h-[363px] flex flex-col items-center justify-center gap-1.5 px-6 text-center select-none animate-soft-in" data-contract-unwatched>
             <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted">Not on your list</span>
-            <span className="font-mono text-[11px] text-textMuted">Watch it marks the contract at this tick's price — its simulated returns land here</span>
+            <span className="font-mono text-[11px] text-textMuted">Watch it marks the contract at this tick's price — its projected returns land here</span>
           </div>
         )}
         <div className="shrink-0 px-3.5 py-2 border-t border-borderSubtle/60 flex items-center gap-2 flex-wrap" data-contract-foot>
@@ -244,7 +244,7 @@ const PositionDeskCard = ({ picked, row, profile, contractKey, onWatch, onClose,
                 contract price, and the clock */}
             <div className="flex items-end gap-4 flex-wrap" data-sim-figures>
               <div className="min-w-0">
-                <span className="block font-mono text-[11px] uppercase tracking-widest text-textMuted">Simulated return</span>
+                <span className="block font-mono text-[11px] uppercase tracking-widest text-textMuted">Projected return</span>
                 <span className={`block font-mono text-[26px] font-bold tnum leading-none mt-1 ${dirInk(retNow)}`} data-sim-return>
                   {fmtPnl(retNow)}
                 </span>
@@ -261,7 +261,7 @@ const PositionDeskCard = ({ picked, row, profile, contractKey, onWatch, onClose,
                 </span>
               </div>
               <div className="ml-auto self-start">
-                <CardTabs options={VIEWS} value={view} onChange={setView} ariaLabel="Simulated returns by date or by price" />
+                <CardTabs options={VIEWS} value={view} onChange={setView} ariaLabel="Projected returns by date or by price" />
               </div>
             </div>
 
@@ -321,7 +321,7 @@ const PositionDeskCard = ({ picked, row, profile, contractKey, onWatch, onClose,
           /* `flex-1`: the card fills its row (WeigherDesk, 2026-10-07), and the room a live chart would take is this box's */
           <div className="flex-1 min-h-[96px] flex items-center justify-center rounded-md border border-borderSubtle/60 bg-ink/[0.02]" data-sim-settled>
             <span className="font-mono text-[11px] text-textMuted">
-              {w ? (w.status === 'closed' ? 'Closed by hand' : 'Settled at the bell') : `Expired ${monthDay(pos.expiry)} — settled`} — simulated returns are for open positions
+              {w ? (w.status === 'closed' ? 'Closed by hand' : 'Settled at the bell') : `Expired ${monthDay(pos.expiry)} — settled`} — projected returns are for open positions
             </span>
           </div>
         )}

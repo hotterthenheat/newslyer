@@ -55,7 +55,7 @@ export const DataDoor = ({ ticker, open, onClick, compact = false }: DoorProps) 
       aria-haspopup="dialog"
       title={title}
       className={`hit inline-flex items-center gap-1.5 h-7 rounded-md border bg-chip transition-colors font-mono select-none ${compact ? 'w-7 justify-center' : 'px-2.5'} ${open ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted hover:bg-ink/[0.04]'}`}
-      data-ledger-data-door={src.live ? 'live' : 'simulated'}
+      data-ledger-data-door={src.live ? 'live' : 'house'}
     >
       <Database className={`w-3 h-3 ${src.live ? 'text-silver' : 'text-textMuted'}`} />
       {!compact && (
@@ -101,7 +101,7 @@ export const DataCard = ({ ticker, surface, greeks, expiries, rings, view }: Car
   const src = sourceWords();
   const dates = expiries.map(e => surface.expiries[e]?.date).filter(Boolean);
   return (
-    <div className="px-3 py-3 flex flex-col gap-3" data-book-provenance-card data-book-source={src.live ? 'live' : 'simulated'}>
+    <div className="px-3 py-3 flex flex-col gap-3" data-book-provenance-card data-book-source={src.live ? 'live' : 'house'}>
       <div>
         <p className="text-[12px] font-semibold text-textPrimary">Where the figures come from</p>
         <ul className="mt-1 flex flex-col gap-1 text-[11.5px] leading-relaxed text-textSecondary">

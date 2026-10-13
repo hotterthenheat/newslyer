@@ -130,12 +130,12 @@ const Tape = () => {
   const one = useMemo(() => ROW_ONE.map(n => quoteOf(n, day)), [day]);
   const two = useMemo(() => ROW_TWO.map(n => quoteOf(n, day)), [day]);
   return (
-    <div className="tape relative" role="group" aria-label="A few of the names the terminal covers, with the preview's simulated prices" data-landing-tape>
+    <div className="tape relative" role="group" aria-label="A few of the names the terminal covers, with their prices" data-landing-tape>
       <div className="flex flex-col gap-5 [mask-image:linear-gradient(90deg,transparent,black_9%,black_91%,transparent)]">
         <Row quotes={one} seconds={95} />
         <Row quotes={two} back seconds={115} />
       </div>
-      <p className="mt-6 text-center font-mono text-[11px] text-textMuted">Any name on the market. Preview prices are simulated.</p>
+      <p className="mt-6 text-center font-mono text-[11px] text-textMuted">Any name on the market.</p>
     </div>
   );
 };
