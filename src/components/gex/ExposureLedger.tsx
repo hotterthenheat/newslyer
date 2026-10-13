@@ -69,6 +69,8 @@ interface ExposureLedgerProps {
   focusOn?: boolean;
   /** The greeks drawn, in the book's order — one, some, or all five (a stable array) */
   greeks: Greek[];
+  /** Which leg the capsules carry (the band's Legs card, 2026-10-13): the net, or one leg alone */
+  leg?: 'net' | 'call' | 'put';
   /** The expiry columns the host wants, as surface indices, nearest first (its window after the bell and its
       ceiling); this box cuts them to what fits its width */
   expiries: number[];
@@ -245,8 +247,23 @@ const LedgerCell = memo(({ strike, e, g, v, maxAbs, date, first, wash, isKing, r
   </div>
 ));
 
-const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greeks, expiries, rings, hoverStrike, palette = 'house', afterBell = false, selectedStrike, marks, onPointer, onSelectStrike, fitKey, onFit, paper = false }: ExposureLedgerProps) => {
+const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greeks, leg = 'net', expiries, rings, hoverStrike, palette = 'house', afterBell = false, selectedStrike, marks, onPointer, onSelectStrike, fitKey, onFit, paper = false }: ExposureLedgerProps) => {
   const mode = palette === 'thermal' ? ('thermal-yellow' as const) : undefined;
+  /* one leg alone is painted against its own heaviest cell — the net's scale would read a call leg against puts it
+     never had */
+  const paintMax = useMemo(() => {
+    const m = {} as Record<Greek, number>;
+    for (const g of greeks) {
+      if (leg === 'net') {
+        m[g] = surface.maxAbs[g];
+        continue;
+      }
+      let best = 1;
+      for (const row of surface[leg][g]) for (const v of row) if (Math.abs(v) > best) best = Math.abs(v);
+      m[g] = best;
+    }
+    return m;
+  }, [surface, greeks, leg]);
   /* ON PAPER the calendar is part of the page (2026-09-22): the island's soft grey, the page's inks, the tint ramp on
      the capsules (heatmap.ts, PAPER); the host stamps the theme and the ground, this only has to say `paper` */
   const ground = paper ? 'bg-inset' : 'bg-panel';
@@ -826,7 +843,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
           /* THE FIT IS NOT A CHOICE (2026-10-12): keyed on the HEAD'S window, not on the columns that fit — a pane
              widening or narrowing adds or drops a column in place (its cells keyed by date and strike stay), where
              keying on the fit remounted every cell of every pane as a name left (~66ms, the last of the exit's jank) */
-          key={`${greeks.join(',')}-${expiries.join('|')}-${rings}-${afterBell ? 'after' : 'now'}`}
+          key={`${greeks.join(',')}-${expiries.join('|')}-${rings}-${afterBell ? 'after' : 'now'}-${leg}`}
           data-ledger-focus={focusOn ? '' : undefined}
           className="grid min-h-full animate-fade-in"
           /* THE STRIKE COLUMN IS AS WIDE AS ITS WIDEST ROW and the cells take the rest (Noah, 2026-10-12: "let the
@@ -931,7 +948,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
               ...greeks.flatMap(g => {
                 const king = kings.get(g)!;
                 const sup = supremes.get(g)!;
-                const maxAbs = q3(surface.maxAbs[g]);
+                const maxAbs = q3(paintMax[g]);
                 return shownIdx.map((e, ci) => {
                   const exp = surface.expiries[e];
                   const isKing = king.e === e && king.strike === strike;
@@ -947,7 +964,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
                       strike={strike}
                       e={e}
                       g={g}
-                      v={q3(surface.net[g][e][s])}
+                      v={q3(surface[leg][g][e][s])}
                       maxAbs={maxAbs}
                       date={exp.date}
                       first={ci === 0}

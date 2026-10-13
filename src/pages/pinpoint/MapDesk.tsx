@@ -41,6 +41,8 @@ import { CalendarInner, DayInner, MapPageSkeleton, ReportInner } from './pinpoin
 import ExposureField from '../../components/gex/ExposureField';
 import TraderClock from '../../components/gex/TraderClock';
 import WallReportCard from '../../components/gex/WallReportCard';
+import TapeBox from '../../components/gex/TapeBox';
+import BookThroughDay from '../../components/gex/BookThroughDay';
 import ReplayStrip from '../../components/gex/ReplayStrip';
 import { barsAt, replayDay, replayLabel, replayMinute, replayRange, snapPos, snapshotAt, type ReplayRange } from '../../data/replay';
 import { readSessionClock } from '../../data/moc';
@@ -50,9 +52,9 @@ import { buildExposureProfile, type StrikeWindow } from '../../data/exposure';
 import type { ExposureExpiry } from '../../types/gex';
 import type { Candle, MarketSnapshot } from '../../types/market';
 import { useOnScreen } from '../../components/ui/useOnScreen';
+import { bookMarket } from '../../data/bookMarket';
+import { ownScan, useRoomScan } from './useRoomScan';
 
-/** The book sweeps on its own cadence — the boxes must not vibrate with every tick. */
-const SCAN_INTERVAL_MS = 10_000;
 /* THE WINDOW IS THE WHOLE BOOK (Noah, 2026-09-05): thirty strikes each side are
    built once; the boxes draw whatever of them they need. */
 const WINDOW: StrikeWindow = 30;
@@ -67,7 +69,7 @@ const POSITIONS_EXPIRY: ExposureExpiry = '0DTE';
   refreshed on the scan cadence) and its chip wears the name. Held across route
   changes within a session and reset on reload, so every visit starts as one.
 */
-type BoxKey = 'calendar' | 'day' | 'report';
+type BoxKey = 'calendar' | 'tape' | 'through' | 'day' | 'report';
 type Scopes = Partial<Record<BoxKey, string>>;
 let scopesMemory: Scopes = {};
 
@@ -104,34 +106,20 @@ const MapDesk = () => {
   const replayOn = replay != null;
   const playing = replay;
 
-  /* Scan-tier snapshot: the book sweeps every SCAN_INTERVAL_MS (a name change is immediate) */
-  const [scan, setScan] = useState<MarketSnapshot | null>(null);
-  const scanRef = useRef<MarketSnapshot | null>(null);
-  const scanAtRef = useRef(0);
-  useEffect(() => {
-    if (!marketData) return;
-    const now = Date.now();
-    const due = !scanRef.current || now - scanAtRef.current >= SCAN_INTERVAL_MS || scanRef.current.ticker !== marketData.ticker;
-    if (due) {
-      scanRef.current = marketData;
-      scanAtRef.current = now;
-      setScan(marketData);
-    }
-  }, [marketData]);
+  /* THE ROOM'S SCAN (pages/pinpoint/useRoomScan.ts): the house's book swept every ten seconds, or the vendor's latest
+     book with the room on the feed — the one snapshot every box reads */
+  const scan = useRoomScan();
 
-  /* THE OWN-NAME SNAPSHOTS — one per name a box has stepped onto, rebuilt on
-     the scan cadence like the frame's own. A pure read of the simulator. */
-  const pinnedKey = [scopes.calendar, scopes.day, scopes.report].filter(Boolean).join('|');
+  /* THE OWN-NAME SNAPSHOTS — one per name a box has stepped onto, on the room's market (the feed's or the house's),
+     rebuilt on the scan cadence like the frame's own */
+  const pinnedKey = [scopes.calendar, scopes.tape, scopes.through, scopes.day, scopes.report].filter(Boolean).join('|');
   const ownSnaps = useMemo(() => {
     const m = new Map<string, MarketSnapshot>();
     if (!scan || !pinnedKey) return m;
     for (const t of new Set(pinnedKey.split('|'))) {
       if (t === scan.ticker) continue;
-      try {
-        m.set(t, Simulator.snapshotFor(t));
-      } catch {
-        /* a name the sim can't build — the box stays on the frame's */
-      }
+      const own = ownScan(t);
+      if (own) m.set(t, own);
     }
     return m;
   }, [scan, pinnedKey]);
@@ -216,7 +204,9 @@ const MapDesk = () => {
      session on hand stays live */
   const columnSnap = useCallback(
     (t: string): MarketSnapshot => {
-      const live = Simulator.snapshotFor(t);
+      /* the market the room reads (data/bookMarket.ts) — on the feed, the name's own book from the vendor; a name whose
+         book has not come reads the house's, as the Names door always did */
+      const live = bookMarket().snapshotFor(t) ?? Simulator.snapshotFor(t);
       if (!range) return live;
       const own = replayRange(t);
       return own ? snapshotAt(live, own, Math.min(minutePos, own.length)) : live;
@@ -234,15 +224,19 @@ const MapDesk = () => {
      screen, a box keeps the moment it last showed; scrolled into view, it
      catches up on its next render. What it reads arrives DEFERRED. */
   const [calRef, calOn] = useOnScreen<HTMLDivElement>();
+  const [tapeRef, tapeOn] = useOnScreen<HTMLDivElement>();
+  const [throughRef, throughOn] = useOnScreen<HTMLDivElement>();
   const [dayRef, dayOn] = useOnScreen<HTMLDivElement>();
   const [reportRef, reportOn] = useOnScreen<HTMLDivElement>();
-  const heldRef = useRef<{ calendar: MarketSnapshot | null; day: MarketSnapshot | null; report: MarketSnapshot | null; bars: Candle[] | undefined }>({ calendar: null, day: null, report: null, bars: undefined });
+  const heldRef = useRef<{ calendar: MarketSnapshot | null; tape: MarketSnapshot | null; through: MarketSnapshot | null; day: MarketSnapshot | null; report: MarketSnapshot | null; bars: Candle[] | undefined }>({ calendar: null, tape: null, through: null, day: null, report: null, bars: undefined });
   const shown = (key: BoxKey, on: boolean): MarketSnapshot | null => {
     const fresh = snapFor(key);
     if (!replayOn || on || !heldRef.current[key]) heldRef.current[key] = fresh;
     return heldRef.current[key];
   };
   const calSnap = useDeferredValue(shown('calendar', calOn));
+  const tapeSnap = useDeferredValue(shown('tape', tapeOn));
+  const throughSnap = useDeferredValue(shown('through', throughOn));
   const daySnap = useDeferredValue(shown('day', dayOn));
   const reportSnap = useDeferredValue(shown('report', reportOn));
   if (!replayOn || reportOn || !heldRef.current.bars) heldRef.current.bars = replayBars;
@@ -274,6 +268,8 @@ const MapDesk = () => {
   const ticker = frameSnap?.ticker ?? activeTicker;
   const focusPrice = focusFor(ticker);
   const calTicker = calSnap?.ticker ?? ticker;
+  const tapeTicker = tapeSnap?.ticker ?? ticker;
+  const throughTicker = throughSnap?.ticker ?? ticker;
   const dayTicker = daySnap?.ticker ?? ticker;
   const reportTicker = reportSnap?.ticker ?? ticker;
 
@@ -332,6 +328,17 @@ const MapDesk = () => {
             snapshotFor={columnSnap}
           />
         </Deferred>
+      </div>
+      {/* THE TAPE (the competitive audit, 2026-10-13): today's price with the book's levels on it, a bell on each level,
+          the expected move to the close — the chart practitioners open first, on this page rather than Terrain alone;
+          foldable, remembered. The replay rewinds it with the report's bars. */}
+      <div ref={tapeRef} className="border border-borderSubtle rounded-md bg-panel" data-tape data-scope-ticker={tapeTicker} data-on-screen={tapeOn}>
+        <TapeBox snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} scope={chipFor('tape', tapeTicker)} at={playing && tapeTicker === ticker ? replayMinute(framePos) : undefined} />
+      </div>
+      {/* THE BOOK THROUGH THE DAY (the competitive audit, 2026-10-13): net gamma over the session and every strike's
+          gamma minute by minute — the record a regime change is read off */}
+      <div ref={throughRef} className="border border-borderSubtle rounded-md bg-panel" data-through data-scope-ticker={throughTicker} data-on-screen={throughOn}>
+        <BookThroughDay snapshot={throughSnap ?? scan} bars={playing && throughTicker === ticker ? reportBars : undefined} focus={focusFor(throughTicker)} onPick={price => toggleFocus(price, throughTicker)} scope={chipFor('through', throughTicker)} />
       </div>
       {/* THE DAY — the two tools nobody ships (roadmap step 5, 2026-09-05):
           the Trader's Clock, today's hedging schedule with the book's figures

@@ -64,13 +64,16 @@ interface ExposureMatrixProps {
   onSelectStrike?: (strike: number) => void;
   /** The greek the pointer card reads — the band's lead */
   lead?: Greek;
+  /** Which legs the cells carry (the band's Legs card, 2026-10-13): the net, one leg, or both side by side */
+  legs?: 'net' | 'call' | 'put' | 'both';
 }
 
 type Leg = 'put' | 'call' | 'net';
-/* THE NET ALONE ON THE TABLE (the partner through Noah, 2026-10-12: the matrix "only showing the net and on hover do
-   we keep the put/call etc" … "the net to fill its container"): one column a greek, as wide as the box lets it,
-   its bar the whole lane; the put and call legs live on the pointer card, as they did. */
-const LEGS: Leg[] = ['net'];
+/* THE NET ALONE ON THE TABLE BY REST (the partner through Noah, 2026-10-12: the matrix "only showing the net and on
+   hover do we keep the put/call etc" … "the net to fill its container"): one column a greek, as wide as the box lets
+   it, its bar the whole lane; the put and call legs live on the pointer card. SINCE 2026-10-13 the band's Legs card can
+   draw one leg alone, or BOTH — two columns a greek, the put's bar growing left and the call's right from the seam. */
+const legsOf = (pick: 'net' | 'call' | 'put' | 'both'): Leg[] => (pick === 'both' ? ['put', 'call'] : [pick]);
 const GREEK_LABEL: Record<Greek, string> = { gex: 'GEX', dex: 'DEX', vex: 'VEX', vanna: 'VANNA', charm: 'CHARM' };
 const SILVER = 'rgb(var(--silver))';
 const PUT_INK = PUT_WALL;
@@ -93,26 +96,27 @@ interface Row {
    at the seam. */
 /* A shade more on the dark terminal (Noah: "a slight bit more for the dark mode, the light mode is pretty good") — the
    light values are untouched; the two grounds get their own hairline and wash. */
-const groupSkin = (gi: number, leg: Leg, paper: boolean) =>
-  `${leg === LEGS[0] ? `border-l ${paper ? 'border-borderSubtle' : 'border-borderMuted'} pl-3` : ''} ${leg === LEGS[LEGS.length - 1] ? 'pr-3' : ''} ${gi % 2 === 1 ? (paper ? 'bg-ink/[0.02]' : 'bg-ink/[0.045]') : ''}`;
+const groupSkin = (gi: number, first: boolean, last: boolean, paper: boolean) =>
+  `${first ? `border-l ${paper ? 'border-borderSubtle' : 'border-borderMuted'} pl-3` : ''} ${last ? 'pr-3' : ''} ${gi % 2 === 1 ? (paper ? 'bg-ink/[0.02]' : 'bg-ink/[0.045]') : ''}`;
 const groupWash = (gi: number, paper: boolean) => (gi % 2 === 1 ? (paper ? 'bg-ink/[0.02]' : 'bg-ink/[0.045]') : '');
 
-const Cell = ({ value, leg, cap, mode, paper, gi }: { value: number; leg: Leg; cap: number; mode: HeatMode; paper: boolean; gi: number }) => {
+const Cell = ({ value, leg, cap, mode, paper, gi, first, last, mirror }: { value: number; leg: Leg; cap: number; mode: HeatMode; paper: boolean; gi: number; first: boolean; last: boolean; /** with both legs drawn, the put's bar grows LEFT from the seam and the call's right */ mirror: 'left' | 'right' | null }) => {
   const pct = Math.min(100, (Math.abs(value) / Math.max(1, cap)) * 100);
   return (
-    <td className={`px-2 py-1 text-right align-middle ${groupSkin(gi, leg, paper)}`} data-matrix-leg={leg}>
+    <td className={`px-2 py-1 align-middle ${mirror === 'right' ? 'text-left' : 'text-right'} ${groupSkin(gi, first, last, paper)}`} data-matrix-leg={leg} data-matrix-mirror={mirror ?? undefined}>
       <span className={`block font-mono text-[11px] tnum leading-none ${leg === 'net' ? 'text-textPrimary font-semibold' : 'text-textPrimary'}`}>{fmtUsd(value)}</span>
       {/* the bar's lane is the whole cell — the net fills its container (2026-10-12) */}
-      <span className="mt-1 ml-auto block h-[3px] w-full rounded-full bg-ink/[0.06]">
+      <span className={`mt-1 ml-auto flex h-[3px] w-full rounded-full bg-ink/[0.06] ${mirror === 'left' ? 'justify-end' : ''}`}>
         {/* the width glides with the data, the ink with the Colours switch — the ladder's two clocks */}
-        <span className="block h-full rounded-full transition-[width,background-color] [transition-duration:700ms,450ms]" style={{ width: `${pct}%`, background: value === 0 ? 'transparent' : heatLadderColor(value, cap, mode, paper) }} />
+        <span className="block h-full shrink-0 rounded-full transition-[width,background-color] [transition-duration:700ms,450ms]" style={{ width: `${pct}%`, background: value === 0 ? 'transparent' : heatLadderColor(value, cap, mode, paper) }} />
       </span>
     </td>
   );
 };
 
-const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrike, palette = 'house', selectedStrike, marks, onPointer, onSelectStrike, lead: leadProp }: ExposureMatrixProps) => {
+const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrike, palette = 'house', selectedStrike, marks, onPointer, onSelectStrike, lead: leadProp, legs: legsPick = 'net' }: ExposureMatrixProps) => {
   const mode: HeatMode = palette === 'thermal' ? 'thermal-yellow' : HEAT_MODE;
+  const LEGS = useMemo(() => legsOf(legsPick), [legsPick]);
   const paper = useResolvedTheme() === 'light';
   const shownGreeks = useMemo(() => GREEKS.filter(g => greeks.includes(g)), [greeks]);
   const lead: Greek = leadProp && shownGreeks.includes(leadProp) ? leadProp : shownGreeks[0] ?? 'gex';
@@ -393,7 +397,11 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
           )}
           {you && <span className={`${TAG} text-silver`}>you own</span>}
         </td>
-        {shownGreeks.map((g, gi) => LEGS.map(leg => <Cell key={`${g}-${leg}`} value={r.legs[g][leg]} leg={leg} cap={caps[g][leg]} mode={mode} paper={paper} gi={gi} />))}
+        {shownGreeks.map((g, gi) =>
+          LEGS.map((leg, li) => (
+            <Cell key={`${g}-${leg}`} value={r.legs[g][leg]} leg={leg} cap={caps[g][leg]} mode={mode} paper={paper} gi={gi} first={li === 0} last={li === LEGS.length - 1} mirror={LEGS.length > 1 ? (leg === 'put' ? 'left' : 'right') : null} />
+          ))
+        )}
       </tr>
     );
   };
@@ -459,8 +467,8 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
             <tr>
               <th className="border-b border-borderSubtle" />
               {shownGreeks.map((g, gi) =>
-                LEGS.map(leg => (
-                  <th key={`${g}-${leg}`} className={`${head} px-2 py-1 text-right text-textSecondary border-b border-borderSubtle ${groupSkin(gi, leg, paper)}`}>
+                LEGS.map((leg, li) => (
+                  <th key={`${g}-${leg}`} className={`${head} px-2 py-1 ${leg === 'put' ? 'text-right' : 'text-left'} text-textSecondary border-b border-borderSubtle ${groupSkin(gi, li === 0, li === LEGS.length - 1, paper)}`}>
                     {leg}
                   </th>
                 ))

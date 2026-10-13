@@ -83,6 +83,9 @@ export function sessionBars(ticker: string) {
  * the live one's — no surface reads them. Null until the session has a snapshot to start from.
  */
 export function snapshotAtOpen(ticker: string): MarketSnapshot | null {
+  /* the house's estimator rebuilds the house's chain alone — on the feed there is no open book to rebuild from yet, and
+     a house chain beside the vendor's would be two markets on one screen (2026-10-13) */
+  if (bookMarket().src === 'feed') return null;
   const session = sessionBars(ticker);
   if (!session) return null;
   const snaps = Simulator.getGexHistory(ticker) ?? [];

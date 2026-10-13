@@ -17,6 +17,12 @@ import { readSessionClock } from '../../data/moc';
 import { FLIP, LONG_GAMMA, SHORT_GAMMA } from '../../components/gex/paletteInk';
 import { GEX_SUBPAGES } from './subnav';
 import { useReplayLabel } from './replayState';
+import { useRoomScan } from './useRoomScan';
+import { usePinpointSource } from '../../data/feed/levels';
+import { LEVELS_OPTIONS, LEVELS_TITLE, setLevelsScope, useLevelsScope } from '../../data/levelsScope';
+/* registers the feed's market with the seam (data/bookMarket.ts) — Unusual Whales' answers under every box of the room
+   while its key answers (data/feed/pinpointMarket.ts) */
+import '../../data/feed/pinpointMarket';
 
 /*
 ==================================================
@@ -83,6 +89,14 @@ const Fact = ({ label, children, title, testId }: { label: string; children: Rea
 
 const PinpointLayout = () => {
   const { activeTicker, marketData, flowTape } = useMarketData();
+  /* THE UI IS THE OWNER'S; THE FEED FILLS IT (2026-10-12, the 3abida line; restored 2026-10-13): with the room on the feed
+     every engine under this frame reads Unusual Whales' answers (data/bookMarket.ts) — the same pages, the same boxes, the
+     vendor's figures. While the shell's first probe is out the page stands as its own skeleton, so the house's book never
+     flashes before the vendor's. The head's facts read the room's scan, the one snapshot every page reads. */
+  const roomSrc = usePinpointSource();
+  const scan = useRoomScan();
+  /* WHICH CONTRACTS THE LEVELS ARE READ OFF (data/levelsScope.ts): today's alone, or every listed date */
+  const levelsScope = useLevelsScope();
   const { focus, clearFocus } = useFocus();
   /* Alerts are watched by the app shell on every page now (components/alerts/AlertWatcher.tsx, 2026-09-10) */
   const location = useLocation();
@@ -93,13 +107,14 @@ const PinpointLayout = () => {
      strike, its distance from spot, the door to the chart, and the one place
      to let it go. It belongs to the name the desk is on. */
   const focused = focus && focus.ticker === activeTicker ? focus.price : null;
-  const spot = marketData?.spot;
+  /* on the feed the distance is from the price the vendor figured the book at — never the house's price */
+  const spot = roomSrc === 'feed' ? scan?.spot : marketData?.spot;
   const dist = focused != null && spot ? ((focused - spot) / spot) * 100 : null;
 
   /* WHICH SIDE OF THE FLIP the market is on and how far the flip is, in the
      desk's own ruler. Rebuilt per tick: it is a proximity read and the build
      is under a millisecond. */
-  const gauge = useMemo(() => (marketData ? buildFlipGauge(marketData) : null), [marketData]);
+  const gauge = useMemo(() => (scan ? buildFlipGauge(scan) : null), [scan]);
   const unit = useDistanceUnit();
   const scales = useMemo<DistanceScales>(() => {
     if (!marketData) return { atr: null, sigma: null };
@@ -224,6 +239,7 @@ const PinpointLayout = () => {
               </Fact>
             </dl>
           )}
+          <DropdownSelect label="Levels" value={levelsScope} options={LEVELS_OPTIONS} onChange={setLevelsScope} title={LEVELS_TITLE} testId="levels-scope" align="end" />
           <DropdownSelect label="Ruler" value={unit} options={RULER_OPTIONS} onChange={setDistanceUnit} title="The unit every distance on Pinpoint is read in" testId="ruler" align="end" />
         </div>
       </header>
@@ -244,7 +260,7 @@ const PinpointLayout = () => {
           <ScrollHome />
           {/* A page's code travels on its first visit; it stands in as ITS OWN
               shape under a shell head that stays put (pinpointSkeletons.tsx) */}
-          <Suspense fallback={<PinpointPageSkeleton pathname={location.pathname} />}>{outlet}</Suspense>
+          <Suspense fallback={<PinpointPageSkeleton pathname={location.pathname} />}>{roomSrc === 'pending' ? <PinpointPageSkeleton pathname={location.pathname} /> : outlet}</Suspense>
         </motion.div>
       </AnimatePresence>
     </>

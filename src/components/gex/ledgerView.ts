@@ -31,19 +31,20 @@
 ==================================================
 */
 
-export type LedgerView = 'calendar' | 'matrix';
+/* THE PROFILE joined 2026-10-13 (the competitive audit): dealer gamma across spot, the curve the flip is read off */
+export type LedgerView = 'calendar' | 'matrix' | 'profile';
 export type LedgerHost = 'map' | 'tile';
 
 const KEY: Record<LedgerHost, string> = { map: 'slayer_map_view', tile: 'slayer_ledger_view' };
 const FIRST: Record<LedgerHost, LedgerView> = { map: 'matrix', tile: 'calendar' };
 /** The views a host offers — the Map's ladder went with the matrix's return */
-export const VIEWS_FOR: Record<LedgerHost, LedgerView[]> = { map: ['matrix', 'calendar'], tile: ['calendar', 'matrix'] };
+export const VIEWS_FOR: Record<LedgerHost, LedgerView[]> = { map: ['matrix', 'calendar', 'profile'], tile: ['calendar', 'matrix'] };
 
 export function readLedgerView(host: LedgerHost): LedgerView {
   try {
     const saved = localStorage.getItem(KEY[host]);
     /* a pick this host no longer offers (the Map's old ladder) opens on the host's first */
-    if ((saved === 'calendar' || saved === 'matrix') && VIEWS_FOR[host].includes(saved)) return saved;
+    if ((saved === 'calendar' || saved === 'matrix' || saved === 'profile') && VIEWS_FOR[host].includes(saved)) return saved;
   } catch {
     /* storage off — the host's first view */
   }

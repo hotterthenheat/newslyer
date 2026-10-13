@@ -38,6 +38,9 @@ import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type
 import { buildExposureProfile } from '../../data/exposure';
 import { buildLevelRead, sessionBars } from '../../data/levelview';
 import { nyClock } from '../../core/nyTime';
+import { RECORD_LEVELS, RECORD_WORDS, baseRates, levelTicks, sessionRecords, type Tick } from '../../data/levelRecord';
+import { useLevelsScope } from '../../data/levelsScope';
+import { bookMarket } from '../../data/bookMarket';
 import { CALL_WALL, FLIP, PUT_WALL, SUPREME } from './paletteInk';
 import GuideFocus, { GuideDoor } from '../ui/GuideFocus';
 import ReportGuide from './ReportGuide';
@@ -50,34 +53,8 @@ const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 /* NEW YORK'S CLOCK, like "Last touched" beside it (the audit's H2, 2026-10-13): the browser's zone put 05:43 and 01:36 on one row for the same minute */
 const hhmm = (unix: number) => nyClock(unix * 1000);
 
-interface Tick {
-  /** Index into the session's bars — the strip's x */
-  i: number;
-  time: number;
-  close: number;
-  kind: 'held' | 'broke';
-}
-
-/** Every test of a level along the session, bar by bar — kept as events rather
-    than counts so the strip can draw each one. */
-function levelTicks(bars: readonly Candle[], strike: number, side: 'call' | 'put'): Tick[] {
-  const out: Tick[] = [];
-  let touches = 0;
-  let broken = false;
-  bars.forEach((b, i) => {
-    const touched = b.low <= strike && b.high >= strike;
-    const beyond = side === 'call' ? b.close > strike : b.close < strike;
-    if (touched) touches++;
-    if (beyond && !broken) {
-      if (touches > 0) out.push({ i, time: b.time, close: b.close, kind: 'broke' });
-      broken = true;
-      return;
-    }
-    if (!beyond) broken = false;
-    if (touched) out.push({ i, time: b.time, close: b.close, kind: 'held' });
-  });
-  return out;
-}
+/* THE RULE FOR A TEST AND A BREAK lives in data/levelRecord.ts (`levelTicks`) since 2026-10-13, where the sessions before
+   today are graded by the same rule — the base rates under the subtitle */
 
 interface Row {
   key: string;
@@ -165,10 +142,12 @@ const SessionStrip = ({ row, bars }: { row: Row; bars: readonly Candle[] }) => {
 /** `scope`: the host's chip saying which name's levels these are */
 const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { snapshot: MarketSnapshot; focus: number | null; onPick: (price: number) => void; scope?: ReactNode; /** The day so far, handed in — the Map's replay reads the bars up to its position (2026-09-08) */ bars?: readonly Candle[] }) => {
   const bars = useMemo(() => barsProp ?? sessionBars(snapshot.ticker) ?? [], [snapshot, barsProp]);
+  /* the levels off today's contracts or every date — the desk's one choice (data/levelsScope.ts) */
+  const levelsScope = useLevelsScope();
   const rows = useMemo<Row[]>(() => {
     let levels: { callWall: number; putWall: number; flip: number; pin: number; supreme: number; spot: number } | null = null;
     try {
-      levels = buildExposureProfile(snapshot, '0DTE', 20).levels;
+      levels = buildExposureProfile(snapshot, levelsScope, 20).levels;
     } catch {
       return [];
     }
@@ -209,7 +188,10 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
       } else merged.push(r);
     }
     return merged;
-  }, [snapshot, bars]);
+  }, [snapshot, bars, levelsScope]);
+  /* THE BASE RATES (data/levelRecord.ts): the sessions on hand before today, each level as it stood at its open, graded
+     by the report's own rule — read, not stored; a machine on the vendor's two years grades two years */
+  const rates = useMemo(() => baseRates(sessionRecords(snapshot.ticker, bookMarket().cfg(snapshot.ticker)?.iv ?? null)), [snapshot.ticker]);
 
   const first = bars[0]?.time;
   const last = bars[bars.length - 1]?.time;
@@ -228,8 +210,17 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
           <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the rows, the strips and the ticks mean" testId="report-guide" />
         </div>
         <p className="mt-0.5 text-[11px] text-textMuted">
-          {rows.length} levels · {bars.length} one-minute bars{first != null && last != null ? ` from ${hhmm(first)} to ${hhmm(last)}` : ''} · a test is a bar whose range reaches the level, a break is a close beyond it after a test
+          {rows.length} levels off {levelsScope === 'ALL' ? 'every listed date' : "today's contracts"} · {bars.length} one-minute bars{first != null && last != null ? ` from ${hhmm(first)} to ${hhmm(last)}` : ''} · a test is a bar whose range reaches the level, a break is a close beyond it after a test
         </p>
+        {rates.sessions > 0 && (
+          <p className="mt-1 text-[11px] leading-relaxed text-textSecondary" title="Each session's levels are read off the first book kept that morning, never a later one — no look-ahead; the rule for a test and a break is this report's" data-base-rates={rates.sessions}>
+            <span className="text-textMuted">The {rates.sessions} {rates.sessions === 1 ? 'session' : 'sessions'} before today, each level as it stood at the open · </span>
+            {RECORD_LEVELS.filter(k => rates.levels[k].tested > 0)
+              .map(k => `${RECORD_WORDS[k]} held its first test ${rates.levels[k].heldFirst} of ${rates.levels[k].tested}`)
+              .join(' · ')}
+            {rates.insideMove.n > 0 && ` · the close landed inside one expected move ${rates.insideMove.inside} of ${rates.insideMove.n}`}
+          </p>
+        )}
       </div>
       <ul className="flex flex-col" data-level-rows>
         {rows.map(r => {

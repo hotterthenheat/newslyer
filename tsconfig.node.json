@@ -1,14 +1,25 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "noEmit": true,
     "strict": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["vite.config.ts", "tailwind.config.ts", "server.ts"]
+  "include": [
+    "vite.config.ts",
+    "tailwind.config.ts",
+    "server.ts",
+    "server",
+    "scripts/feed-check.ts",
+    "scripts/feed-proof.ts"
+  ]
 }

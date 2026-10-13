@@ -60,7 +60,9 @@ import CompanyLogo from '../ui/CompanyLogo';
 import TickerSearch from '../ui/TickerSearch';
 import { useFadeClose } from '../ui/useFadeClose';
 import { fmtUsd } from '../../data/gex';
-import { STRIKE_WINDOWS, type StrikeWindow } from '../../data/exposure';
+import { STRIKE_WINDOWS, buildExposureProfile, type StrikeWindow } from '../../data/exposure';
+import { useLevelsScope } from '../../data/levelsScope';
+import ExportDoor from './ExportDoor';
 import { buildExposureSurface, CALENDAR_DTES, GREEKS, type ExposureSurface, type Greek } from '../../data/exposureSurface';
 import { snapshotAtOpen } from '../../data/levelview';
 import { beginGlide } from '../../core/glide';
@@ -69,6 +71,19 @@ import ColoursSwitch from './ColoursSwitch';
 import type { MarketSnapshot } from '../../types/market';
 import { VIEWS_FOR, readLedgerView, writeLedgerView, type LedgerView } from './ledgerView';
 import ExposureMatrix from './ExposureMatrix';
+import { DataCard, DataDoor } from './BookProvenance';
+import ExposureProfileView from './ExposureProfileView';
+
+/* THE LEGS (the competitive audit, 2026-10-13 — a net-only grid was the category's toy-grade marker): the net, one leg
+   alone, or both side by side on the matrix (the two columns a greek, the bars mirrored at the seam). The calendar's
+   capsule carries one figure, so Both is the matrix's alone there. */
+export type LegsPick = 'net' | 'call' | 'put' | 'both';
+const legsOptions = (calendar: boolean): DropdownOption<LegsPick>[] => [
+  { value: 'net', label: 'Net', hint: 'The two legs added — the sign is the side that wins the strike' },
+  { value: 'call', label: 'Calls', hint: 'The call leg alone — what dealers hedge against the calls open there' },
+  { value: 'put', label: 'Puts', hint: 'The put leg alone' },
+  { value: 'both', label: 'Both', hint: calendar ? 'On the matrix only — the two legs side by side' : 'The two legs side by side, each in its own column, the bars mirrored at the seam', disabled: calendar },
+];
 
 interface ExposureFieldProps {
   /** Null before the first tick — the panel waits rather than throws. */
@@ -180,6 +195,7 @@ interface DrawnShape {
   greeks: Greek[];
   range: { from: number; through: number };
   afterBell: boolean;
+  legs: LegsPick;
 }
 /** The old shape's fade-out; the new one's fade-in is index.css's view-in (320ms) */
 const SWAP_OUT_MS = 160;
@@ -225,6 +241,7 @@ const VIEW_OPTION: Record<LedgerView, DropdownOption<LedgerView>> = {
   /* the net alone since 2026-10-12 — the hint says what the table draws (the audit's H7, 2026-10-13) */
   matrix: { value: 'matrix', label: 'Matrix', hint: "One row per strike — each greek's net, a figure and its bar; put and call on the card" },
   calendar: { value: 'calendar', label: 'Calendar', hint: 'Strike by expiry — every cell a capsule' },
+  profile: { value: 'profile', label: 'Profile', hint: 'Dealer gamma across spot — the curve the flip is read off, a line per expiry and the total' },
 };
 const SHOW_OPTIONS: DropdownOption<'now' | 'after'>[] = [
   { value: 'now', label: 'Now', hint: 'The calendar as it stands' },
@@ -279,6 +296,30 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   /* THE VIEW — the matrix or the calendar; remembered per host (ledgerView.ts): the Map's band opens on the matrix */
   const viewHost = toolbar === 'band' ? 'map' : 'tile';
   const [view, setView] = useState<LedgerView>(() => readLedgerView(viewHost));
+  /* THE LEGS — net by rest (the partner's call of 2026-10-12); Both falls back to net on the calendar */
+  const [legs, setLegs] = useState<LegsPick>('net');
+  useEffect(() => {
+    if (view === 'calendar' && legs === 'both') setLegs('net');
+  }, [view, legs]);
+  /* THE DATA DOOR (components/gex/BookProvenance.tsx): where the figures come from and how they are computed */
+  const [dataOpen, setDataOpen] = useState(false);
+  /* THE LEVELS OFF EVERY DATE when the desk says so (data/levelsScope.ts): a surface's levels are its front's; with the
+     scope on all expiries the same surface is read with the whole book's levels instead, once per surface */
+  const levelsScope = useLevelsScope();
+  const scopedCache = useRef(new WeakMap<ExposureSurface, ExposureSurface>());
+  const scoped = (surf: ExposureSurface, snap: MarketSnapshot): ExposureSurface => {
+    if (levelsScope !== 'ALL') return surf;
+    const hit = scopedCache.current.get(surf);
+    if (hit) return hit;
+    let out = surf;
+    try {
+      out = { ...surf, levels: buildExposureProfile(snap, 'ALL', WHOLE_BOOK).levels };
+    } catch {
+      /* a book without its dates yet — the front's levels stand */
+    }
+    scopedCache.current.set(surf, out);
+    return out;
+  };
   /** The expiry columns drawn for a book, nearest first: the window, without today after the bell, then the
       ceiling, then what fits (every pane reports its own; the least wins) — read off a shape (the live picks for the
       card's words, the drawn snapshot for the columns; see the soft swap below) */
@@ -345,8 +386,8 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      cards up top show the new pick at once. The columns render from ONE SNAPSHOT of the shape (`drawn`), and the
      live picks catch up as the fade lands. Nothing is cloned or measured — two short opacity fades, cheap at any
      size. Reduced motion: the cut. */
-  const liveShape: DrawnShape = { view, rings, greeks, range, afterBell };
-  const liveKey = `${view}|${rings}|${greeks.join(',')}|${range.from}-${range.through}|${afterBell ? 'a' : 'n'}`;
+  const liveShape: DrawnShape = { view, rings, greeks, range, afterBell, legs };
+  const liveKey = `${view}|${rings}|${greeks.join(',')}|${range.from}-${range.through}|${afterBell ? 'a' : 'n'}|${legs}`;
   const [drawn, setDrawn] = useState<{ key: string; shape: DrawnShape }>({ key: liveKey, shape: liveShape });
   const [fading, setFading] = useState(false);
   const [swapped, setSwapped] = useState(false);
@@ -791,6 +832,8 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       <Fold open={!many} gap={8} testId="data-band-greek">
         <DropdownMulti label="Greek" values={pick} groups={GREEK_GROUPS} onChange={setPick} emptyWord="All" clearWord="Clear · all five" title="One, some, or all five" testId="ledger-greek" align="start" bare={stripsBare} />
       </Fold>
+      {/* the profile draws the net alone — the card steps aside there */}
+      {view !== 'profile' && <DropdownSelect label="Legs" value={legs} options={legsOptions(view === 'calendar')} onChange={setLegs} title="Which legs the cells carry" testId="ledger-legs" bare={stripsBare} />}
       {/* the trigger says the window DRAWN when the fit cuts the one chosen — "Today → Oct 16 · 4 of 7" (the audit's H4) */}
       <ExpiryRangeCard label="Expiries" days={expiryDays} from={range.from} through={range.through} onChange={(from, through) => setRange({ from, through })} ceiling={ceiling} ceilingWhy={ceilingWhy} shortcuts={shortcuts} title="Which expiries the book reads" testId="ledger-expiries" note={fitNote} bare={stripsBare} cut={{ through: shownIdx[shownIdx.length - 1] ?? range.through, shown: shownIdx.length, wanted }} />
       <DropdownSelect
@@ -832,6 +875,8 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
     </button>
   );
   const guideButton = <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the grid means" testId="ledger-guide" compact={doorsTight} size={toolbar === 'band' ? 'md' : 'sm'} />;
+  const dataDoor = <DataDoor ticker={surface.ticker} open={dataOpen} onClick={() => setDataOpen(v => !v)} compact={doorsTight} />;
+  const exportDoor = toolbar === 'band' ? <ExportDoor surface={scoped(surface, snapshot)} greeks={greeks} expiries={shownIdx} compact={doorsTight} /> : null;
   /* THE READ's door — beside the guide's; lit while the card is up. The band's opens the host's read */
   const readDoor = <ReadDoor open={readOf(surface.ticker) === 'open'} onClick={() => toggleRead(surface.ticker)} compact={doorsTight} />;
   const fullButton =
@@ -928,9 +973,11 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   /* the supreme and the read are one name's — they step down into the columns' heads with the chip */
   const doors = (
     <>
+      {dataDoor}
       {namesDoor}
       {focusDoor}
       {after}
+      {exportDoor}
       <Fold open={!many} gap={8} className="ml-auto" testId="data-band-supreme">
         {supremeDoor}
       </Fold>
@@ -1213,6 +1260,8 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
             );
           const sup = book.surface.supreme[colGreeks[0] ?? 'gex'];
           const supEx = book.surface.expiries[sup.e];
+          /* the surface as drawn: its levels off today's contracts, or every date (the desk's Levels choice) */
+          const surfDrawn = scoped(book.surface, book.snapshot);
           return cell(
             <>
               {/* THE COLUMN'S HEAD unfolds when a second name arrives and folds
@@ -1269,17 +1318,19 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                   data-ledger-shape={drawn.key}
                   data-ledger-fading={fading || undefined}
                 >
-                  {d.view === 'matrix' ? (
-                    <ExposureMatrix surface={book.surface} liveSpot={book.snapshot.spot} greeks={colGreeks} expiries={shownFor(book.surface, d)} rings={d.rings} hoverStrike={c.host ? hoverStrike : undefined} palette={palette} selectedStrike={kept} marks={c.host ? marks : undefined} onPointer={c.host ? onPointer : handlesFor(c.ticker).point} onSelectStrike={keep} lead={c.host ? leadGreek : undefined} />
+                  {d.view === 'profile' ? (
+                    <ExposureProfileView surface={surfDrawn} expiries={shownFor(book.surface, d)} liveSpot={book.snapshot.spot} selectedStrike={kept} onSelectStrike={keep} paper={paper} />
+                  ) : d.view === 'matrix' ? (
+                    <ExposureMatrix surface={surfDrawn} liveSpot={book.snapshot.spot} greeks={colGreeks} expiries={shownFor(book.surface, d)} rings={d.rings} hoverStrike={c.host ? hoverStrike : undefined} palette={palette} selectedStrike={kept} marks={c.host ? marks : undefined} onPointer={c.host ? onPointer : handlesFor(c.ticker).point} onSelectStrike={keep} lead={c.host ? leadGreek : undefined} legs={d.legs} />
                   ) : (
-                    <ExposureLedger surface={book.surface} liveSpot={book.snapshot.spot} open={view === 'calendar' && !fresh ? openSurfaceOf(book.ticker) : null} focusOn={focusOn && view === 'calendar' && !fresh} greeks={colGreeks} expiries={same(`e:${c.ticker}`, windowFor(book.surface, d))} rings={d.rings} hoverStrike={c.host ? hoverStrike : undefined} palette={palette} afterBell={d.afterBell} selectedStrike={kept} marks={c.host ? marks : undefined} onPointer={c.host ? onPointer : handlesFor(c.ticker).point} onSelectStrike={keep} fitKey={c.ticker} onFit={reportFit} paper={paper} />
+                    <ExposureLedger surface={surfDrawn} liveSpot={book.snapshot.spot} open={view === 'calendar' && !fresh ? openSurfaceOf(book.ticker) : null} focusOn={focusOn && view === 'calendar' && !fresh} greeks={colGreeks} expiries={same(`e:${c.ticker}`, windowFor(book.surface, d))} rings={d.rings} leg={d.legs === 'both' ? 'net' : d.legs} hoverStrike={c.host ? hoverStrike : undefined} palette={palette} afterBell={d.afterBell} selectedStrike={kept} marks={c.host ? marks : undefined} onPointer={c.host ? onPointer : handlesFor(c.ticker).point} onSelectStrike={keep} fitKey={c.ticker} onFit={reportFit} paper={paper} />
                   )}
                 </div>
                 {/* THE READ — this name's, glass over the right of its own book
                     (the whole column when names are tight), in its lead greek */}
                 {read && (
                   <BookRead
-                    surface={book.surface}
+                    surface={surfDrawn}
                     snapshot={book.snapshot}
                     greek={colGreek}
                     mode={palette === 'thermal' ? 'thermal-yellow' : HEAT_MODE}
@@ -1302,6 +1353,10 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       {/* THE GUIDE IN FOCUS — over the whole calendar, the grid blurred behind it */}
       <GuideFocus open={guideOpen} onClose={() => setGuideOpen(false)} title="How to read the calendar" testId="ledger-guide">
         <LedgerGuide surface={surface} greek={supremeGreek} />
+      </GuideFocus>
+      {/* WHERE THIS BOOK COMES FROM — the source, the freshness, the formula, the sign, the levels (BookProvenance.tsx) */}
+      <GuideFocus open={dataOpen} onClose={() => setDataOpen(false)} title="Where this book comes from" testId="ledger-data" width={480}>
+        <DataCard ticker={surface.ticker} surface={scoped(surface, snapshot)} greeks={greeks} expiries={shownIdx} rings={rings} view={view} />
       </GuideFocus>
     </div>
   );

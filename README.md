@@ -15,9 +15,25 @@ One terminal, put together from two lines of the same app:
 
 There is no lime anywhere: the accent is the holographic silver, including in the landing's stills and films.
 
+## The data feed
+
+The terminal runs on its own simulated book until a key is in place. With `UW_API_TOKEN` (Unusual Whales) in a `.env` at
+the repo root — never with a `VITE_` prefix, the page never sees a key — the dev server and `npm run serve` answer
+`/feed/uw/*` themselves (`server/feed.ts`), and the rooms that are wired (Pinpoint, Terrain, Trace, the Dossier) read the
+vendor's answers in place of the house's. `npm run feed:check` says whether the key works; Settings › Data sources shows
+where each vendor stands. `docs/data-feed.md` is the owner's page for it.
+
+## The Map (Pinpoint)
+
+The book by strike and expiry as a matrix, a calendar or a profile (dealer gamma across spot); a data door that says where
+the figures come from and how they are computed; the legs apart or together; the tape with the levels on it and a bell on
+each; the book through the day; the trader's clock; how the levels held today, with the base rates of the sessions before;
+export as CSV or JSON. `reports/` and `research_notes/` (git-ignored) hold the competitive audit behind it.
+
 ```
 npm install
 npm run dev        # the app
 npm run typecheck
 npm test
+npm run feed:check # do the keys in .env work
 ```
