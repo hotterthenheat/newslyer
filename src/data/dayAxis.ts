@@ -7,9 +7,10 @@
   first bar came later (the house book opened mid-afternoon, a page that
   had no history to backfill) drew three or four empty hours on the
   left of both charts (the dead-space scan, 2026-10-13: 60% of a
-  2,700px chart empty before 13:16). The clock starts on the quarter hour
-  at or before the first bar, so the two charts still share one axis,
-  and on the open itself whenever the data reaches it.
+  2,700px chart empty before 13:16). The clock starts on the first bar's own
+  minute (a quarter-hour floor still left a fifth of a short session's
+  charts empty), so the two charts still share one axis, and on the
+  open itself whenever the data reaches it.
 ==================================================
 */
 
@@ -21,7 +22,7 @@ export function dayAxisFrom(firstTime: number | null | undefined): number {
   if (firstTime == null || !Number.isFinite(firstTime) || firstTime <= 0) return OPEN_MIN;
   const first = nyMinutes(firstTime * 1000);
   if (first <= OPEN_MIN + 30 || first >= CLOSE_MIN - 30) return OPEN_MIN;
-  return Math.max(OPEN_MIN, Math.floor(first / 15) * 15);
+  return Math.max(OPEN_MIN, first);
 }
 
 /** The marks under the axis: its start, the whole hours after it (the even ones on a narrow plot), the close — none

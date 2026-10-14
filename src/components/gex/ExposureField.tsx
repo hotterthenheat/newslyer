@@ -150,6 +150,8 @@ interface ExposureFieldProps {
       tells the host how wide it would be at its widest — the panes' natural widths, or the band's named row if that is
       wider; 0 while unmeasured or on the profile, which fills its room */
   onNaturalWidth?: (px: number) => void;
+  /** The band's one row with its words, measured — the host decides where it has the room (2026-10-13) */
+  onBandNeed?: (px: number) => void;
   /** Given (the Map, 2026-10-13), the band is drawn into this element — a strip of its own above the book and the day —
       rather than across the top of the book: a band needs ~1,800px for its words, one name's pane 443, and inside the
       box the band's width was the box's. Fullscreen draws it in place, as before. */
@@ -270,7 +272,7 @@ const SHOW_OPTIONS: DropdownOption<'now' | 'after'>[] = [
   { value: 'after', label: 'After the close', hint: "The same calendar once today's contracts have expired" },
 ];
 
-const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike, openRatio, onTicker, toolbar = 'desk', marks, lead, greeks: greeksProp, onGreeks, fresh = false, after, fullMode = 'portal', fullOpen, headFull = false, multi = false, selectedStrikeFor, onSelectStrikeFor, snapshotFor, onNaturalWidth, headSlot, pack = false }: ExposureFieldProps) => {
+const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike, openRatio, onTicker, toolbar = 'desk', marks, lead, greeks: greeksProp, onGreeks, fresh = false, after, fullMode = 'portal', fullOpen, headFull = false, multi = false, selectedStrikeFor, onSelectStrikeFor, snapshotFor, onNaturalWidth, onBandNeed, headSlot, pack = false }: ExposureFieldProps) => {
   const [ownPick, setOwnPick] = useState<string[]>(['gex']);
   const pick = greeksProp ?? ownPick;
   /* the page's theme: on paper the island and everything drawn in it wear the light set and the paper ramps */
@@ -1257,6 +1259,9 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   /* the band's named row is the floor — measured once it has been drawn with its words, the widest band's threshold until
      then, so a box packing to one narrow pane never squeezes the band into its phone rows before it has been measured */
   const headOut = toolbar === 'band' && !!headSlot && !full;
+  useEffect(() => {
+    if (namedNeed > 0) onBandNeed?.(namedNeed);
+  }, [namedNeed, onBandNeed]);
   const hostNatural = naturalW > 0 ? (headOut ? naturalW : Math.max(naturalW, namedNeed > 0 ? namedNeed + 48 : BAND_ONE_ROW_PX)) + 2 : 0;
   useEffect(() => {
     onNaturalWidth?.(hostNatural);

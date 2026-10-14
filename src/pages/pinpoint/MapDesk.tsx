@@ -252,6 +252,33 @@ const MapDesk = () => {
      as wide as its panes; its height is taken off the book box's, so the two together keep the first screen's height */
   const [bandSlot, setBandSlot] = useState<HTMLDivElement | null>(null);
   const [bandSlotH, setBandSlotH] = useState(0);
+  /* THE BAND IN THE HEAD WHERE THE HEAD HAS ITS ROOM (2026-10-13, "i dont want any deadspace"): the head's side (the facts,
+     the room between, the Levels and Ruler cards) measured against the band's named row; in, with 12px to spare, and out
+     only once it no longer fits, so a fact's width ticking by a figure never throws it back and forth */
+  const [bandNeed, setBandNeed] = useState(0);
+  const [headBand, setHeadBand] = useState<HTMLElement | null>(null);
+  const [headRoom, setHeadRoom] = useState(0);
+  useLayoutEffect(() => {
+    const slot = document.getElementById('pinpoint-head-band');
+    const side = slot?.closest('[data-shell-side]') as HTMLElement | null;
+    if (!slot || !side) return;
+    setHeadBand(slot);
+    const read = () => {
+      const facts = side.querySelector<HTMLElement>('[data-shell-facts]')?.offsetWidth ?? 0;
+      const cards = side.querySelector<HTMLElement>('[data-shell-cards]')?.offsetWidth ?? 0;
+      const room = Math.floor(side.clientWidth - facts - cards - 48);
+      setHeadRoom(prev => (Math.abs(prev - room) < 2 ? prev : room));
+    };
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(side);
+    return () => ro.disconnect();
+  }, []);
+  const [bandUp, setBandUp] = useState(false);
+  useEffect(() => {
+    if (bandNeed <= 0 || headRoom <= 0) return;
+    setBandUp(up => (up ? headRoom >= bandNeed : headRoom >= bandNeed + 12));
+  }, [bandNeed, headRoom]);
   /* the top row's width, to know whether the day box stands beside the book (the same rule the row's wrap follows: the
      book at its width, 16px, and 640 for the day) — beside, it takes the book box's height exactly and its two charts
      share it; under the book it keeps its own */
@@ -424,7 +451,7 @@ const MapDesk = () => {
           be under 640 it wraps under the book at the page's full width, as before. */}
       <div id="map-book" className="flex flex-col gap-2 max-sm:scroll-mt-24" data-map-book-wrap>
       <div ref={setBandSlot} className="empty:hidden border border-borderSubtle rounded-md bg-panel overflow-hidden [&>[data-ledger-toolbar]]:border-b-0" data-map-band-slot />
-      <div ref={setTopRow} className="flex flex-wrap items-stretch gap-4" data-map-top-row data-day-beside={dayBeside || undefined}>
+      <div ref={setTopRow} className="flex flex-wrap items-stretch gap-4" data-map-top-row data-day-beside={dayBeside || undefined} data-band-need={bandNeed || undefined} data-head-room={headRoom || undefined} data-band-up={bandUp || undefined}>
       <div ref={calRef} className="shrink-0 grow-0 max-w-full border border-borderSubtle rounded-md overflow-hidden flex flex-col" style={{ width: dayBeside ? bookW : '100%', height: bookH }} data-book-w={bookW || undefined} data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
         <Deferred index={0} frames={0} fallback={<CalendarInner />} className="h-full min-h-0 flex flex-col animate-fade-in">
           <ExposureField
@@ -446,7 +473,8 @@ const MapDesk = () => {
             onSelectStrikeFor={(t, price) => toggleFocus(price, t)}
             snapshotFor={columnSnap}
             onNaturalWidth={setBookW}
-            headSlot={bandSlot}
+            headSlot={bandUp && headBand ? headBand : bandSlot}
+            onBandNeed={setBandNeed}
             pack={dayBeside}
           />
         </Deferred>

@@ -165,7 +165,9 @@ const PinpointLayout = () => {
       <header ref={headRef} className="flex items-start gap-6 flex-wrap pb-3 border-b border-borderSubtle" data-shell>
         {/* THE LINE IS NEVER CUT MID-WORD (the audit's H8, 2026-10-13): the column keeps room for it, so under ~1,200px the
             facts wrap under the title instead of the title column shrinking to "The book by s…" */}
-        <div className="min-w-[min(100%,560px)] flex-1">
+        {/* …and no wider than its own words (2026-10-13, "i dont want any deadspace"): as a quarter of a wide head it held
+            ~150px of nothing, and the side beside it is where the facts, the Map's band and the cards need the room */}
+        <div className="min-w-[min(100%,560px)] flex-none max-w-full">
           <div className="h-6 flex items-center gap-2.5 flex-wrap" data-shell-page>
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-borderSubtle text-textSecondary shrink-0" aria-hidden="true">
               <PageIcon className="w-3.5 h-3.5" />
@@ -253,6 +255,10 @@ const PinpointLayout = () => {
               </Fact>
             </dl>
           )}
+          {/* THE MAP'S BAND, WHEN THE ROW HAS ITS ROOM (2026-10-13, "i dont want any deadspace"): on a wide screen the head
+              left ~1,400px empty between the facts and the cards, and the band's own strip the same between its picks and
+              its doors; the Map draws its band here when its words fit, and in its own strip under the head when not */}
+          <div id="pinpoint-head-band" className="empty:hidden min-w-0 flex-1 [&>[data-ledger-toolbar]]:border-0 [&>[data-ledger-toolbar]]:bg-transparent [&>[data-ledger-toolbar]]:p-0" data-shell-band />
           <div className="ml-auto flex items-center gap-6" data-shell-cards>
             <DropdownSelect label="Levels" value={levelsScope} options={LEVELS_OPTIONS} onChange={setLevelsScope} title={LEVELS_TITLE} testId="levels-scope" align="end" />
             <DropdownSelect label="Ruler" value={unit} options={RULER_OPTIONS} onChange={setDistanceUnit} title="The unit every distance on Pinpoint is read in" testId="ruler" align="end" />
