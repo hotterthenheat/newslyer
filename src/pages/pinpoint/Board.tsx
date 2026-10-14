@@ -202,7 +202,11 @@ const BellCell = ({ data }: ICellRendererParams<BoardRow>) =>
   );
 
 const CrossCell = ({ data }: ICellRendererParams<BoardRow>) =>
-  data ? <span className="font-mono text-[11px] tnum text-textSecondary">{data.crossings == null ? '—' : `${data.crossings}×`}</span> : null;
+  data ? (
+    <span className="font-mono text-[11px] tnum text-textSecondary">
+      {data.crossings == null || data.flipTests == null ? '—' : data.flipTests === 0 ? 'untested' : data.crossings === 0 ? `held all ${data.flipTests}` : `broke ${data.crossings} of ${data.flipTests}`}
+    </span>
+  ) : null;
 
 /** The session's closes as one quiet line — the day's shape, not a chart */
 const SparkCell = ({ data }: ICellRendererParams<BoardRow>) => {
@@ -363,7 +367,7 @@ const Board = () => {
       { headerName: 'Supreme', field: 'supreme', flex: 0.8, minWidth: 96, cellRenderer: SupremeCell, headerTooltip: 'The heaviest strike on the whole book — the one the Map marks in magenta' },
       { headerName: 'Net GEX today', field: 'netGex', flex: 1.1, minWidth: 120, cellRenderer: NetCell, comparator: (a: number, b: number) => Math.abs(a) - Math.abs(b), headerTooltip: 'All the hedging on the name added up, per 1% move: positive absorbs moves, negative amplifies them' },
       { headerName: 'Expires today', field: 'bellShare', flex: 1.2, minWidth: 140, cellRenderer: BellCell, headerTooltip: "The share of the name's hedging sitting in contracts that expire at 4:00 today — it is gone at the close, and the walls it made go with it" },
-      { headerName: 'Flip crossed today', field: 'crossings', flex: 1.1, minWidth: 150, cellRenderer: CrossCell, headerTooltip: 'How many times price has crossed the flip today — the more it has, the less either side of it means' },
+      { headerName: 'Flip today', field: 'crossings', flex: 1.1, minWidth: 150, cellRenderer: CrossCell, headerTooltip: 'How the flip held today: the bars that reached it, and how many closed through it — the Map\'s own count. The more it broke, the less either side of it means' },
       { headerName: 'Today so far', field: 'spark', flex: 1.2, minWidth: 140, cellRenderer: SparkCell, cellDataType: false, sortable: false, headerTooltip: 'The price path since the open' },
       {
         headerName: 'Your positions',

@@ -46,6 +46,7 @@ import DropdownMulti from '../ui/DropdownMulti';
 import GuideFocus, { GuideDoor } from '../ui/GuideFocus';
 import { undoable } from '../ui/undo';
 import LedgerGuide, { guideTitle } from './LedgerGuide';
+import { attachScrollMore } from '../ui/scrollMore';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Crosshair, Maximize2, Minimize2, Plus, X } from 'lucide-react';
@@ -54,7 +55,7 @@ import TickerLookup from '../ui/TickerLookup';
 import useFocusTrap from '../ui/useFocusTrap';
 import { useAnchoredMenu } from '../ui/useAnchoredMenu';
 import BookRead, { ReadDoor } from './BookRead';
-import ExposureLedger, { columnsThatFit } from './ExposureLedger';
+import ExposureLedger, { SinceBadge, columnsThatFit } from './ExposureLedger';
 import { useResolvedTheme } from '../../theme/theme';
 import { GREEK_PICK_OPTIONS, nextGreekPick, pickGreeks, type SurfaceCell } from './exposureView';
 import CompanyLogo from '../ui/CompanyLogo';
@@ -1143,27 +1144,8 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
     if (!bandScroll) return;
     const el = bandEl.current;
     if (!el) return;
-    const rows = [...el.querySelectorAll<HTMLElement>('[data-ledger-toolbar-row]')];
-    const mark = (row: HTMLElement) => {
-      const more: string[] = [];
-      if (row.scrollLeft > 1) more.push('left');
-      if (row.scrollLeft + row.clientWidth < row.scrollWidth - 1) more.push('right');
-      if (more.length) row.setAttribute('data-scroll-more', more.join(' '));
-      else row.removeAttribute('data-scroll-more');
-    };
-    const ro = new ResizeObserver(() => rows.forEach(mark));
-    const offs = rows.map(row => {
-      const on = () => mark(row);
-      row.addEventListener('scroll', on, { passive: true });
-      ro.observe(row);
-      mark(row);
-      return () => row.removeEventListener('scroll', on);
-    });
-    return () => {
-      ro.disconnect();
-      offs.forEach(off => off());
-      rows.forEach(row => row.removeAttribute('data-scroll-more'));
-    };
+    const offs = [...el.querySelectorAll<HTMLElement>('[data-ledger-toolbar-row]')].map(attachScrollMore);
+    return () => offs.forEach(off => off());
   }, [bandScroll, bandRows]);
 
   const leadFold = lead ? (
@@ -1696,10 +1678,21 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
             <span aria-hidden className="h-[3px] w-4 rounded-full bg-silver" />
             kept
           </span>
+          {/* the calendar's pills, named (2026-10-14 — a bare "−96%" on a cell said neither what fell nor since when) */}
+          {view === 'calendar' && (
+            <span className="inline-flex items-center gap-1.5" data-legend-since>
+              <span aria-hidden className="inline-flex items-center rounded-full border border-borderSubtle px-0.5">
+                <SinceBadge text="−96%" dir={-1} />
+              </span>
+              change since the open, on the ten biggest moves
+            </span>
+          )}
         </div>
       )}
-      {/* THE GUIDE IN FOCUS — over the whole calendar, the grid blurred behind it */}
-      <GuideFocus open={guideOpen} onClose={() => setGuideOpen(false)} title={guideTitle(view)} testId="ledger-guide">
+      {/* THE GUIDE IN FOCUS — over the whole page, the way the clock's and the report's are (2026-10-14: inside the matrix's
+          own pane the card was cut to ~330px and its 400px drawings clipped mid-word — "it looks broken in the one place
+          that's meant to teach") */}
+      <GuideFocus open={guideOpen} onClose={() => setGuideOpen(false)} title={guideTitle(view)} testId="ledger-guide" viewport>
         <LedgerGuide surface={surface} greek={supremeGreek} view={view} mode={palette === 'thermal' ? 'thermal-yellow' : undefined} paper={paper} />
       </GuideFocus>
       {/* WHERE THIS BOOK COMES FROM — the source, the freshness, the formula, the sign, the levels (BookProvenance.tsx) */}

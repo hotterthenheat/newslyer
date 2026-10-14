@@ -46,8 +46,10 @@ import { armLevel, removeAlert, useAlerts, type LevelName } from './alertStore';
 import { useLevelsScope } from '../../data/levelsScope';
 import { setDayHover, useDayHover } from '../../data/dayHover';
 import { useResolvedTheme } from '../../theme/theme';
+import { useRoomSpot } from '../../pages/pinpoint/useRoomScan';
+import { undoable } from '../ui/undo';
 import { CALL_WALL, FLIP, PUT_WALL, SUPREME, alpha, resolveInk } from './paletteInk';
-import { CLOCK_SCALE, dayChartOptions, dayClock, daySurface, dayStartOf, feedSeries } from './dayChart';
+import { CLOCK_SCALE, DAY_SCALE_W, dayChartOptions, dayClock, daySurface, dayStartOf, feedSeries } from './dayChart';
 import type { Candle, GexSnapshot, MarketSnapshot } from '../../types/market';
 
 const SILVER = 'rgb(var(--silver))';
@@ -107,7 +109,11 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
       return !v;
     });
   };
-  const bars = useMemo(() => barsProp ?? sessionBars(snapshot.ticker) ?? [], [snapshot, barsProp]);
+  /* THE ROOM'S PRICE (pages/pinpoint/useRoomScan.ts useRoomSpot — one price on the page, 2026-10-14: this box's Last read
+     455.52 under a head at 455.38): on the house the forming bar's close IS the tick (core/simulator.ts updateCandles),
+     so the bars are read again on it and the line ends on the head's figure; a replay's bars are handed in and stand */
+  const roomSpot = useRoomSpot(snapshot.ticker);
+  const bars = useMemo(() => barsProp ?? sessionBars(snapshot.ticker) ?? [], [snapshot, barsProp, roomSpot]);
   /* the levels off today's contracts or every date — the desk's one choice (data/levelsScope.ts) */
   const levelsScope = useLevelsScope();
   const levels = useMemo<Level[]>(() => {
@@ -182,6 +188,8 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
   const TO = dayAxisTo(bars[bars.length - 1]?.time, at == null && inSession);
   const nowMin = at != null ? Math.max(FROM, Math.min(TO, at)) : inSession ? Math.max(FROM, liveMin) : TO;
   const spot = bars.length ? bars[bars.length - 1].close : snapshot.spot;
+  /* what "Last" prints: the room's price — the replay's last bar when rewound */
+  const last = barsProp != null ? spot : roomSpot ?? spot;
   /* one expected move to the close, on the name's vol */
   const iv = bookMarket().cfg(snapshot.ticker)?.iv ?? 0.2;
   const minLeft = Math.max(0, CLOSE_MIN - nowMin);
@@ -348,6 +356,28 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
     if (focus != null) linesRef.current.push(series.createPriceLine({ price: focus, color: resolveInk(SILVER, host), lineWidth: 2, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'Kept' }));
   }, [groupsKey, focus, paper, part, open]);
 
+  /* THE KEPT STRIKE OFF THE SCALE (the owner, 2026-10-14, after a walk as a user: 463 kept, seven points up, and the tape
+     showed nothing — no line, no chip, no word, under a note that had promised "every box"): the scale holds a kept strike
+     within reach of the day's range (the provider above) and a strike beyond it would flatten the tape to a line, so it
+     stays off — but a chip in the row and a tag at the plot's edge say so, and which way. Read off the drawn chart
+     after every render: where the strike's price lands against the pane. */
+  const [keptOff, setKeptOff] = useState<'up' | 'down' | null>(null);
+  useEffect(() => {
+    const series = priceRef.current;
+    const chart = chartRef.current;
+    if (!series || !chart || focus == null || !open || !bars.length) {
+      setKeptOff(k => (k === null ? k : null));
+      return;
+    }
+    const id = requestAnimationFrame(() => {
+      const y = series.priceToCoordinate(focus);
+      const h = chart.paneSize().height;
+      const next: 'up' | 'down' | null = y == null ? (focus > spot ? 'up' : 'down') : y < 0 ? 'up' : y > h ? 'down' : null;
+      setKeptOff(k => (k === next ? k : next));
+    });
+    return () => cancelAnimationFrame(id);
+  });
+
   /* THE MINUTE, SHARED (idea 1): the pointer's minute is told to the plot under it, and its pointer's minute is set here
      as this chart's own crosshair — one clock, one rule across both */
   const hb = hover != null ? bars[hover.i] : null;
@@ -411,7 +441,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
   const session = useMemo(() => (bars.length ? { lo: Math.min(...bars.map(b => b.low)), hi: Math.max(...bars.map(b => b.high)) } : null), [bars]);
 
   /* THE LEVELS' CHIPS: keep the strike, or set the alert — the chart names the lines, the chips act on them */
-  const chips = groups.length > 0 && (
+  const chips = (groups.length > 0 || focus != null) && (
     <div className="flex flex-wrap items-center gap-x-1 gap-y-1" data-tape-chips>
       {groups.map(g => {
         const on = focus != null && Math.abs(focus - g.price) < 1e-9;
@@ -441,7 +471,19 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
             {alertable.length > 0 && (
               <button
                 type="button"
-                onClick={() => (armed.length ? armed.forEach(a => removeAlert(snapshot.ticker, a.id)) : alertable.forEach(l => armLevel(snapshot.ticker, l.key)))}
+                /* IT SAYS IT TOOK (the owner, 2026-10-14 — "arming a bell gives no confirmation … I wasn't sure it took"): the
+                   shell's own chip, with the way back (ui/undo.tsx) — "Bell set on the call wall 457 · Undo" */
+                onClick={() => {
+                  const t = snapshot.ticker;
+                  if (armed.length) {
+                    const gone = armed;
+                    gone.forEach(a => removeAlert(t, a.id));
+                    undoable({ label: `Bell off the ${bellWords} ${fmtStrike(g.price)}`, undo: () => gone.forEach(a => a.kind === 'level' && armLevel(t, a.level)), key: `tape-bell-${g.key}` });
+                  } else {
+                    const set = alertable.map(l => armLevel(t, l.key)).filter((a): a is NonNullable<typeof a> => !!a);
+                    undoable({ label: `Bell set on the ${bellWords} ${fmtStrike(g.price)}`, undo: () => set.forEach(a => removeAlert(t, a.id)), key: `tape-bell-${g.key}` });
+                  }
+                }}
                 aria-pressed={armed.length > 0}
                 title={armed.length ? `Watching the ${bellWords} — click to stop` : `Tell me when price crosses the ${bellWords}`}
                 className={`hit inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors ${armed.length ? 'text-silver' : 'text-textMuted hover:text-textPrimary hover:bg-ink/[0.05]'}`}
@@ -454,6 +496,27 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
           </span>
         );
       })}
+      {/* THE KEPT STRIKE'S OWN CHIP, when it is no level's: on the scale it is the silver line; off it, the chip says which
+          way it lies, and the tag at the plot's edge points there */}
+      {focus != null && !groups.some(g => Math.abs(g.price - focus) < 1e-9) && (
+        <span className="inline-flex items-center rounded-md bg-silver/[0.1]" data-tape-tag="kept" data-tape-kept-off={keptOff ?? undefined}>
+          <button
+            type="button"
+            onClick={() => onPick(focus)}
+            aria-pressed
+            title={`Kept ${fmtStrike(focus)}${keptOff ? ` — ${Math.abs(focus - spot).toFixed(2)} ${keptOff === 'up' ? 'above' : 'below'} the chart's top: a line that far would flatten the tape` : ''} · click to let go`}
+            className="hit inline-flex items-center gap-1.5 h-6 px-2 rounded-md font-mono text-[11px] whitespace-nowrap hover:bg-ink/[0.05] transition-colors"
+          >
+            <span className="text-silver">Kept</span>
+            <span className="font-semibold tnum text-textPrimary">{fmtStrike(focus)}</span>
+            {keptOff && (
+              <span className="text-textMuted">
+                · {keptOff === 'up' ? '↑' : '↓'} {Math.abs(focus - spot).toFixed(2)} {keptOff === 'up' ? 'above' : 'below'} the chart
+              </span>
+            )}
+          </button>
+        </span>
+      )}
     </div>
   );
 
@@ -488,7 +551,9 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
           <dl className={part ? 'flex flex-wrap gap-x-6 gap-y-1' : 'grid grid-cols-3 gap-x-6'}>
             <div>
               <dt className="text-[11px] text-textMuted">Last</dt>
-              <dd className="mt-0.5 font-mono text-[14px] tnum text-textPrimary whitespace-nowrap">{spot.toFixed(2)}</dd>
+              <dd className="mt-0.5 font-mono text-[14px] tnum text-textPrimary whitespace-nowrap" data-tape-last={last.toFixed(2)}>
+                {last.toFixed(2)}
+              </dd>
             </div>
             <div>
               <dt className="text-[11px] text-textMuted">Session</dt>
@@ -532,6 +597,16 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
                 <span className="font-bold tnum text-textPrimary">{hhmm(nyMinutes(hb.time * 1000))}</span>
                 <span className="ml-2 tnum text-textPrimary">{hb.close.toFixed(2)}</span>
                 <span className="ml-2 text-textMuted">{nearLevel(hb.close)}</span>
+              </div>
+            )}
+            {/* the kept strike's tag at the edge it lies beyond, beside the scale — silver, the line's own ink */}
+            {focus != null && keptOff && (
+              <div
+                className="pointer-events-none absolute z-10 whitespace-nowrap rounded-sm border border-silver/50 bg-panel/90 px-1.5 py-0.5 font-mono text-[11px] text-silver"
+                style={{ right: DAY_SCALE_W + 8, ...(keptOff === 'up' ? { top: 4 } : { bottom: 4 }) }}
+                data-tape-kept-edge={keptOff}
+              >
+                {keptOff === 'up' ? '▲' : '▼'} Kept {fmtStrike(focus)} · {Math.abs(focus - spot).toFixed(2)} {keptOff === 'up' ? 'above' : 'below'}
               </div>
             )}
             {bars.length === 0 && <div className="absolute inset-0 grid place-items-center font-mono text-[11px] uppercase tracking-widest text-textMuted">No bars yet this session</div>}

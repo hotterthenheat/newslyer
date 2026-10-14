@@ -14,7 +14,8 @@
 ==================================================
 */
 
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react';
+import { attachScrollMore } from '../ui/scrollMore';
 import { fmtUsd } from '../../data/gex';
 import type { ExposureSurface, Greek } from '../../data/exposureSurface';
 import { heatCellStyle, type HeatMode } from './heatmap';
@@ -58,6 +59,18 @@ const Cell = ({ x, y, w, v, ring }: { x: number; y: number; w: number; v: number
    8–9.5px type never reached the page's 11px floor and the dates in them were a September that never moved. They are
    400 wide now, 11px throughout, dated from today, and a phone scrolls them sideways rather than shrinking them. */
 const FIG_W = 400;
+
+/** A drawing's box: the card's own ground, scrolling sideways where the card is narrower than the drawing — and SAYING SO
+    at the edge (ui/scrollMore.ts; 2026-10-14: on a phone the drawing simply stopped mid-word) */
+const FigureBox = ({ children }: { children: ReactNode }) => {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => (ref.current ? attachScrollMore(ref.current) : undefined), []);
+  return (
+    <div ref={ref} className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2 overflow-x-auto scroll-row" data-guide-figure-box>
+      {children}
+    </div>
+  );
+};
 const Label = ({ x, y, children, anchor = 'start', fill = INK_2, size = 11, mono = false }: { x: number; y: number; children: string; anchor?: 'start' | 'middle' | 'end'; fill?: string; size?: number; mono?: boolean }) => (
   <text x={x} y={y} textAnchor={anchor} dominantBaseline="middle" fontFamily={mono ? MONO : SANS} fontSize={size} fill={fill}>
     {children}
@@ -319,9 +332,9 @@ const MatrixWords = ({ surface, greek, mode }: { surface: ExposureSurface; greek
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
           Each row is a strike, every expiry on the band added together. The figure is how much dealer hedging sits there, and the bar beside it is that figure drawn: the longer, the more. {w.absorb} pushes back against a move through the strike, {w.amplify} pushes it along. A strike's ink names its level: magenta the supreme, green the call wall, red the put wall; a dotted underline marks the gamma pin, a silver one a strike you own. Spot is a row of its own, where price stands.
         </p>
-        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2 overflow-x-auto scroll-row">
+        <FigureBox>
           <MatrixFigure />
-        </div>
+        </FigureBox>
       </div>
       <div>
         <p className="text-[12px] font-semibold text-textPrimary">Legs · the net, one side, or both</p>
@@ -349,9 +362,9 @@ const ProfileWords = ({ surface, mode }: { surface: ExposureSurface; mode?: Heat
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
           Price runs left to right. The line is the dealers' total gamma if price stood at that level, every drawn expiry added together; the quiet lines are the expiries one by one. Above the zero line their hedging amplifies a move; below it, it absorbs one. Where the line crosses zero is the zero-gamma level: the price where the book changes character. It is not the same number as the flip strike on the band, which is the strike where the net by strike changes sign.
         </p>
-        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2 overflow-x-auto scroll-row">
+        <FigureBox>
           <ProfileFigure />
-        </div>
+        </FigureBox>
       </div>
       <div className="border-t border-borderSubtle/60 pt-2.5">
         <p className="text-[11px] text-textMuted">Today's profile, in words</p>
@@ -399,18 +412,18 @@ const CalendarWords = ({ surface, greek, mode }: { surface: ExposureSurface; gre
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
           Each row is a strike, a price level. Each column is an expiry date, today first and later dates to the right. Each cell is a capsule: the figure inside is how much dealer hedging sits at that strike for that date. Brighter means more. {w.absorb} pushes back against a move there, {w.amplify} pushes it along. The strike printed in magenta is the supreme, the heaviest strike of the whole book and the one the chart wears in magenta; the cell with the star is the heaviest single cell. A strike's ink names its level: green the call wall, red the put wall, magenta the supreme; a dotted underline marks the gamma pin, a silver one a strike you own. Hover a strike for the words.
         </p>
-        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2 overflow-x-auto scroll-row">
+        <FigureBox>
           <GridFigure />
-        </div>
+        </FigureBox>
       </div>
       <div>
         <p className="text-[12px] font-semibold text-textPrimary">Reading it · across for how long, down for what expires</p>
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
           Read across a row to see how long a level lasts. Heavy in every column means the level stays for weeks. Heavy today and empty after means it is a one-day wall that is gone at the bell. Read down today's column to see what expires at the close. The "After the close" choice up top shows the same grid with today's column removed, the calendar as it will stand tomorrow morning.
         </p>
-        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2 overflow-x-auto scroll-row">
+        <FigureBox>
           <ReadFigure />
-        </div>
+        </FigureBox>
       </div>
       <div className="border-t border-borderSubtle/60 pt-2.5">
         <p className="text-[11px] text-textMuted">Today's calendar, in words</p>

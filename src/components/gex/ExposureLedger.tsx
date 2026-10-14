@@ -47,7 +47,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import HeatPill from './HeatPill';
 import { HEAT_MODE, heatLaneColor, type HeatMode } from './heatmap';
-import SpotRule from '../ui/SpotRule';
+import RoomSpotRule from './RoomSpotRule';
+import { useRoomSpotRead } from '../../pages/pinpoint/useRoomScan';
 import { fmtUsd } from '../../data/gex';
 import { GREEK_UNIT, type ExposureSurface, type Greek } from '../../data/exposureSurface';
 import { LONG_GAMMA, SHORT_GAMMA, SUPREME } from './paletteInk';
@@ -220,7 +221,7 @@ interface LedgerCellProps {
 const sinceInk = (dir: 1 | -1 | 0) => (dir === 1 ? 'rgb(var(--bull))' : dir === -1 ? 'rgb(var(--bear))' : 'rgb(var(--text-muted))');
 /* at the house's 11px floor (the audit's H5b, 2026-10-13 — it was 7.5px); the chip stands only where the column has room
    for its own words (`laneFor` below), the dot everywhere else */
-const SinceBadge = ({ text, dir }: { text: string; dir: 1 | -1 | 0 }) => (
+export const SinceBadge = ({ text, dir }: { text: string; dir: 1 | -1 | 0 }) => (
   <span className="rounded-full px-1 py-0 font-mono text-[11px] font-semibold tnum leading-none whitespace-nowrap" style={{ background: 'rgb(var(--panel) / 0.88)', color: sinceInk(dir), textShadow: 'none' }} data-since={dir}>
     {text}
   </span>
@@ -364,26 +365,33 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
   const inBoxRef = useRef(false);
   const heldRef = useRef<number[] | null>(null);
   const [left, setLeft] = useState(0);
+  /* THE ROWS SPLIT ROUND THE PRICE NOW (one price on the page, 2026-10-14): the first strike at or over the room's price
+     (pages/pinpoint/useRoomScan.ts) — the grid re-renders on it only when the price crosses a strike; the pill between
+     the rows reads the price itself (RoomSpotRule). Infinity when the price stands over every strike. */
+  const spotAt = useRoomSpotRead(surface.ticker, sp => {
+    const price = sp ?? liveSpot ?? surface.spot;
+    return surface.strikes.find(s => s >= price) ?? Infinity;
+  });
   // Descending, the ledger's way — the window's rings each side of spot
   const { above, below } = useMemo(() => {
     const desc = [...surface.strikes].sort((a, b) => b - a);
     const n = Math.max(1, rings);
-    const fresh = [...desc.filter(s => s >= surface.spot).slice(-n), ...desc.filter(s => s < surface.spot).slice(0, n)];
+    const fresh = [...desc.filter(s => s >= spotAt).slice(-n), ...desc.filter(s => s < spotAt).slice(0, n)];
     const held = heldRef.current;
     const hold =
       (inBoxRef.current || pinned) &&
       held != null &&
       held.length === fresh.length &&
-      surface.spot <= held[0] &&
-      surface.spot > held[held.length - 1] && // strictly: the spot rule always has a row under it
+      spotAt <= held[0] &&
+      spotAt > held[held.length - 1] && // strictly: the spot rule always has a row under it
 
       held.every(s => surface.strikes.includes(s));
     const list = hold && held ? held : fresh;
     heldRef.current = list;
-    return { above: list.filter(s => s >= surface.spot), below: list.filter(s => s < surface.spot) };
+    return { above: list.filter(s => s >= spotAt), below: list.filter(s => s < spotAt) };
     // `left` counts the pointer's exits from the grid — the rings re-centre then, not between two cells
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [surface, rings, pinned, left]);
+  }, [surface, rings, pinned, left, spotAt]);
   const strikes = useMemo(() => [...above, ...below], [above, below]);
   /** The longest strike this book prints — the strike column's reserve (see the head) */
   const cents = useMemo(() => hasCents(surface.strikes), [surface]);
@@ -710,15 +718,20 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
     return total > 0 ? Math.round((100 * dies) / total) : 0;
   })();
   const bellWords = bell == null ? null : afterBell ? `after the close · today's ${bell}% has expired` : `${bell}% of this expires today at the close`;
-  const verdict =
-    focus.greek === 'gex'
+  /* AN EMPTY CELL SAYS SO (the owner, 2026-10-14, after a walk as a user: a $0 cell read "put-heavy" and "peak · hedging
+     amplifies a move here" — zero is at or over zero, and in an all-negative row it was the row's peak): no leg at all
+     is "nothing here", not a side that wins */
+  const empty = Math.abs(putV) < 1e-9 && Math.abs(callV) < 1e-9;
+  const verdict = empty
+    ? 'nothing here · no hedging at this strike for this date'
+    : focus.greek === 'gex'
       ? gexV >= 0
         ? 'peak · hedging amplifies a move here'
         : 'well · hedging absorbs a move here'
       : netV >= 0
         ? 'the put side wins here'
         : 'the call side wins here';
-  const verdictInk = focus.greek === 'gex' ? (gexV >= 0 ? SHORT_GAMMA : LONG_GAMMA) : netInk(focus.greek, netV);
+  const verdictInk = empty ? 'rgb(var(--text-muted))' : focus.greek === 'gex' ? (gexV >= 0 ? SHORT_GAMMA : LONG_GAMMA) : netInk(focus.greek, netV);
   const { levels } = surface;
   const role = focus.strike === levels.callWall ? 'call wall' : focus.strike === levels.putWall ? 'put wall' : focus.strike === pinStrike ? 'pin' : null;
   /* SINCE THE OPEN, PER CELL (2026-10-12): the open's book beside today's, matched by strike and by date (the open's
@@ -729,7 +742,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
     () => (open ? { strikes: new Map(open.strikes.map((s, i) => [s, i] as const)), expiries: new Map(open.expiries.map((x, i) => [x.date, i] as const)) } : null),
     [open]
   );
-  type Since = { text: string; dir: 1 | -1 | 0; size: number };
+  type Since = { text: string; dir: 1 | -1 | 0; size: number; /** "−96%" / "4.2×", or null where words say it better */ figure: string | null; /** "bleeding", "building", "new today", "flipped sides", "about flat" */ words: string };
   const sinceCache = useMemo(() => new Map<string, Since | null>(), [open, surface]);
   const sinceCell = (g: Greek, e: number, strike: number): Since | null => {
     if (!open || !openIdx) return null;
@@ -750,12 +763,15 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
            heaviest cell — a node of nothing that flipped its sign or doubled is not abnormal, a wall that lost a
            third of itself is */
         const size = Math.abs(now - was) / Math.max(1, surface.maxAbs[g]);
-        if (read) out = { text: read.figure ?? read.short, dir: read.dir, size };
+        if (read) out = { text: read.figure ?? read.short, dir: read.dir, size, figure: read.figure, words: read.short };
       }
     }
     sinceCache.set(key, out);
     return out;
   };
+  /* THE MOVE SINCE THE OPEN, IN THE CARD TOO (2026-10-14 — the capsule's bare "−96%" pill said neither what fell nor since
+     when; its words lived in the aria-label alone) */
+  const sinceHere = sinceCell(focus.greek, focus.e, focus.strike);
   /* ONLY THE EXCEPTIONAL NODES WEAR IT (Noah, 2026-10-12: "only shown for a certain number of nodes that we consider
      exceptional or abnormal"): the ten biggest moves since the open on this board, among the cells drawn — biggest
      in dollars against the board's heaviest cell, at least a twentieth of it — and only moves the since-open rule
@@ -819,8 +835,9 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
       {cardTags.length > 0 && <span className="col-span-2 -mt-0.5 mb-0.5 flex items-center gap-2 text-[11px] uppercase tracking-widest whitespace-nowrap">{cardTags}</span>}
       <CardRow k="Put" v={fmtUsd(putV)} sub={pct(putV)} ink={PUT_INK} />
       <CardRow k="Call" v={fmtUsd(callV)} sub={pct(callV)} ink={CALL_INK} />
-      <CardRow k={`Net · ${GREEK_LABEL[focus.greek]}`} v={fmtUsd(netV)} sub={netV >= 0 ? 'put-heavy' : 'call-heavy'} ink={heatLaneColor(netV, surface.maxAbs[focus.greek], mode ?? HEAT_MODE, 0.35, paper)} />
+      <CardRow k={`Net · ${GREEK_LABEL[focus.greek]}`} v={fmtUsd(netV)} sub={empty ? 'nothing' : netV >= 0 ? 'put-heavy' : 'call-heavy'} ink={empty ? 'rgb(var(--text-muted))' : heatLaneColor(netV, surface.maxAbs[focus.greek], mode ?? HEAT_MODE, 0.35, paper)} />
       {oi > 0 && <CardRow k="Open interest" v={oi.toLocaleString('en-US')} sub="contracts" />}
+      {sinceHere && <CardRow k="Since the open" v={sinceHere.figure ?? sinceHere.words} sub={sinceHere.figure ? sinceHere.words : undefined} ink={sinceInk(sinceHere.dir)} />}
     </>
   );
   const cardTitle = fmtStrike(focus.strike);
@@ -1008,7 +1025,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
               si === above.length && <div key="spot-strike" aria-hidden />,
               si === above.length && (
                 <div key="spot" data-spot-row className="px-1.5 flex items-center" style={{ gridColumn: `span ${cols}` }}>
-                  <SpotRule ticker={surface.ticker} price={liveSpot ?? surface.spot} centre />
+                  <RoomSpotRule ticker={surface.ticker} fallback={liveSpot ?? surface.spot} centre />
                 </div>
               ),
               <div

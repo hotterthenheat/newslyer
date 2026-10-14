@@ -8,32 +8,42 @@
   profile" (data/exposureCurve.ts). One line per
   drawn expiry, quiet; the total, loud; the ground
   tinted where hedging amplifies (above zero) and
-  where it absorbs (below); spot, the flip (the
-  total's zero crossing), the walls and the supreme
-  as rules across it, in the house's inks. Hover a
-  spot for the figures; click to keep the nearest
-  strike; the arrow keys walk the curve.
+  where it absorbs (below); spot, the zero crossing,
+  the walls and the supreme as rules across it, in
+  the house's inks. Hover a spot for the figures;
+  click to keep the nearest strike; the arrow keys
+  walk the curve.
+
+  DRAWN BY THE CHART LIBRARY, the day box's way (the
+  owner, 2026-10-14: the hand-drawn monospace SVG
+  stood between two library charts — "two chart
+  languages on one page"): the library's options
+  chart, price along the foot, the total as its
+  baseline series at zero, the dates its quiet
+  lines, its scale and crosshair (dayChart.ts for the
+  surface). The rules, their tags and the dates'
+  names are the one thing the library has no idea
+  of — a vertical line at a price along the foot —
+  and stand over the plot, placed off the chart's
+  own coordinates after every draw.
 ==================================================
 */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { BaselineSeries, createOptionsChart, LineSeries, LineStyle, type IChartApiBase, type ISeriesApi, type LineData } from 'lightweight-charts';
 import { buildExposureCurve } from '../../data/exposureCurve';
 import { fmtUsd } from '../../data/gex';
+import { useRoomSpot } from '../../pages/pinpoint/useRoomScan';
+import { readToken, useResolvedTheme } from '../../theme/theme';
+import { DAY_SCALE_W, daySurface } from './dayChart';
+import { ABSORB, AMPLIFY, CALL_WALL, FLIP, PUT_WALL, SUPREME, alpha, resolveInk } from './paletteInk';
 import type { ExposureSurface } from '../../data/exposureSurface';
-import { ABSORB, AMPLIFY, CALL_WALL, FLIP, PUT_WALL, SUPREME, alpha } from './paletteInk';
 
 const SILVER = 'rgb(var(--silver))';
-const INK = 'rgb(var(--text-primary))';
-const INK_3 = 'rgb(var(--text-muted))';
-const RULE = 'rgb(var(--ink) / 0.14)';
-const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 const fmtStrike = (v: number) => (!Number.isFinite(v) ? '—' : v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
-const ML = 68;
-const MR = 18;
-const MT = 44;
-const MB = 46;
 /** a tag's width, near enough, for keeping the rules' tags off each other */
-const TAG_PX = 6.7;
+const TAG_PX = 6.4;
+const TAG_ROW = 14;
 
 interface Props {
   surface: ExposureSurface;
@@ -45,30 +55,156 @@ interface Props {
   paper?: boolean;
 }
 
-const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSelectStrike, paper = false }: Props) => {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const [box, setBox] = useState({ w: 0, h: 0 });
-  useLayoutEffect(() => {
-    const el = hostRef.current;
-    if (!el) return;
-    const read = () => setBox(prev => (prev.w === el.clientWidth && prev.h === el.clientHeight ? prev : { w: el.clientWidth, h: el.clientHeight }));
-    read();
-    const ro = new ResizeObserver(read);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+interface Rule {
+  key: string;
+  x: number;
+  ink: string;
+  word: string;
+  dash?: boolean;
+}
+
+type Chart = IChartApiBase<number>;
+
+const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSelectStrike, paper: paperProp }: Props) => {
+  const paper = useResolvedTheme() === 'light' || !!paperProp;
   const curve = useMemo(() => buildExposureCurve(surface, expiries), [surface, expiries]);
   const { points } = curve;
-  const spot = liveSpot ?? surface.spot;
+  /* the room's price (one price on the page, 2026-10-14) */
+  const roomSpot = useRoomSpot(surface.ticker);
+  const spot = roomSpot ?? liveSpot ?? surface.spot;
   const x0 = points[0]?.spot ?? spot;
   const x1 = points[points.length - 1]?.spot ?? spot;
-  const W = box.w;
-  const H = box.h;
-  const plotW = Math.max(10, W - ML - MR);
-  const xOf = (s: number) => ML + ((s - x0) / Math.max(1e-9, x1 - x0)) * plotW;
-  /* the rules across the plot: spot, the flip, the walls, the supreme — those inside the band, their tags on two rows */
+  const cents = surface.strikes.some(k => k % 1 !== 0);
+
+  /* ---- the chart ---- */
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<Chart | null>(null);
+  const totalRef = useRef<ISeriesApi<'Baseline', number> | null>(null);
+  const datesRef = useRef<ISeriesApi<'Line', number>[]>([]);
+  const pointsRef = useRef(points);
+  pointsRef.current = points;
+  const maxAbsRef = useRef(curve.maxAbs);
+  maxAbsRef.current = curve.maxAbs;
+
+  /* the hovered point — the pointer's, or the keys' — and where its dot is on the chart */
+  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
+  const hoverRef = useRef(hover);
+  hoverRef.current = hover;
+  /* the drawn geometry the overlay is placed by: the pane's size and every point's x */
+  const [geo, setGeo] = useState<{ w: number; h: number; xs: number[]; dateYs: (number | null)[] } | null>(null);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const s = daySurface(host, paper);
+    const chart = createOptionsChart(host, {
+      autoSize: true,
+      layout: { background: { color: s.bg }, textColor: s.text, fontFamily: "'Inter', sans-serif", fontSize: 10, attributionLogo: true },
+      localization: { precision: cents ? 2 : 0 },
+      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+      /* room over the top tick for the rules' tags; whole figures only on the scale */
+      rightPriceScale: { borderColor: s.line, minimumWidth: DAY_SCALE_W, entireTextOnly: true, scaleMargins: { top: 0.2, bottom: 0.08 } },
+      timeScale: { borderColor: s.line, rightOffset: 0, fixLeftEdge: true, fixRightEdge: true, lockVisibleTimeRangeOnResize: true },
+      crosshair: {
+        vertLine: { color: s.crosshair, labelBackgroundColor: s.label },
+        horzLine: { color: s.crosshair, labelBackgroundColor: s.label },
+      },
+      handleScroll: false,
+      handleScale: false,
+    });
+    const amp = resolveInk(AMPLIFY, host);
+    const abs = resolveInk(ABSORB, host);
+    /* THE TOTAL AS A BASELINE AT ZERO — the book chart's own two-sided line: ember and its ground above (hedging
+       amplifies), glacier and its ground below (it absorbs) */
+    const total = chart.addSeries(BaselineSeries, {
+      baseValue: { type: 'price', price: 0 },
+      topLineColor: amp,
+      topFillColor1: alpha(amp, paper ? 0.2 : 0.26),
+      topFillColor2: alpha(amp, 0.03),
+      bottomLineColor: abs,
+      bottomFillColor1: alpha(abs, 0.03),
+      bottomFillColor2: alpha(abs, paper ? 0.2 : 0.26),
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerRadius: 3,
+      priceFormat: { type: 'custom', formatter: (v: number) => fmtUsd(v), minMove: 1 },
+      /* the scale symmetric about zero, the dates' reach included — the curve reads as a balance */
+      autoscaleInfoProvider: () => ({ priceRange: { minValue: -maxAbsRef.current, maxValue: maxAbsRef.current } }),
+    });
+    total.createPriceLine({ price: 0, color: s.zero, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
+    const quiet = alpha(readToken('--text-muted', undefined, host), 0.55);
+    const dates = curve.expiries.map(() => chart.addSeries(LineSeries, { color: quiet, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, autoscaleInfoProvider: () => null }));
+    chart.subscribeCrosshairMove(param => {
+      if (param.point === undefined || param.logical === undefined || param.logical == null) {
+        setHover(null);
+        return;
+      }
+      const i = Math.max(0, Math.min(pointsRef.current.length - 1, Math.round(param.logical as number)));
+      const p = pointsRef.current[i];
+      if (!p) {
+        setHover(null);
+        return;
+      }
+      const x = chart.timeScale().timeToCoordinate(p.spot) ?? param.point.x;
+      const y = total.priceToCoordinate(p.total) ?? param.point.y;
+      setHover({ i, x, y });
+    });
+    chartRef.current = chart;
+    totalRef.current = total;
+    datesRef.current = dates;
+    return () => {
+      chart.remove();
+      chartRef.current = null;
+      totalRef.current = null;
+      datesRef.current = [];
+    };
+    // the dates' count is a series each; a new count remounts the chart
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paper, cents, curve.expiries.length]);
+
+  /* the data: price along the foot, the figures on the scale */
+  const totalData = useMemo<LineData<number>[]>(() => points.map(p => ({ time: p.spot, value: p.total })), [points]);
+  useEffect(() => {
+    const chart = chartRef.current;
+    const total = totalRef.current;
+    if (!chart || !total) return;
+    total.setData(totalData);
+    datesRef.current.forEach((d, i) => d.setData(points.map(p => ({ time: p.spot, value: p.byExpiry[i] ?? 0 }))));
+    chart.timeScale().fitContent();
+  }, [totalData, points, paper, cents]);
+
+  /* THE GEOMETRY, READ OFF THE DRAWN CHART after every render: the rules, their tags and the dates' names are placed by
+     it — a vertical line at a price along the foot is the one thing the library has no idea of */
+  useEffect(() => {
+    const chart = chartRef.current;
+    const total = totalRef.current;
+    if (!chart || !total || !points.length) return;
+    const id = requestAnimationFrame(() => {
+      const size = chart.paneSize();
+      const xs = points.map(p => chart.timeScale().timeToCoordinate(p.spot) ?? NaN);
+      const end = points[points.length - 1];
+      const dateYs = datesRef.current.map((d, i) => d.priceToCoordinate(end.byExpiry[i] ?? 0));
+      setGeo(g => (g && g.w === size.width && g.h === size.height && g.xs.length === xs.length && g.xs.every((x, i) => x === xs[i]) && g.dateYs.every((y, i) => y === dateYs[i]) ? g : { w: size.width, h: size.height, xs, dateYs }));
+    });
+    return () => cancelAnimationFrame(id);
+  });
+  /* a price's x, between the two drawn points it falls between */
+  const xOf = (s: number): number | null => {
+    if (!geo || points.length < 2) return null;
+    if (s <= x0) return geo.xs[0];
+    if (s >= x1) return geo.xs[geo.xs.length - 1];
+    const step = (x1 - x0) / (points.length - 1);
+    const f = (s - x0) / step;
+    const i = Math.min(points.length - 2, Math.floor(f));
+    const a = geo.xs[i];
+    const b = geo.xs[i + 1];
+    return Number.isFinite(a) && Number.isFinite(b) ? a + (b - a) * (f - i) : null;
+  };
+
+  /* the rules across the plot: spot, the zero crossing, the walls, the supreme, the kept strike — those inside the band */
   const { levels } = surface;
-  const rules: { key: string; x: number; ink: string; word: string; dash?: boolean }[] = [];
+  const rules: Rule[] = [];
   const inBand = (v: number) => Number.isFinite(v) && v >= x0 && v <= x1;
   if (inBand(levels.putWall)) rules.push({ key: 'pw', x: levels.putWall, ink: PUT_WALL, word: `PUT WALL ${fmtStrike(levels.putWall)}` });
   if (inBand(levels.callWall)) rules.push({ key: 'cw', x: levels.callWall, ink: CALL_WALL, word: `CALL WALL ${fmtStrike(levels.callWall)}` });
@@ -77,180 +213,158 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
   if (inBand(spot)) rules.push({ key: 'spot', x: spot, ink: SILVER, word: `SPOT ${spot.toFixed(2)}` });
   if (selectedStrike != null && inBand(selectedStrike)) rules.push({ key: 'kept', x: selectedStrike, ink: SILVER, word: `KEPT ${fmtStrike(selectedStrike)}`, dash: true });
   rules.sort((a, b) => a.x - b.x);
-  /* the tags on as many rows as they need (2026-10-13: five levels within a strike or two of spot ran out of the three
-     rows and printed over each other — "PUT CALL WALL 457"): each takes the first row whose last tag ends before this one
-     begins, else a row of its own, and the plot starts under the last row */
+  /* the tags on as many rows as they need (2026-10-13: five levels within a strike or two of spot ran out of the rows
+     and printed over each other): each takes the first row whose last tag ends before this one begins */
+  const placed = rules.map(r => ({ ...r, px: xOf(r.x) }));
   const rowEnds: number[] = [];
-  const rowOf = rules.map(r => {
+  const rowOf = placed.map(r => {
+    if (r.px == null) return 0;
     const half = (r.word.length * TAG_PX) / 2;
-    const left = xOf(r.x) - half;
+    const left = r.px - half;
     let row = rowEnds.findIndex(end => end < left - 6);
     if (row < 0) {
       rowEnds.push(-Infinity);
       row = rowEnds.length - 1;
     }
-    rowEnds[row] = xOf(r.x) + half;
+    rowEnds[row] = r.px + half;
     return row;
   });
-  /* three rows' room at least (the "amplifies" word sits in it), a row more for each tag row past three */
-  const mt = Math.max(MT, rowEnds.length * 13 + 5);
-  const plotH = Math.max(10, H - mt - MB);
-  const yOf = (v: number) => mt + plotH / 2 - (v / curve.maxAbs) * (plotH / 2);
-  const y0 = yOf(0);
 
-  /* the hovered point — the pointer's, or the keys' */
-  const [hover, setHover] = useState<number | null>(null);
-  const nearestIdx = (clientX: number) => {
-    const r = hostRef.current?.getBoundingClientRect();
-    if (!r || !points.length) return null;
-    const s = x0 + ((clientX - r.left - ML) / plotW) * (x1 - x0);
-    let best = 0;
-    for (let i = 1; i < points.length; i++) if (Math.abs(points[i].spot - s) < Math.abs(points[best].spot - s)) best = i;
-    return best;
-  };
+  /* the pointer's point — the keys walk it too */
   const nearestStrike = (s: number) => surface.strikes.reduce((b, k) => (Math.abs(k - s) < Math.abs(b - s) ? k : b), surface.strikes[0] ?? s);
+  const walk = (i: number) => {
+    const chart = chartRef.current;
+    const total = totalRef.current;
+    const p = points[i];
+    if (!chart || !total || !p) return;
+    chart.setCrosshairPosition(p.total, p.spot, total);
+    setHover({ i, x: chart.timeScale().timeToCoordinate(p.spot) ?? 0, y: total.priceToCoordinate(p.total) ?? 0 });
+  };
   const onKeys = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget || !points.length) return;
-    const cur = hover ?? points.findIndex(p => p.spot >= spot);
-    if (e.key === 'ArrowLeft') setHover(Math.max(0, cur - 1));
-    else if (e.key === 'ArrowRight') setHover(Math.min(points.length - 1, cur + 1));
-    else if (e.key === 'Home') setHover(0);
-    else if (e.key === 'End') setHover(points.length - 1);
-    else if ((e.key === 'Enter' || e.key === ' ') && hover != null) onSelectStrike?.(nearestStrike(points[hover].spot));
-    else return;
+    const cur = hover?.i ?? Math.max(0, points.findIndex(p => p.spot >= spot));
+    if (e.key === 'ArrowLeft') walk(Math.max(0, cur - 1));
+    else if (e.key === 'ArrowRight') walk(Math.min(points.length - 1, cur + 1));
+    else if (e.key === 'Home') walk(0);
+    else if (e.key === 'End') walk(points.length - 1);
+    else if ((e.key === 'Enter' || e.key === ' ') && hover) onSelectStrike?.(nearestStrike(points[hover.i].spot));
+    else if (e.key === 'Escape') {
+      setHover(null);
+      chartRef.current?.clearCrosshairPosition();
+    } else return;
     e.preventDefault();
   };
-  useEffect(() => setHover(null), [surface]);
+  useEffect(() => setHover(h => (h && h.i < points.length ? h : null)), [points]);
 
-  /* the paths */
-  const line = (pick: (p: (typeof points)[number]) => number) => points.map((p, i) => `${i ? 'L' : 'M'}${xOf(p.spot).toFixed(1)} ${yOf(pick(p)).toFixed(1)}`).join(' ');
-  const area = (sign: 1 | -1) => {
-    const top = points.map((p, i) => `${i ? 'L' : 'M'}${xOf(p.spot).toFixed(1)} ${yOf(sign > 0 ? Math.max(0, p.total) : Math.min(0, p.total)).toFixed(1)}`).join(' ');
-    return `${top} L${xOf(x1).toFixed(1)} ${y0.toFixed(1)} L${xOf(x0).toFixed(1)} ${y0.toFixed(1)} Z`;
-  };
-  /* y ticks: five, symmetric; x ticks: every ~90px, on a round figure */
-  const yTicks = [-1, -0.5, 0, 0.5, 1].map(f => f * curve.maxAbs);
-  /* x ticks on round figures: the strikes' own step, or a multiple of it that keeps ~90px between ticks */
-  const step = surface.strikes.length > 1 ? Math.max(0.01, surface.strikes[1] - surface.strikes[0]) : 1;
-  const perPx = (x1 - x0) / plotW;
-  const tick = step * Math.max(1, Math.ceil((perPx * 90) / step));
-  const xTicks: number[] = [];
-  for (let s = Math.ceil(x0 / tick) * tick; s <= x1 + 1e-9; s += tick) xTicks.push(s);
-  const hp = hover != null ? points[hover] : null;
-  /* THE CARD TAKES THE CORNER THE POINTER IS NOT IN (the re-audit's M3): beside the pointer it covered the spot and
-     flip rules, the two lines the reader hovers near to see */
-  const cardLeft = hp ? (xOf(hp.spot) > ML + plotW / 2 ? ML + 8 : W - MR - 228) : 0;
   /* the two heaviest dates named at their right ends (the re-audit's L4) — the thin lines were nameless off the card */
   const dateTags = (() => {
     const out: { e: number; y: number; word: string }[] = [];
-    if (!points.length || curve.expiries.length < 2) return out;
+    if (!geo || !points.length || curve.expiries.length < 2) return out;
     const weight = curve.expiries.map((_, i) => Math.max(...points.map(p => Math.abs(p.byExpiry[i]))));
     const top = curve.expiries.map((e, i) => ({ e, i, w: weight[i] })).sort((a, b) => b.w - a.w).slice(0, 2);
-    const end = points[points.length - 1];
-    for (const t of top) out.push({ e: t.e, y: yOf(end.byExpiry[t.i]), word: surface.expiries[t.e]?.date ?? '' });
+    for (const t of top) {
+      const y = geo.dateYs[t.i];
+      if (y != null) out.push({ e: t.e, y, word: surface.expiries[t.e]?.date ?? '' });
+    }
     out.sort((a, b) => a.y - b.y);
     if (out.length === 2 && out[1].y - out[0].y < 13) out[1].y = out[0].y + 13;
     return out;
   })();
 
+  const hp = hover ? points[hover.i] : null;
+  const W = geo?.w ?? 0;
+  const H = geo?.h ?? 0;
+  const tagRows = rowEnds.length;
+  /* THE CARD BESIDE ITS POINT, the day box's way (besideDot.ts) — but this card is a date a line tall, so it stands over
+     the point only where the plot's head holds it, under it otherwise (2026-10-14: near the curve's crown it ran off
+     the top) */
+  const cardH = 78 + 16 * curve.expiries.length;
+  const cardStyle = hover
+    ? {
+        left: hover.x > W / 2 ? hover.x - 12 : hover.x + 12,
+        top: hover.y,
+        transform: `translate(${hover.x > W / 2 ? '-100%' : '0'}, ${hover.y >= cardH + 12 || hover.y > H - cardH - 12 ? `calc(-100% - 12px)` : '12px'})`,
+      }
+    : undefined;
+
   return (
-    <div
-      ref={hostRef}
-      className="relative h-full min-h-0 select-none outline-none"
-      tabIndex={0}
-      role="group"
-      aria-label="Dealer gamma across spot — the arrow keys walk the curve, Enter keeps the nearest strike"
-      onKeyDown={onKeys}
-      onPointerMove={e => setHover(nearestIdx(e.clientX))}
-      onPointerLeave={() => setHover(null)}
-      onClick={e => {
-        const i = nearestIdx(e.clientX);
-        if (i != null) onSelectStrike?.(nearestStrike(points[i].spot));
-      }}
-      data-exposure-profile={surface.ticker}
-      data-profile-flip={curve.flip != null ? curve.flip.toFixed(2) : undefined}
-    >
-      {W > 0 && H > 0 && points.length > 1 && (
-        <svg width={W} height={H} className="block" role="img" aria-label={`Dealer gamma across spot for ${surface.ticker}: ${fmtUsd(curve.atSpot)} at ${spot.toFixed(2)}${curve.flip != null ? `, zero gamma at ${curve.flip.toFixed(2)}` : ''}`}>
-          {/* the ground: amplifies above zero, absorbs below */}
-          <path d={area(1)} fill={alpha(AMPLIFY, paper ? 0.1 : 0.14)} />
-          <path d={area(-1)} fill={alpha(ABSORB, paper ? 0.1 : 0.14)} />
-          {/* the y rules and their figures */}
-          {yTicks.map(v => (
-            <g key={v}>
-              <line x1={ML} x2={W - MR} y1={yOf(v)} y2={yOf(v)} stroke={v === 0 ? 'rgb(var(--ink) / 0.35)' : RULE} strokeDasharray={v === 0 ? undefined : '2 3'} />
-              <text x={ML - 8} y={yOf(v)} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={11} fill={INK_3}>
-                {v === 0 ? '0' : fmtUsd(v)}
-              </text>
-            </g>
-          ))}
-          <text x={ML - 8} y={mt - 10} textAnchor="end" fontFamily={MONO} fontSize={11} fill={AMPLIFY}>amplifies</text>
-          <text x={ML - 8} y={H - MB + 16} textAnchor="end" fontFamily={MONO} fontSize={11} fill={ABSORB}>absorbs</text>
-          {/* the x figures */}
-          {xTicks.map(s => (
-            <text key={s} x={xOf(s)} y={H - MB + 16} textAnchor="middle" fontFamily={MONO} fontSize={11} fill={INK_3}>
-              {fmtStrike(Math.round(s / step) * step)}
-            </text>
-          ))}
-          {/* a line per date, quiet */}
-          {curve.expiries.map((e, i) => (
-            <path key={e} d={line(p => p.byExpiry[i])} fill="none" stroke={INK_3} strokeOpacity={0.5} strokeWidth={1} />
-          ))}
-          {dateTags.map(t => (
-            <text key={t.e} x={W - MR - 4} y={t.y} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={11} fill={INK_3} data-profile-date={t.word}>
-              {t.word}
-            </text>
-          ))}
-          {/* the total, loud */}
-          <path d={line(p => p.total)} fill="none" stroke={INK} strokeWidth={2} strokeLinejoin="round" />
-          {/* the rules and their tags, on as many rows as they need so they never overprint */}
-          {rules.map((r, i) => (
-            <g key={r.key} data-profile-rule={r.key}>
-              <line x1={xOf(r.x)} x2={xOf(r.x)} y1={mt - 2} y2={H - MB} stroke={r.ink} strokeOpacity={r.key === 'spot' ? 0.9 : 0.6} strokeDasharray={r.dash ? '3 3' : undefined} />
-              <text x={xOf(r.x)} y={12 + rowOf[i] * 13} textAnchor="middle" fontFamily={MONO} fontSize={11} fontWeight={700} fill={r.ink}>
-                {r.word}
-              </text>
-            </g>
-          ))}
-          {/* the pointer's spot */}
-          {hp && (
-            <g>
-              <line x1={xOf(hp.spot)} x2={xOf(hp.spot)} y1={mt} y2={H - MB} stroke={SILVER} strokeOpacity={0.5} />
-              <circle cx={xOf(hp.spot)} cy={yOf(hp.total)} r={3.5} fill={SILVER} />
-            </g>
-          )}
-        </svg>
-      )}
-      {/* the figures under the pointer */}
-      {hp && (
-        <div
-          className="pointer-events-none absolute z-10 w-[220px] rounded-md border border-borderMuted bg-card/95 px-2.5 py-2 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm"
-          style={{ top: mt + 4, left: cardLeft }}
-          data-profile-card={hp.spot.toFixed(2)}
-        >
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-semibold tnum text-textPrimary">at {hp.spot.toFixed(2)}</span>
-            <span className="tnum text-textMuted">{(((hp.spot - spot) / spot) * 100).toFixed(2)}%</span>
-          </div>
-          <div className="mt-1 flex items-baseline justify-between gap-2">
-            <span className="text-textSecondary">Total</span>
-            <span className="font-semibold tnum" style={{ color: hp.total >= 0 ? AMPLIFY : ABSORB }}>
-              {fmtUsd(hp.total)} · {hp.total >= 0 ? 'amplifies' : 'absorbs'}
-            </span>
-          </div>
-          {curve.expiries.map((e, i) => (
-            <div key={e} className="flex items-baseline justify-between gap-2">
-              <span className="text-textMuted">{surface.expiries[e]?.date}</span>
-              <span className="tnum text-textSecondary">{fmtUsd(hp.byExpiry[i])}</span>
+    <div className="relative flex h-full min-h-0 flex-col select-none" data-exposure-profile={surface.ticker} data-profile-flip={curve.flip != null ? curve.flip.toFixed(2) : undefined}>
+      <div
+        className="relative flex-1 min-h-0 outline-none"
+        tabIndex={0}
+        role="group"
+        aria-label={`Dealer gamma across spot for ${surface.ticker}: ${fmtUsd(curve.atSpot)} at ${spot.toFixed(2)}${curve.flip != null ? `, zero gamma at ${curve.flip.toFixed(2)}` : ''} — the arrow keys walk the curve, Enter keeps the nearest strike`}
+        onKeyDown={onKeys}
+        onClick={() => {
+          if (hover) onSelectStrike?.(nearestStrike(points[hover.i].spot));
+        }}
+        data-profile-plot
+      >
+        <div ref={hostRef} className="absolute inset-0" data-profile-chart />
+        {/* THE RULES AND THEIR TAGS, over the plot, placed by the chart's own coordinates — over the library's canvases
+            (they stand at z 1 and 2), under the glass */}
+        {geo && W > 0 && (
+          <div className="pointer-events-none absolute left-0 top-0 z-[5] overflow-hidden" style={{ width: W, height: H }} aria-hidden data-profile-rules>
+            {placed.map((r, i) =>
+              r.px == null ? null : (
+                <div key={r.key} data-profile-rule={r.key}>
+                  <div className="absolute" style={{ left: r.px, top: tagRows * TAG_ROW + 2, bottom: 0, borderLeft: `1px ${r.dash ? 'dashed' : 'solid'} ${r.ink}`, opacity: r.key === 'spot' ? 0.9 : 0.6 }} />
+                  <div className="absolute -translate-x-1/2 whitespace-nowrap font-mono text-[11px] font-bold leading-none" style={{ left: r.px, top: rowOf[i] * TAG_ROW + 2, color: r.ink }}>
+                    {r.word}
+                  </div>
+                </div>
+              )
+            )}
+            {/* the sides, named where the scale's figures are (the plot's own words) */}
+            <div className="absolute left-2 font-mono text-[11px]" style={{ top: tagRows * TAG_ROW + 6, color: AMPLIFY }}>
+              amplifies
             </div>
-          ))}
-          <div className="mt-1 text-textMuted">click to keep {fmtStrike(nearestStrike(hp.spot))}</div>
-        </div>
-      )}
-      {/* what this is, in one line */}
-      {/* SHORT ENOUGH TO STAND WHOLE (the paying-user audit's M5): the long sentence was cut mid-word on any pane under
-          1100px; the method lives in the Data door and the guide */}
-      <p className="pointer-events-none absolute inset-x-0 bottom-0 truncate px-3 pb-1.5 text-[11px] text-textMuted">
+            {/* over the library's attribution mark in the corner, not on it */}
+            <div className="absolute left-2 bottom-8 font-mono text-[11px]" style={{ color: ABSORB }}>
+              absorbs
+            </div>
+            {dateTags.map(t => (
+              <div key={t.e} className="absolute right-1 -translate-y-1/2 font-mono text-[11px] text-textMuted" style={{ top: t.y }} data-profile-date={t.word}>
+                {t.word}
+              </div>
+            ))}
+          </div>
+        )}
+        {/* the figures under the pointer — the day box's glass, beside the point it reads */}
+        {hp && hover && (
+          <div
+            className="pointer-events-none absolute z-10 w-[220px] rounded-md border border-borderSubtle px-2.5 py-2 font-mono text-[11px] text-textSecondary"
+            style={{ ...cardStyle, background: 'rgba(8,8,10,0.88)', backdropFilter: 'blur(3px)' }}
+            data-theme="dark"
+            data-chart-glass
+            data-profile-card={hp.spot.toFixed(2)}
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-semibold tnum text-textPrimary">at {hp.spot.toFixed(2)}</span>
+              <span className="tnum text-textMuted">
+                {hp.spot >= spot ? '+' : '−'}
+                {Math.abs(((hp.spot - spot) / spot) * 100).toFixed(2)}%
+              </span>
+            </div>
+            <div className="mt-1 flex items-baseline justify-between gap-2">
+              <span className="text-textSecondary">Total</span>
+              <span className="font-semibold tnum" style={{ color: hp.total >= 0 ? AMPLIFY : ABSORB }}>
+                {fmtUsd(hp.total)} · {hp.total >= 0 ? 'amplifies' : 'absorbs'}
+              </span>
+            </div>
+            {curve.expiries.map((e, i) => (
+              <div key={e} className="flex items-baseline justify-between gap-2">
+                <span className="text-textMuted">{surface.expiries[e]?.date}</span>
+                <span className="tnum text-textSecondary">{fmtUsd(hp.byExpiry[i])}</span>
+              </div>
+            ))}
+            <div className="mt-1 text-textMuted">click to keep {fmtStrike(nearestStrike(hp.spot))}</div>
+          </div>
+        )}
+        {points.length < 2 && <div className="absolute inset-0 grid place-items-center font-mono text-[11px] uppercase tracking-widest text-textMuted">No curve for this book yet</div>}
+      </div>
+      {/* what this is, in one line — short enough to stand whole (the paying-user audit's M5) */}
+      <p className="shrink-0 truncate px-3 py-1 text-[11px] text-textMuted border-t border-borderSubtle/60">
         {W >= 760 ? 'Dealer gamma re-priced across spot · above zero hedging amplifies a move, below it absorbs · zero gamma is where it crosses' : W >= 420 ? 'Gamma across spot · above zero amplifies, below absorbs' : 'Gamma across spot'}
       </p>
     </div>

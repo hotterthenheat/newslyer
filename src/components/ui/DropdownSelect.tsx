@@ -83,6 +83,9 @@ interface DropdownSelectProps<T extends string | number> {
   /** The trigger's height: 28 by rest; `sm` is 24 — for a card head's 32px line, where the
       full size touched the borders (Noah, 2026-09-14) */
   size?: 'md' | 'sm';
+  /** The name shown only from this breakpoint up — a tight head keeps the choice and its icon, the name in the title
+      (the laptop head, 2026-10-14) */
+  labelFrom?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   /** The card WITHOUT its printed name — for a line that measured itself too short for four named cards (the Weigher's
       chain head on a laptop, 2026-09-20). The name stays in the tooltip, the aria-label and the open card's heading. */
   bare?: boolean;
@@ -91,7 +94,9 @@ interface DropdownSelectProps<T extends string | number> {
 /** The card every dropdown on the terminal opens — one surface, one shadow, one radius */
 export const CARD = 'z-[90] rounded-lg border border-borderSubtle bg-chip shadow-[0_16px_48px_rgba(0,0,0,0.65)] animate-soft-in';
 
-const DropdownSelect = <T extends string | number>({ label, value, options, onChange, title, align = 'start', icon: Icon, ink, testId, size = 'md', bare = false }: DropdownSelectProps<T>) => {
+const LABEL_FROM: Record<NonNullable<DropdownSelectProps<string>['labelFrom']>, string> = { sm: 'hidden sm:inline', md: 'hidden md:inline', lg: 'hidden lg:inline', xl: 'hidden xl:inline', '2xl': 'hidden 2xl:inline' };
+
+const DropdownSelect = <T extends string | number>({ label, value, options, onChange, title, align = 'start', icon: Icon, ink, testId, size = 'md', bare = false, labelFrom }: DropdownSelectProps<T>) => {
   const current = options.find(o => o.value === value);
   /* OPENED BY THE KEYS, THE CARD STARTS ON THE CHOICE (2026-10-10, the audit's PR-27): Radix puts the keys on the first
      row, so ↓ Enter on "Start with" at $25,000 picked $5,000. A card opened from the keys focuses the checked row; one
@@ -104,7 +109,7 @@ const DropdownSelect = <T extends string | number>({ label, value, options, onCh
           type="button"
           data-dropdown={testId ?? label}
           aria-label={`${label}: ${current?.short ?? current?.label ?? ''}`}
-          title={bare ? label : undefined}
+          title={bare || labelFrom ? (title ? `${label} — ${title}` : label) : title}
           onPointerDown={() => (byKeys.current = false)}
           onKeyDown={() => (byKeys.current = true)}
           /* `hit`: a finger's 44 px on a touch screen. ON A PHONE THE CHOICE WRAPS, never "0DTE · …" (the audit's CO-19): the
@@ -120,7 +125,7 @@ const DropdownSelect = <T extends string | number>({ label, value, options, onCh
             />
           )}
           {/* the name at the house's 11 px floor, in sentence case (2026-10-10 — it was 9 px tracked capitals) */}
-          {!bare && <span className="shrink-0 text-[11px] text-textMuted">{label}</span>}
+          {!bare && <span className={`shrink-0 text-[11px] text-textMuted ${labelFrom ? LABEL_FROM[labelFrom] : ''}`}>{label}</span>}
           {/* min-w-0 + truncate: a long value gives before the card does — on a desk; on a phone it wraps to a second line */}
           {/* the trigger wears the choice's tone — a Yes reads green, a No red, the way its row did (2026-09-22) */}
           <span className={`min-w-0 truncate max-sm:whitespace-normal max-sm:text-balance max-sm:leading-tight text-[11px] font-semibold ${current?.tone === 'bull' ? 'text-bull' : current?.tone === 'bear' ? 'text-bear' : current?.quiet ? 'text-textSecondary' : 'text-textPrimary'}`} data-tone={current?.tone ?? (current?.quiet ? 'quiet' : undefined)}>

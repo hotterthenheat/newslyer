@@ -28,6 +28,7 @@ import { buildExposureSurface, CALENDAR_DTES, type ExposureSurface } from './exp
 import { buildFlipGauge } from './flipGauge';
 import { getBoardNames } from './boardNames';
 import { sessionBars } from './levelview';
+import { levelTicks } from './levelRecord';
 import { spotChangePct } from './gex';
 import { readSessionClock } from './moc';
 import { getPositions } from './positions';
@@ -43,7 +44,10 @@ export interface BoardRow {
   flip: number | null;
   /** Signed distance from spot to the flip, percent (+ = the flip is overhead) */
   flipDistPct: number | null;
+  /** Times price closed through today's flip — the Map head's and report's own count (levelRecord.ts levelTicks) */
   crossings: number | null;
+  /** Bars that reached the flip today; the count above is of these */
+  flipTests: number | null;
   callWall: number;
   putWall: number;
   /** The wall nearer to spot, and how far it is */
@@ -135,6 +139,10 @@ export function buildBoardRow(ticker: string): BoardRow | null {
   }
 
   const bars = sessionBars(ticker) ?? [];
+  /* HOW THE FLIP HELD TODAY, BY THE MAP'S OWN RULE (2026-10-14 — one count across the pages): the bars that reached
+     the flip and the closes through it (data/levelRecord.ts levelTicks), as the Map's head and report print it, not
+     the per-bar crossings of flipGauge.ts, which read "23×" beside the report's "broke 8 of 24" */
+  const flipTicks = gauge.flip != null ? levelTicks(bars, gauge.flip, gauge.flip >= spot ? 'call' : 'put') : null;
   const mine = getPositions(snapshot.ticker);
 
   /* WHAT TO WATCH FIRST — the agenda's #1 for this name, so the board is the
@@ -150,7 +158,8 @@ export function buildBoardRow(ticker: string): BoardRow | null {
     regime: gauge.regime,
     flip: gauge.flip,
     flipDistPct: gauge.distPct,
-    crossings: gauge.crossings,
+    crossings: flipTicks ? flipTicks.filter(t => t.kind === 'broke').length : null,
+    flipTests: flipTicks ? flipTicks.length : null,
     callWall,
     putWall,
     nearest,

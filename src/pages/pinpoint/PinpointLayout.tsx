@@ -2,7 +2,7 @@ import { useRef, Suspense, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useOutlet } from 'react-router-dom';
 import { PinpointPageSkeleton } from './pinpointSkeletons';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowUpRight, X } from 'lucide-react';
+import { ArrowUpRight, Layers, Ruler, X } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useFocus } from '../../context/FocusContext';
 import Simulator from '../../core/simulator';
@@ -10,15 +10,17 @@ import DropdownSelect, { type DropdownOption } from '../../components/ui/Dropdow
 import SessionClock from '../../components/ui/SessionClock';
 import ScrollHome from '../../components/layout/ScrollHome';
 import Term from '../../components/ui/Term';
-import { REGIME_WORDS, buildFlipGauge } from '../../data/flipGauge';
+import { REGIME_WORDS, type GammaRegime } from '../../data/flipGauge';
 import { fmtDistance, impliedDaySigma, sessionAtr, type DistanceScales, type DistanceUnit } from '../../data/atr';
 import { setDistanceUnit, useDistanceUnit } from '../../data/distanceUnits';
 import { readSessionClock } from '../../data/moc';
 import { ABSORB, AMPLIFY, CALL_WALL, FLIP, PUT_WALL, SUPREME } from '../../components/gex/paletteInk';
-import { buildExposureProfile } from '../../data/exposure';
 import { GEX_SUBPAGES } from './subnav';
 import { useReplayLabel } from './replayState';
-import { useRoomScan } from './useRoomScan';
+import { useRoomScan, useRoomSpot } from './useRoomScan';
+import { roomLevels } from '../../data/roomLevels';
+import { levelTicks } from '../../data/levelRecord';
+import { sessionBars } from '../../data/levelview';
 import { usePinpointSource } from '../../data/feed/levels';
 import { LEVELS_OPTIONS, LEVELS_TITLE, setLevelsScope, useLevelsScope } from '../../data/levelsScope';
 /* registers the feed's market with the seam (data/bookMarket.ts) — Unusual Whales' answers under every box of the room
@@ -111,25 +113,37 @@ const PinpointLayout = () => {
      strike, its distance from spot, the door to the chart, and the one place
      to let it go. It belongs to the name the desk is on. */
   const focused = focus && focus.ticker === activeTicker ? focus.price : null;
-  /* on the feed the distance is from the price the vendor figured the book at — never the house's price */
-  const spot = roomSrc === 'feed' ? scan?.spot : marketData?.spot;
+  /* THE ONE PRICE ON THE PAGE (pages/pinpoint/useRoomScan.ts useRoomSpot, 2026-10-14): the tick on the house, the
+     vendor's spot on the feed — the figure the matrix's spot row and the tape's Last print too, never three readings */
+  const spot = useRoomSpot(activeTicker) ?? (roomSrc === 'feed' ? scan?.spot : marketData?.spot) ?? null;
   const change = (roomSrc === 'feed' ? scan?.changePercent : marketData?.changePercent) ?? null;
   const dist = focused != null && spot ? ((focused - spot) / spot) * 100 : null;
 
-  /* WHICH SIDE OF THE FLIP the market is on and how far the flip is, in the
-     desk's own ruler. Rebuilt per tick: it is a proximity read and the build
-     is under a millisecond. */
-  const gauge = useMemo(() => (scan ? buildFlipGauge(scan) : null), [scan]);
-  /* THE WALLS FOR THE STUCK STRIP (the paying-user audit's H4, 2026-10-13): the strip was a name, a price and a flip on a
-     1,600px bar — the levels a trader scrolls back up for were not on it. Read off the scope the Levels card names. */
-  const walls = useMemo(() => {
-    if (!scan) return null;
-    try {
-      return buildExposureProfile(scan, levelsScope === 'ALL' ? 'ALL' : '0DTE', 30).levels;
-    } catch {
-      return null;
-    }
-  }, [scan, levelsScope]);
+  /* THE LEVELS THE PAGE SHOWS (data/roomLevels.ts — the Levels card's scope): the flip here is the line the tape draws
+     and the row the report tests, never a second reading off the whole chain; the walls ride the stuck strip (the
+     paying-user audit's H4, 2026-10-13) */
+  const walls = useMemo(() => (scan ? roomLevels(scan, levelsScope) : null), [scan, levelsScope]);
+  const flip = walls && Number.isFinite(walls.flip) ? walls.flip : null;
+  /* WHICH SIDE OF THE FLIP the market is on and how far the flip is, in the desk's own ruler — off the price now, so the
+     words turn the moment price does. Null until the scan has come; a flip of null is a one-sided book. */
+  const gauge = useMemo(
+    () =>
+      spot == null || !walls
+        ? null
+        : { spot, flip, regime: flip == null ? null : ((spot >= flip ? 'LONG' : 'SHORT') as GammaRegime), distAbs: flip == null ? null : flip - spot, distPct: flip == null || spot === 0 ? null : ((flip - spot) / spot) * 100 },
+    [spot, walls, flip]
+  );
+  /* HOW THE FLIP HELD TODAY, BY THE REPORT'S OWN RULE (the owner, 2026-10-14 — one count on the page): the head said
+     "crossed 23 times", price against each minute's own flip (data/flipGauge.ts), while the report under it said
+     "broke 8 of 24", today's flip tested across the session (data/levelRecord.ts levelTicks); in plain words those are
+     one claim, so this is the report's — the same bars, the same level, the same side. */
+  const flipRead = useMemo(() => {
+    if (!scan || !walls || flip == null) return null;
+    const ticks = levelTicks(sessionBars(scan.ticker) ?? [], flip, flip >= walls.spot ? 'call' : 'put');
+    const broke = ticks.filter(t => t.kind === 'broke').length;
+    return { tests: ticks.length, broke, held: ticks.length - broke };
+  }, [scan, walls, flip]);
+  const flipHeld = flipRead ? (flipRead.tests === 0 ? 'untested' : flipRead.broke === 0 ? `held ${flipRead.tests === 1 ? 'its one test' : `all ${flipRead.tests} tests`}` : `broke ${flipRead.broke} of ${flipRead.tests}`) : null;
   const unit = useDistanceUnit();
   const scales = useMemo<DistanceScales>(() => {
     if (!marketData) return { atr: null, sigma: null };
@@ -184,7 +198,10 @@ const PinpointLayout = () => {
             facts wrap under the title instead of the title column shrinking to "The book by s…" */}
         {/* …and no wider than its own words (2026-10-13, "i dont want any deadspace"): as a quarter of a wide head it held
             ~150px of nothing, and the side beside it is where the facts, the Map's band and the cards need the room */}
-        <div className="min-w-[min(100%,560px)] flex-none max-w-full">
+        {/* …AND NO WIDER THAN ITS WORDS AT ALL (the laptop head, 2026-10-14 — at 1440 the 560px column pushed the facts to
+            two rows and the cards under them: 136px of head): the column is its longest line, the one-liner allowed two
+            lines under 2xl, so the facts and the cards keep one row with the title */}
+        <div className="flex-none max-w-full 2xl:max-w-none" data-shell-title>
           <div className="h-6 flex items-center gap-2.5 flex-wrap" data-shell-page>
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-borderSubtle text-textSecondary shrink-0" aria-hidden="true">
               <PageIcon className="w-3.5 h-3.5" />
@@ -206,7 +223,7 @@ const PinpointLayout = () => {
                   title="See this strike on the chart"
                   className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-ink/[0.06] transition-colors"
                 >
-                  Chart <ArrowUpRight className="w-3 h-3" />
+                  <span className="hidden 2xl:inline">Chart</span> <ArrowUpRight className="w-3 h-3" />
                 </button>
                 <button onClick={clearFocus} aria-label="Let go of the strike" className="p-0.5 rounded text-textMuted hover:text-textPrimary hover:bg-ink/[0.06] transition-colors">
                   <X className="w-3 h-3" />
@@ -220,15 +237,15 @@ const PinpointLayout = () => {
               </span>
             )}
           </div>
-          <p className="mt-1 text-[12px] text-textMuted">{page.subtitle}</p>
+          <p className="mt-1 text-[12px] text-textMuted max-w-[240px] 2xl:max-w-none">{page.subtitle}</p>
         </div>
 
         {/* THE CARDS DROP FIRST (the re-audit's M1): this side shares the line with the title and wraps inside itself, so
             the Levels and Ruler cards step under the facts before the facts step under the title */}
-        <div className="flex-[3_1_0%] min-w-[min(100%,480px)] flex items-center gap-x-6 gap-y-2 flex-wrap" data-shell-side>
-          {/* THE FACTS, each named: which way dealers hedge, the flip and how far, how often it was crossed, the clock */}
+        <div className="flex-[3_1_0%] min-w-[min(100%,480px)] flex items-center gap-x-4 2xl:gap-x-6 gap-y-2 flex-wrap" data-shell-side>
+          {/* THE FACTS, each named: which way dealers hedge, the flip and how far, how it held today, the clock */}
           {gauge && (
-            <dl className={`flex flex-wrap gap-x-6 gap-y-2 ${replaying ? 'opacity-70' : ''}`} data-shell-facts data-shell-facts-live={replaying ? '' : undefined} title={replaying ? 'Live — the replay rewinds the boxes, not these facts' : undefined}>
+            <dl className={`flex flex-wrap gap-x-4 2xl:gap-x-6 gap-y-2 ${replaying ? 'opacity-70' : ''}`} data-shell-facts data-shell-facts-live={replaying ? '' : undefined} title={replaying ? 'Live — the replay rewinds the boxes, not these facts' : undefined}>
               {replaying && (
                 <div className="self-end">
                   <span className="inline-flex h-5 items-center rounded-full border border-borderSubtle px-2 text-[11px] text-textMuted">live</span>
@@ -266,9 +283,9 @@ const PinpointLayout = () => {
                       </span>
                     )}
                   </Fact>
-                  {gauge.crossings !== null && (
-                    <Fact label="Flip crossed today" testId="crossed">
-                      {gauge.crossings === 0 ? <span className="text-textSecondary">not yet</span> : `${gauge.crossings} ${gauge.crossings === 1 ? 'time' : 'times'}`}
+                  {flipRead && flipHeld && (
+                    <Fact label="Flip today" testId="crossed" title={flipRead.tests === 0 ? 'No bar has reached the flip yet today' : `${flipRead.tests} ${flipRead.tests === 1 ? 'bar' : 'bars'} reached the flip today; price closed through it ${flipRead.broke === 0 ? 'never' : `${flipRead.broke} ${flipRead.broke === 1 ? 'time' : 'times'}`} — the report's own count`}>
+                      {flipRead.tests === 0 ? <span className="text-textSecondary">{flipHeld}</span> : flipHeld}
                     </Fact>
                   )}
                 </>
@@ -290,9 +307,10 @@ const PinpointLayout = () => {
               left ~1,400px empty between the facts and the cards, and the band's own strip the same between its picks and
               its doors; the Map draws its band here when its words fit, and in its own strip under the head when not */}
           <div id="pinpoint-head-band" className="empty:hidden min-w-0 flex-1 [&>[data-ledger-toolbar]]:border-0 [&>[data-ledger-toolbar]]:bg-transparent [&>[data-ledger-toolbar]]:p-0" data-shell-band />
-          <div className="ml-auto flex items-center gap-6" data-shell-cards>
-            <DropdownSelect label="Levels" value={levelsScope} options={LEVELS_OPTIONS} onChange={setLevelsScope} title={LEVELS_TITLE} testId="levels-scope" align="end" />
-            <DropdownSelect label="Ruler" value={unit} options={RULER_OPTIONS} onChange={setDistanceUnit} title="The unit every distance on Pinpoint is read in" testId="ruler" align="end" />
+          {/* the cards' names from 2xl up; under it the icon says it and the title spells it (the laptop head) */}
+          <div className="ml-auto flex items-center gap-4 2xl:gap-6" data-shell-cards>
+            <DropdownSelect label="Levels" icon={Layers} labelFrom="2xl" value={levelsScope} options={LEVELS_OPTIONS} onChange={setLevelsScope} title={LEVELS_TITLE} testId="levels-scope" align="end" />
+            <DropdownSelect label="Ruler" icon={Ruler} labelFrom="2xl" value={unit} options={RULER_OPTIONS} onChange={setDistanceUnit} title="The unit every distance on Pinpoint is read in" testId="ruler" align="end" />
           </div>
         </div>
       </header>
@@ -316,7 +334,7 @@ const PinpointLayout = () => {
             <span className="text-textSecondary">
               flip <span className="font-semibold tnum" style={{ color: FLIP }}>{fmt(gauge.flip)}</span>
               {flipLead && (flipAtSpot ? ' · at spot' : ` · ${flipLead} ${gauge.distAbs! > 0 ? 'above' : 'below'} spot`)}
-              {gauge.crossings != null && gauge.crossings > 0 && ` · crossed ${gauge.crossings}×`}
+              {flipRead && flipRead.tests > 0 && ` · ${flipHeld}`}
             </span>
           )}
           {walls && (

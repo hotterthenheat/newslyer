@@ -39,7 +39,8 @@
 
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { HEAT_MODE, heatLadderColor, type HeatMode } from './heatmap';
-import SpotRule from '../ui/SpotRule';
+import RoomSpotRule from './RoomSpotRule';
+import { useRoomSpotRead } from '../../pages/pinpoint/useRoomScan';
 import PointerCard, { CardRow, PointerFollowCard, letGoWords } from '../ui/PointerCard';
 
 const letGo = letGoWords();
@@ -158,13 +159,17 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
   const cols = 1 + shownGreeks.length * LEGS.length;
   /* THE EXPIRIES DRAWN — the host's list, so every view sums the same book */
   const shownIdx = useMemo(() => (expiries.length ? expiries.filter(i => i >= 0 && i < surface.expiries.length) : [Math.max(0, surface.expiries.findIndex(e => e.dte === 0))]), [expiries, surface]);
+  /* THE ROWS SPLIT ROUND THE PRICE NOW (one price on the page, 2026-10-14 — the spot row sat where the ten-second scan
+     had left it while the head ticked on): the count of strikes at or over the room's price, re-rendered on only when
+     it changes; the pill between them reads the price itself (RoomSpotRule) */
+  const splitAt = useRoomSpotRead(surface.ticker, sp => surface.strikes.filter(s => s >= (sp ?? liveSpot ?? surface.spot)).length);
   const { above, below } = useMemo(() => {
     const desc = [...surface.strikes].sort((a, b) => b - a);
     return {
-      above: desc.filter(s => s >= surface.spot).slice(-Math.max(1, rings)),
-      below: desc.filter(s => s < surface.spot).slice(0, Math.max(1, rings)),
+      above: desc.slice(0, splitAt).slice(-Math.max(1, rings)),
+      below: desc.slice(splitAt).slice(0, Math.max(1, rings)),
     };
-  }, [surface, rings]);
+  }, [surface, rings, splitAt]);
   const rowFor = (strike: number): Row => {
     const si = surface.strikes.indexOf(strike);
     const legs = {} as Row['legs'];
@@ -575,7 +580,7 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
                 past the pane's edge (four names at 768, 2026-10-13) */}
             {!stacked && <td aria-hidden />}
             <td colSpan={stacked ? cols : cols - 1} className="px-2 py-1">
-              <SpotRule ticker={surface.ticker} price={liveSpot} centre />
+              <RoomSpotRule ticker={surface.ticker} fallback={liveSpot ?? surface.spot} centre />
             </td>
           </tr>
           {rowsBelow.map(renderRow)}
