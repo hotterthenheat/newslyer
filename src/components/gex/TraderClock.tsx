@@ -164,7 +164,7 @@ export const PHASES: Phase[] = [
 const phaseAt = (min: number) => PHASES.find(p => min >= p.from && min < p.to) ?? PHASES[PHASES.length - 1];
 /* THE NAMES ON A PHONE (the audit's C1, 2026-10-13): under `lg` the six names stand on two rows, in one word each, the
    close's anchored to the strip's right edge — on one row at 390px "The open" ran into "The morning" and "Charm window"
-   into "The turn". The desk keeps its one row of full names. */
+   into "The turn". Since the paying-user audit (M3) the desk wears the one-word names too; the full ones are in the card. */
 const SHORT_NAME: Record<string, string> = { open: 'Open', morning: 'Morning', lunch: 'Lunch', charm: 'Charm', turn: 'Turn', auction: 'Close' };
 const PRESSURE_WORDS = { absorbs: 'absorbs moves', amplifies: 'amplifies moves' } as const;
 
@@ -395,7 +395,9 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
                 onClick={() => onNameClick(p.key)}
                 /* Under lg: every other name on the second row, the close's name on the strip's right edge (it ran 8px past a
                    phone's strip from its own start, so the phone pass of 2026-09-13 hid it) */
-                className={`hit absolute text-[11px] font-medium whitespace-nowrap transition-colors ${nameCls} ${twoRows && i % 2 === 1 ? 'top-5' : 'top-0'} ${twoRows && last ? '!left-auto !right-0 !translate-x-0' : ''}`}
+                /* ONE WORD EACH, AND THE CLOSE ON THE EDGE AT EVERY WIDTH (the paying-user audit's M3, 2026-10-13): "The close"
+                   from its own start ran 4px past a 1440 desk's box; on one row the turn stands just left of it */
+                className={`hit absolute text-[11px] font-medium whitespace-nowrap transition-colors ${nameCls} ${twoRows && i % 2 === 1 ? 'top-5' : 'top-0'} ${last ? '!left-auto !right-0 !translate-x-0' : ''} ${turn && !twoRows ? '!left-auto !right-[44px] !translate-x-0' : ''}`}
                 style={{
                   left: `${pct(turn ? p.to : p.from)}%`,
                   transform: turn ? 'translateX(calc(-100% - 6px))' : last ? 'translateX(2px)' : undefined,
@@ -403,7 +405,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
                 }}
                 title={`${hhmm(p.from)}–${hhmm(p.to)} — click to keep this phase`}
               >
-                {twoRows ? SHORT_NAME[p.key] : p.name}
+                {SHORT_NAME[p.key]}
               </button>
             );
           })}

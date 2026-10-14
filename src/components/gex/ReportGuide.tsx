@@ -85,7 +85,7 @@ const RowFigure = () => {
       <circle cx={18} cy={120} r={3.5} fill={GREEN} />
       <Label x={27} y={120}>a green tick: price reached the level in that minute and it held</Label>
       <circle cx={18} cy={136} r={3.5} fill={RED} />
-      <Label x={27} y={136}>a red tick: price closed through it · the strip runs 09:30 to now</Label>
+      <Label x={27} y={136}>a red tick: price closed through it · the strip runs from the first bar to now</Label>
       <Label x={14} y={152} fill={INK_3}>the chip sums the row up</Label>
       <Label x={14} y={168} fill={INK_3}>the facts count the ticks and track the hedging since the open</Label>
     </svg>
@@ -149,7 +149,7 @@ const ReportGuide = ({ rows, bars, from }: ReportGuideProps) => {
       <div>
         <p className="text-[12px] font-semibold text-textPrimary">Each row · one of today's levels and how it did</p>
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
-          Every row is one of today's levels: the call wall, the put wall, the flip, the pin, the supreme. Its price is on the left with a chip that sums up its day. The strip is the whole session from 9:30 to now. Every time price reached the level in a one-minute bar, the strip gets a tick: green if the level held, red if price closed through it. The facts count those ticks and say how much hedging the level has gained or lost since the open.
+          Every row is one of today's levels: the call wall, the put wall, the flip, the pin, the supreme. Its price is on the left with a chip that sums up its day. The strip is the whole session, from its first bar to now, with price's path drawn around the level. Every time price reached the level in a one-minute bar, the strip gets a tick: green if the level held, red if price closed through it. The facts count those ticks and say how much hedging the level has gained or lost since the open.
         </p>
         <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2 overflow-x-auto scroll-row">
           <RowFigure />

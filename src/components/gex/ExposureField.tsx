@@ -44,6 +44,7 @@ import ExpiryRangeCard, { type ExpiryDay, type ExpiryShortcut } from '../ui/Expi
 import { expiryFor } from '../../core/calendar';
 import DropdownMulti from '../ui/DropdownMulti';
 import GuideFocus, { GuideDoor } from '../ui/GuideFocus';
+import { undoable } from '../ui/undo';
 import LedgerGuide, { guideTitle } from './LedgerGuide';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
@@ -659,10 +660,31 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
     }
     return f;
   };
+  /* TAKEN OFF, AND BACK IN ONE CLICK (the paying-user audit's H6, 2026-10-13): an X beside a name was final, the one
+     destructive click on the page with no way back — the house's undo chip offers it for six seconds, into the same slot */
+  const restoreName = (t: string, at: number) => {
+    if (!t || t === hostTicker || extra.includes(t) || names.length >= EXTRA_MAX) return;
+    arrivingRef.current.add(t);
+    warmedRef.current.delete(t);
+    window.clearTimeout(leaveTimers.current[t]);
+    setLeaving(l => {
+      if (!l[t]) return l;
+      const next = { ...l };
+      delete next[t];
+      return next;
+    });
+    const next = [...extra];
+    next.splice(Math.max(0, Math.min(at, next.length)), 0, t);
+    writeNames(next);
+  };
+  const restoreRef = useRef(restoreName);
+  restoreRef.current = restoreName;
   const removeName = (t: string) => {
+    const at = extra.indexOf(t);
     arrivingRef.current.delete(t);
     warmedRef.current.delete(t);
     writeNames(extra.filter(x => x !== t));
+    undoable({ label: `${t} taken off`, key: `map-name-${t}`, undo: () => restoreRef.current(t, at) });
     setReads(r => {
       if (!r[t]) return r;
       const next = { ...r };
@@ -931,7 +953,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   namedNow.current = toolbar === 'band' && !stripsBare && !doorsTight && !bandScroll;
   const strips = (
     <>
-      <DropdownSelect label="View" value={view} options={VIEWS_FOR[viewHost].map(v => VIEW_OPTION[v])} onChange={pickView} title="The matrix or the calendar" testId="ledger-view" bare={stripsBare} />
+      <DropdownSelect label="View" value={view} options={VIEWS_FOR[viewHost].map(v => VIEW_OPTION[v])} onChange={pickView} title="The matrix, the calendar or the profile" testId="ledger-view" bare={stripsBare} />
       {/* with names side by side the greek steps down to each column's head; the profile draws GEX alone (its foot says
           so), so the card steps aside there rather than read "All five" over a chart it does not govern (the re-audit's M2) */}
       {view !== 'profile' && (
@@ -953,7 +975,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
         bare={stripsBare}
       />
       {/* a face of its own, so "Now" alone on a bare band still says which card it is (the audit's L2) */}
-      <DropdownSelect label="Show" value={afterBell ? 'after' : 'now'} options={SHOW_OPTIONS} onChange={v => setAfterBell(v === 'after')} title="Which calendar" testId="ledger-show" bare={stripsBare} icon={CalendarClock} />
+      <DropdownSelect label="Show" value={afterBell ? 'after' : 'now'} options={SHOW_OPTIONS} onChange={v => setAfterBell(v === 'after')} title="The book as it stands now, or as it will stand after today's expiries" testId="ledger-show" bare={stripsBare} icon={CalendarClock} />
       {/* the colours switch left the band for Settings › Appearance (idea 10, 2026-10-13): a preference made once, not a
           read, and 150px of every row */}
     </>

@@ -264,7 +264,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
               </dd>
             </div>
             <div>
-              <dt className="text-[11px] text-textMuted">Flipped sides</dt>
+              <dt className="text-[11px] text-textMuted">Net changed sign</dt>
               <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap">{flips === 0 ? 'not yet' : `${flips} ${flips === 1 ? 'time' : 'times'}`}</dd>
             </div>
             <div>

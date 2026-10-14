@@ -966,7 +966,8 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
             >
               <span className="truncate">
                 {GREEK_LABEL[g]}
-                {!narrowGroup && <span className="ml-1 font-normal text-textMuted">· {GREEK_UNIT[g]}</span>}
+                {/* normal-case: the head's capitals turned DEX's "1σ" into "1Σ" (the paying-user audit's M9) */}
+                {!narrowGroup && <span className="ml-1 font-normal normal-case tracking-normal text-textMuted">· {GREEK_UNIT[g]}</span>}
               </span>
             </div>
           ))}

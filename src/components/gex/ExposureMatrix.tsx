@@ -539,12 +539,15 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
                 data-matrix-group={g}
                 data-lead={g === lead || undefined}
                 /* the silver head is the greek the pointer card reads — said, not left to be guessed (the audit's L8) */
-                title={g === lead && shownGreeks.length > 1 ? 'The greek the card reads' : undefined}
+                title={g === lead && shownGreeks.length > 1 ? `The greek the card reads · ${GREEK_UNIT[g]}` : stacked ? GREEK_UNIT[g] : undefined}
               >
                 {/* ONE LEG, ONE HEAD (the audit's M4, 2026-10-13): with the net alone on the table the leg's name rides the
                     greek's head — "GEX · net · 1% move" — and the row that said "NET" five times is gone; it comes back
                     with the legs if they ever return */}
-                {GREEK_LABEL[g]} <span className="text-textSecondary font-medium normal-case tracking-normal">· {LEGS.length === 1 ? `${LEGS[0]} · ` : ''}{GREEK_UNIT[g]}</span>
+                {/* a narrow column wears the greek alone (the paying-user audit, a phone: "VANNA · net · 1 vol pt" on three
+                    lines over a 70px column); its unit is in the title */}
+                {GREEK_LABEL[g]}{' '}
+                {!stacked && <span className="text-textSecondary font-medium normal-case tracking-normal">· {LEGS.length === 1 ? `${LEGS[0]} · ` : ''}{GREEK_UNIT[g]}</span>}
               </th>
             ))}
           </tr>

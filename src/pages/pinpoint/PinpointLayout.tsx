@@ -141,6 +141,8 @@ const PinpointLayout = () => {
   const flipDist = gauge && gauge.distAbs !== null ? Math.abs(gauge.distAbs) : null;
   const flipLead =
     gauge && flipDist !== null ? (unit === '%' ? `${Math.abs(gauge.distPct!).toFixed(2)}%` : fmtDistance(flipDist, gauge.spot, unit, scales).replace(/^[+−]/, '')) : '';
+  /* "0.00% below spot" is a flip at spot, and says so (the paying-user audit's L3) */
+  const flipAtSpot = flipDist !== null && gauge != null && flipDist < gauge.spot * 0.00005;
   /* Which page this is — its name, its icon and one line, from the registry the sidebar reads */
   const page = GEX_SUBPAGES.find(p => location.pathname.startsWith(p.path)) ?? GEX_SUBPAGES[0];
   const PageIcon = page.icon;
@@ -242,7 +244,11 @@ const PinpointLayout = () => {
                     {flipLead && (
                       <span className="text-textSecondary">
                         {' '}
-                        · <span className={gauge.distAbs! > 0 ? 'text-bull' : 'text-bear'}>{flipLead}</span> {gauge.distAbs! > 0 ? 'above' : 'below'} spot
+                        · {flipAtSpot ? 'at spot' : (
+                          <>
+                            <span className={gauge.distAbs! > 0 ? 'text-bull' : 'text-bear'}>{flipLead}</span> {gauge.distAbs! > 0 ? 'above' : 'below'} spot
+                          </>
+                        )}
                       </span>
                     )}
                   </Fact>
@@ -295,7 +301,7 @@ const PinpointLayout = () => {
           {gauge?.flip != null && (
             <span className="text-textSecondary">
               flip <span className="font-semibold tnum" style={{ color: FLIP }}>{fmt(gauge.flip)}</span>
-              {flipLead && ` · ${flipLead} ${gauge.distAbs! > 0 ? 'above' : 'below'} spot`}
+              {flipLead && (flipAtSpot ? ' · at spot' : ` · ${flipLead} ${gauge.distAbs! > 0 ? 'above' : 'below'} spot`)}
               {gauge.crossings != null && gauge.crossings > 0 && ` · crossed ${gauge.crossings}×`}
             </span>
           )}
