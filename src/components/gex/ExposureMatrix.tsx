@@ -72,7 +72,7 @@ interface ExposureMatrixProps {
   /** The greek the pointer card reads — the band's lead */
   lead?: Greek;
   /** Which legs the cells carry (the band's Legs card, 2026-10-13): the net, one leg, or both side by side */
-  legs?: 'net' | 'call' | 'put' | 'both';
+  legs?: 'net' | 'call' | 'put' | 'both' | 'all';
   /** The table's width at its widest — the strike column and every leg's column at MATRIX_COL_W — told to the host,
       which packs the names' panes to it (2026-10-13) */
   onNatural?: (px: number) => void;
@@ -83,7 +83,7 @@ type Leg = 'put' | 'call' | 'net';
    hover do we keep the put/call etc" … "the net to fill its container"): one column a greek, as wide as the box lets
    it, its bar the whole lane; the put and call legs live on the pointer card. SINCE 2026-10-13 the band's Legs card can
    draw one leg alone, or BOTH — two columns a greek, the put's bar growing left and the call's right from the seam. */
-const legsOf = (pick: 'net' | 'call' | 'put' | 'both'): Leg[] => (pick === 'both' ? ['put', 'call'] : [pick]);
+const legsOf = (pick: 'net' | 'call' | 'put' | 'both' | 'all'): Leg[] => (pick === 'all' ? ['put', 'call', 'net'] : pick === 'both' ? ['put', 'call'] : [pick]);
 const GREEK_LABEL: Record<Greek, string> = { gex: 'GEX', dex: 'DEX', vex: 'VEX', vanna: 'VANNA', charm: 'CHARM' };
 const SILVER = 'rgb(var(--silver))';
 /* THE LEGS IN THE CAPSULES' OWN INKS (the paying-user audit's H8, 2026-10-13): the card said Put in the put wall's red
@@ -91,27 +91,24 @@ const SILVER = 'rgb(var(--silver))';
    walls keep red and green (they are levels); a leg is the ramp's side */
 const PUT_INK = EMBER;
 const CALL_INK = GLACIER;
-const ROW_H = 27;
+const ROW_H = 30;
 /* THE ROWS SHARE THE BOX, the ledger's way, down to this floor (the owner, 2026-10-13: the first row half under the head
    and the last cut at the foot — forty 27px rows never fit an 870px box) — and with no ceiling ("i dont want any
    deadspace": fullscreen left a quarter of every pane empty under 27px rows); ROW_H is only the first frame's guess */
-const ROW_MIN = 17;
-/* THE PANE'S NATURAL WIDTH (the owner, 2026-10-13: "its so wide", "compact and tight grouped", then "i dont want any
-   deadspace"): a lane of 240 beside its figure — nine mono characters at 11px. Where the Map stands the day box beside
-   the book, the panes pack to this; where nothing stands beside them (the day box under the book, fullscreen) the
-   table fills its pane and the lanes take the room, so there is never an empty band on either side. */
-const LANE_MAX = 240;
-const FIG_W = 50; /* "−$40.5M", seven mono characters at 11px — the longest the house's figures print */
-/** A leg's column at its widest: the figure, the gap, the lane, the cell's padding and the group's rule */
-export const MATRIX_COL_W = FIG_W + 6 + LANE_MAX + 24 + 1;
+/* 24 since the figure stands over its bar (2026-10-14): a 12px figure, the gap and the 3px track — forty rows of it
+   scroll in an 870px box, the spot row centred on open, rather than crush to a hairline to fit */
+const ROW_MIN = 24;
+/* THE CELL (the owner, 2026-10-14, a picture of the matrix they want: "i like this matrix UI"): the figure over a thin
+   bar on a faint track, put, call and net side by side under every greek, the greek and its unit on the group's head.
+   120px holds the level's word and "−$40.5M" at 12px with air; where nothing stands beside the panes (the day box
+   under the book, fullscreen) the table fills its pane and the tracks take the room. The logic is untouched: the
+   same rows, caps, inks and levels; only how a cell is drawn. */
+export const MATRIX_COL_W = 120;
 /* THE CARD (the owner, 2026-10-13: "the side panel thing is so damn big"): four rows, one line under them, and wide
    enough that "Open interest · 18,709 contracts" prints whole — the calendar's card is the same */
 /* a bit smaller than it was (the owner, 2026-10-14) */
 export const CARD_W = 224;
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
-/* the wall words on the strike at the house's 11px floor (the audit's H5, 2026-10-13 — they were 7.5px, the smallest type
-   on the terminal); the column's reserve below prints the same words, so it grows with them */
-const TAG = 'ml-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider';
 const head = 'font-mono text-[11px] font-semibold uppercase tracking-widest';
 
 interface Row {
@@ -127,26 +124,23 @@ interface Row {
    light values are untouched; the two grounds get their own hairline and wash. */
 const groupSkin = (gi: number, first: boolean, last: boolean, paper: boolean) =>
   `${first ? `border-l ${paper ? 'border-borderSubtle' : 'border-borderMuted'} pl-3` : ''} ${last ? 'pr-3' : ''} ${gi % 2 === 1 ? (paper ? 'bg-ink/[0.02]' : 'bg-ink/[0.045]') : ''}`;
-const groupWash = (gi: number, paper: boolean) => (gi % 2 === 1 ? (paper ? 'bg-ink/[0.02]' : 'bg-ink/[0.045]') : '');
 
-const Cell = ({ value, leg, cap, mode, paper, gi, first, last, mirror, tight = false, stacked = false }: { value: number; leg: Leg; cap: number; mode: HeatMode; paper: boolean; gi: number; first: boolean; last: boolean; /** a row under 20px: no padding */ tight?: boolean; /** a leg's column too narrow for the figure beside its bar (a phone, four names on a laptop): the figure over the bar, as before */ stacked?: boolean; /** with both legs drawn, the put's bar grows LEFT from its figure and the call's RIGHT, the two figures back to back at the seam */ mirror?: 'left' | 'right' | null }) => {
+const Cell = ({ value, leg, cap, mode, paper, gi, first, last, rowH = ROW_H, heavy = true, word = null }: { value: number; leg: Leg; cap: number; mode: HeatMode; paper: boolean; gi: number; first: boolean; last: boolean; /** the row's height — the figure and its track centred in it */ rowH?: number; /** one of the column's three heaviest bars: full ink; the rest a step quieter, so the walls pop */ heavy?: boolean; /** the level's word in its ink, printed in the row's first cell after the strike */ word?: { text: string; ink: string } | null }) => {
   const pct = Math.min(100, (Math.abs(value) / Math.max(1, cap)) * 100);
+  const ink = value === 0 ? 'transparent' : heatLadderColor(value, cap, mode, paper);
   return (
-    <td className={`px-2 ${tight ? 'py-0' : 'py-0.5'} align-middle ${groupSkin(gi, first, last, paper)}`} data-matrix-leg={leg} data-matrix-mirror={mirror ?? undefined}>
-      {/* THE FIGURE AGAINST ITS BAR (the owner, 2026-10-13: "compact and tight grouped"): the figure in a fixed column
-          right after the strike, the bar growing from it — the number had sat at the lane's far edge, up to 500px from
-          a bar a few pixels long. With both legs the put's reads right to left: its bar, then its figure at the seam. */}
-      <div className={stacked ? '' : `flex items-center gap-1.5 ${mirror === 'left' ? 'flex-row-reverse' : ''}`}>
-        <span
-          className={`${stacked ? 'block' : 'shrink-0'} font-mono text-[11px] tnum leading-none whitespace-nowrap ${(stacked ? mirror === 'right' : mirror === 'left') ? 'text-left' : 'text-right'} ${leg === 'net' ? 'text-textPrimary font-semibold' : 'text-textPrimary'}`}
-          style={stacked ? undefined : { width: FIG_W }}
-        >
-          {fmtUsd(value)}
-        </span>
-        {/* no track under the bar (2026-10-14): two hundred faint full-width lines said nothing the bar's length did not */}
-        <span className={`${stacked ? `${tight ? 'mt-px' : 'mt-0.5'} w-full` : 'flex-1 min-w-0'} flex h-[3px] rounded-full ${mirror === 'left' ? 'justify-end' : ''}`}>
-          {/* the width glides with the data, the ink with the Colours switch — the ladder's two clocks */}
-          <span className="block h-full shrink-0 rounded-full" style={{ width: `${pct}%`, background: value === 0 ? 'transparent' : heatLadderColor(value, cap, mode, paper) }} />
+    <td className={`px-2.5 py-0 align-middle ${groupSkin(gi, first, last, paper)}`} data-matrix-leg={leg}>
+      <div className="flex flex-col justify-center" style={{ height: Math.max(ROW_MIN, rowH) - 1 }}>
+        <div className="flex items-baseline justify-between gap-2 min-w-0">
+          {/* the level's word beside its strike (idea 2, 2026-10-14): the book reads without the legend or a hover */}
+          <span className="shrink-0 font-mono text-[11px] font-semibold uppercase tracking-wider leading-none whitespace-nowrap" style={word ? { color: word.ink } : undefined} data-matrix-word={word?.text || undefined}>
+            {word?.text ?? ''}
+          </span>
+          <span className={`font-mono text-[12px] tnum leading-none whitespace-nowrap ${leg === 'net' ? 'font-bold text-textPrimary' : 'font-medium text-textPrimary'}`}>{fmtUsd(value)}</span>
+        </div>
+        {/* the track under every figure, the bar on it — the width with the data, the ink with the Colours switch */}
+        <span className={`relative block w-full h-[3px] mt-[5px] rounded-full ${paper ? 'bg-ink/[0.1]' : 'bg-ink/[0.08]'}`} data-matrix-track>
+          <span className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${pct}%`, background: ink, opacity: heavy ? 1 : 0.72 }} data-matrix-heavy={heavy || undefined} />
         </span>
       </div>
     </td>
@@ -199,6 +193,14 @@ const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, ring
   }, [rows]);
 
   const levels = surface.levels;
+  /* THE WALLS LOUDER, THE REST QUIETER (idea 9, 2026-10-14): a column's three heaviest bars at full ink, the others a
+     step down — the walls pop the way they do on the tape, and nothing else changes */
+  const heavyBy = useMemo(() => {
+    const out: Record<string, Set<number>> = {};
+    for (const g of shownGreeks)
+      for (const leg of LEGS) out[`${g}|${leg}`] = new Set([...rows].sort((a, b) => Math.abs(b.legs[g][leg]) - Math.abs(a.legs[g][leg])).slice(0, 3).map(r => r.strike));
+    return out;
+  }, [rows, shownGreeks, LEGS]);
   const cents = useMemo(() => hasCents(rows.map(r => r.strike)), [rows]);
   const pinStrike = surface.front.strikes.find(r => r.pin)?.strike;
   const tagFor = (strike: number): { word: string; ink: string } | null =>
@@ -409,7 +411,8 @@ const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, ring
   /* A LEG'S COLUMN AS DRAWN: the box (or the natural width, if less) past the strike column, shared by the legs; under the
      figure, its gap and 40px of lane it stacks the figure over the bar instead (a phone, four names on a laptop) */
   const legW = boxW > 0 ? (boxW - (strikeColW || 84)) / Math.max(1, shownGreeks.length * LEGS.length) : MATRIX_COL_W;
-  const stacked = legW < FIG_W + 6 + 40 + 24 + 1;
+  /* a column too narrow for its unit on the head (four names on a laptop): the greek alone there */
+  const stacked = legW < 96;
   /* THE PANE'S NATURAL WIDTH, told to the host (2026-10-13): the strike column as measured and every leg at its widest */
   const natural = strikeColW > 0 ? strikeColW + shownGreeks.length * LEGS.length * MATRIX_COL_W : 0;
   useEffect(() => {
@@ -513,7 +516,7 @@ const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, ring
         </td>
         {shownGreeks.map((g, gi) =>
           LEGS.map((leg, li) => (
-            <Cell key={`${g}-${leg}`} value={r.legs[g][leg]} leg={leg} cap={caps[g][leg]} mode={mode} paper={paper} gi={gi} first={li === 0} last={li === LEGS.length - 1} mirror={LEGS.length > 1 ? (leg === 'put' ? 'left' : 'right') : null} tight={rowH < 20} stacked={stacked} />
+            <Cell key={`${g}-${leg}`} value={r.legs[g][leg]} leg={leg} cap={caps[g][leg]} mode={mode} paper={paper} gi={gi} first={li === 0} last={li === LEGS.length - 1} rowH={rowH + plus} heavy={heavyBy[`${g}|${leg}`]?.has(r.strike) ?? true} word={gi === 0 && li === 0 && role.words.length ? { text: role.words[0], ink: role.ink ?? 'rgb(var(--text-muted))' } : null} />
           ))
         )}
       </tr>
@@ -541,7 +544,7 @@ const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, ring
       data-exposure-matrix={surface.ticker}
       data-matrix-palette={palette}
     >
-      <table className="border-collapse" style={{ width: '100%', minWidth: (strikeColW || 84) + shownGreeks.length * LEGS.length * (stacked ? 76 : MATRIX_COL_W - LANE_MAX + 8), tableLayout: strikeColW ? 'fixed' : 'auto' }}>
+      <table className="border-collapse" style={{ width: '100%', minWidth: (strikeColW || 84) + shownGreeks.length * LEGS.length * 96, tableLayout: strikeColW ? 'fixed' : 'auto' }}>
         {strikeColW > 0 && (
           <colgroup>
             <col style={{ width: strikeColW }} />
@@ -550,7 +553,7 @@ const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, ring
         )}
         <thead ref={theadRef} className="sticky top-0 z-10 bg-panel">
           <tr>
-            <th className={`${head} !tracking-normal pl-2 pr-1.5 pt-2 pb-1 text-right text-textSecondary border-b border-borderSubtle`}>
+            <th className={`${head} !tracking-normal pl-2 pr-1.5 pt-2 pb-1 text-right text-textSecondary border-b border-borderSubtle bg-panel`}>
               {/* THE COLUMN'S WIDTH IS RESERVED (2026-10-12, the replay): the widest row this table can print, set
                   invisibly, so a wall's words moving from row to row never move the column or the cells beside it */}
               <span ref={setReserve} aria-hidden className="invisible block h-0 w-max overflow-hidden whitespace-nowrap normal-case tracking-normal text-[11px] font-semibold tnum">
@@ -562,7 +565,9 @@ const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, ring
               <th
                 key={g}
                 colSpan={LEGS.length}
-                className={`${head} px-2 pt-2 pb-1 text-center border-b border-l ${paper ? 'border-borderSubtle' : 'border-borderMuted'} ${groupWash(gi, paper)} ${g === lead && shownGreeks.length > 1 ? 'text-silver' : 'text-textPrimary'}`}
+                /* the head's cells carry the panel's ground themselves (2026-10-14): a sticky head is only as opaque as its
+                   cells, and the rows scrolling under a two-row head ghosted through the legs' row */
+                className={`${head} px-2 pt-2 pb-1 text-center border-b border-l bg-panel ${paper ? 'border-borderSubtle' : 'border-borderMuted'} ${g === lead && shownGreeks.length > 1 ? 'text-silver' : 'text-textPrimary'}`}
                 data-matrix-group={g}
                 data-lead={g === lead || undefined}
                 /* the silver head is the greek the pointer card reads — said, not left to be guessed (the audit's L8) */
@@ -575,21 +580,21 @@ const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, ring
                     lines over a 70px column); its unit is in the title */}
                 {GREEK_LABEL[g]}{' '}
                 {!stacked && <span className="text-textSecondary font-medium normal-case tracking-normal">· {LEGS.length === 1 ? `${LEGS[0]} · ` : ''}{GREEK_UNIT[g]}</span>}
+                {/* THE LEGS' WORDS ON THE SAME HEAD ROW (2026-10-14): a second <tr> in a sticky head is not painted opaque by
+                    Chromium in a collapsed-border table, whatever its cells say — the rows scrolling under it ghosted
+                    through "put · call · net"; one row, the words in a grid over their columns, paints whole */}
+                {LEGS.length > 1 && (
+                  <span className="mt-1 grid" style={{ gridTemplateColumns: `repeat(${LEGS.length}, minmax(0, 1fr))` }} data-matrix-legs>
+                    {LEGS.map(leg => (
+                      <span key={leg} className={`pr-0.5 text-right ${leg === 'net' ? 'text-textPrimary' : 'text-textSecondary'}`}>
+                        {leg}
+                      </span>
+                    ))}
+                  </span>
+                )}
               </th>
             ))}
           </tr>
-          {LEGS.length > 1 && (
-            <tr>
-              <th className="border-b border-borderSubtle" />
-              {shownGreeks.map((g, gi) =>
-                LEGS.map((leg, li) => (
-                  <th key={`${g}-${leg}`} className={`${head} px-2 py-1 ${leg === 'put' ? 'text-right' : 'text-left'} text-textSecondary border-b border-borderSubtle ${groupSkin(gi, li === 0, li === LEGS.length - 1, paper)}`}>
-                    {leg}
-                  </th>
-                ))
-              )}
-            </tr>
-          )}
         </thead>
         <tbody>
           {rowsAbove.map(renderRow)}

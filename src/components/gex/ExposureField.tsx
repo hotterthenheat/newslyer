@@ -82,8 +82,11 @@ import ExposureProfileView from './ExposureProfileView';
 /* THE LEGS (the competitive audit, 2026-10-13 — a net-only grid was the category's toy-grade marker): the net, one leg
    alone, or both side by side on the matrix (the two columns a greek, the bars mirrored at the seam). The calendar's
    capsule carries one figure, so Both is the matrix's alone there. */
-export type LegsPick = 'net' | 'call' | 'put' | 'both';
+export type LegsPick = 'net' | 'call' | 'put' | 'both' | 'all';
 const legsOptions = (calendar: boolean): DropdownOption<LegsPick>[] => [
+  /* THE WHOLE BOOK IN ONE ROW (the owner, 2026-10-14): each leg in its own column and the net they add to, under every
+     greek — the matrix's own, as Both is; a calendar cell carries one figure, so there it picks a leg */
+  { value: 'all', label: 'Put · Call · Net', short: 'All', hint: calendar ? 'On the matrix only — each leg in its own column and the net' : 'Each leg in its own column and the net they add to, under every greek', disabled: calendar },
   { value: 'net', label: 'Net', hint: 'The two legs added — the sign is the side that wins the strike' },
   { value: 'call', label: 'Calls', hint: 'The call leg alone — what dealers hedge against the calls open there' },
   { value: 'put', label: 'Puts', hint: 'The put leg alone — what dealers hedge against the puts open there' },
@@ -348,9 +351,9 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const viewHost = toolbar === 'band' ? 'map' : 'tile';
   const [view, setView] = useState<LedgerView>(() => readLedgerView(viewHost));
   /* THE LEGS — net by rest (the partner's call of 2026-10-12); Both falls back to net on the calendar */
-  const [legs, setLegs] = useState<LegsPick>('net');
+  const [legs, setLegs] = useState<LegsPick>('all');
   useEffect(() => {
-    if (view === 'calendar' && legs === 'both') setLegs('net');
+    if (view === 'calendar' && (legs === 'both' || legs === 'all')) setLegs('net');
   }, [view, legs]);
   /* A FIRST-VISIT NOTE over the book (idea 12, 2026-10-13): three lines once, dismissed for good on this machine — the
      guides stay for the full read */
@@ -1671,7 +1674,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                   ) : d.view === 'matrix' ? (
                     <ExposureMatrix onNatural={packs ? naturalFor(c.ticker, 'matrix') : undefined} surface={surfDrawn} liveSpot={book.snapshot.spot} live={!fresh} greeks={colGreeks} expiries={shownFor(book.surface, d)} rings={d.rings} hoverStrike={c.host ? hoverStrike : undefined} palette={palette} selectedStrike={kept} marks={c.host ? marks : undefined} onPointer={c.host ? onPointer : handlesFor(c.ticker).point} onSelectStrike={keep} lead={c.host ? leadGreek : undefined} legs={d.legs} />
                   ) : (
-                    <ExposureLedger wantCols={colGreeks.length * windowFor(book.surface, { ...d, greeks: colGreeks }).length} onNatural={packs ? naturalFor(c.ticker, 'calendar') : undefined} surface={surfDrawn} liveSpot={book.snapshot.spot} live={!fresh} open={view === 'calendar' && !fresh ? openSurfaceOf(book.ticker) : null} focusOn={focusOn && view === 'calendar' && !fresh} greeks={colGreeks} expiries={same(`e:${c.ticker}`, windowFor(book.surface, d))} rings={d.rings} leg={d.legs === 'both' ? 'net' : d.legs} hoverStrike={c.host ? hoverStrike : undefined} palette={palette} afterBell={d.afterBell} selectedStrike={kept} marks={c.host ? marks : undefined} onPointer={c.host ? onPointer : handlesFor(c.ticker).point} onSelectStrike={keep} fitKey={c.ticker} onFit={reportFit} paper={paper} />
+                    <ExposureLedger wantCols={colGreeks.length * windowFor(book.surface, { ...d, greeks: colGreeks }).length} onNatural={packs ? naturalFor(c.ticker, 'calendar') : undefined} surface={surfDrawn} liveSpot={book.snapshot.spot} live={!fresh} open={view === 'calendar' && !fresh ? openSurfaceOf(book.ticker) : null} focusOn={focusOn && view === 'calendar' && !fresh} greeks={colGreeks} expiries={same(`e:${c.ticker}`, windowFor(book.surface, d))} rings={d.rings} leg={d.legs === 'both' || d.legs === 'all' ? 'net' : d.legs} hoverStrike={c.host ? hoverStrike : undefined} palette={palette} afterBell={d.afterBell} selectedStrike={kept} marks={c.host ? marks : undefined} onPointer={c.host ? onPointer : handlesFor(c.ticker).point} onSelectStrike={keep} fitKey={c.ticker} onFit={reportFit} paper={paper} />
                   )}
                 </div>
                 {/* THE READ — this name's, glass over the right of its own book
