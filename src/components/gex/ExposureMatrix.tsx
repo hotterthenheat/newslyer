@@ -82,9 +82,9 @@ const SILVER = 'rgb(var(--silver))';
 const PUT_INK = PUT_WALL;
 const CALL_INK = CALL_WALL;
 const ROW_H = 27;
-/* …AND NO LOWER THAN THIS when the box is short: the rows share the box's height down to this floor, the ledger's way
-   (the owner, 2026-10-13: the first row half under the head and the last cut at the foot — forty 27px rows never fit
-   an 870px box) */
+/* THE ROWS SHARE THE BOX, the ledger's way, down to this floor (the owner, 2026-10-13: the first row half under the head
+   and the last cut at the foot — forty 27px rows never fit an 870px box) — and with no ceiling ("i dont want any
+   deadspace": fullscreen left a quarter of every pane empty under 27px rows); ROW_H is only the first frame's guess */
 const ROW_MIN = 17;
 /* THE PANE'S NATURAL WIDTH (the owner, 2026-10-13: "its so wide", "compact and tight grouped", then "i dont want any
    deadspace"): a lane of 240 beside its figure — nine mono characters at 11px. Where the Map stands the day box beside
@@ -382,6 +382,9 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
      ROW_MIN and capped at ROW_H — an 870px box holds forty rows at 20px with nothing hidden under the head */
   const theadRef = useRef<HTMLTableSectionElement | null>(null);
   const [rowH, setRowH] = useState(ROW_H);
+  /* the pixels the even share leaves over, one each to as many rows, spread down the table — the last row ends on the
+     box's foot */
+  const [rowExtra, setRowExtra] = useState(0);
   useLayoutEffect(() => {
     const box = scrollRef.current;
     if (!box) return;
@@ -389,9 +392,12 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
       const head = theadRef.current?.offsetHeight ?? 32;
       const spot = spotRef.current?.offsetHeight ?? 28;
       /* the collapsed table counts each row's 1px rule inside its height — a pixel taken off for it left 40px under the last row */
-      const h = Math.floor((box.clientHeight - head - spot) / Math.max(1, rows.length));
-      const next = Math.max(ROW_MIN, Math.min(ROW_H, h));
+      const room = box.clientHeight - head - spot;
+      const n = Math.max(1, rows.length);
+      const next = Math.max(ROW_MIN, Math.floor(room / n));
+      const extra = next * n <= room ? Math.min(n - 1, room - next * n) : 0;
       setRowH(prev => (prev === next ? prev : next));
+      setRowExtra(prev => (prev === extra ? prev : extra));
       setBoxW(prev => (prev === box.clientWidth ? prev : box.clientWidth));
     };
     read();
@@ -401,6 +407,8 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
   }, [rows.length]);
 
   const renderRow = (r: Row) => {
+    const at = rows.indexOf(r);
+    const plus = rowExtra > 0 && Math.floor(((at + 1) * rowExtra) / rows.length) > Math.floor((at * rowExtra) / rows.length) ? 1 : 0;
     const on = keptStrike === r.strike;
     const lit = hoverStrike === r.strike || hovered === r.strike;
     const walked = keyRow != null && Math.abs(keyRow - r.strike) < 1e-9;
@@ -433,7 +441,7 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
           onSelectStrike?.(r.strike);
         }}
         className={`relative border-b border-borderSubtle/30 transition-colors ${onSelectStrike ? 'cursor-pointer' : ''} ${on ? 'bg-ink/[0.05]' : lit ? 'bg-ink/[0.04]' : ''} ${pinned && !on ? 'opacity-60' : ''}`}
-        style={{ height: rowH, ...(on ? { boxShadow: `inset 2px 0 0 0 ${SILVER}` } : walked ? { boxShadow: 'inset 0 0 0 2px rgb(var(--silver) / var(--ring-a))' } : {}) }}
+        style={{ height: rowH + plus, ...(on ? { boxShadow: `inset 2px 0 0 0 ${SILVER}` } : walked ? { boxShadow: 'inset 0 0 0 2px rgb(var(--silver) / var(--ring-a))' } : {}) }}
         data-matrix-row={r.strike}
         data-kept={on || undefined}
         data-walked={walked || undefined}

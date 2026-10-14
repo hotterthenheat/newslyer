@@ -65,9 +65,37 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
   const W = box.w;
   const H = box.h;
   const plotW = Math.max(10, W - ML - MR);
-  const plotH = Math.max(10, H - MT - MB);
   const xOf = (s: number) => ML + ((s - x0) / Math.max(1e-9, x1 - x0)) * plotW;
-  const yOf = (v: number) => MT + plotH / 2 - (v / curve.maxAbs) * (plotH / 2);
+  /* the rules across the plot: spot, the flip, the walls, the supreme — those inside the band, their tags on two rows */
+  const { levels } = surface;
+  const rules: { key: string; x: number; ink: string; word: string; dash?: boolean }[] = [];
+  const inBand = (v: number) => Number.isFinite(v) && v >= x0 && v <= x1;
+  if (inBand(levels.putWall)) rules.push({ key: 'pw', x: levels.putWall, ink: PUT_WALL, word: `PUT WALL ${fmtStrike(levels.putWall)}` });
+  if (inBand(levels.callWall)) rules.push({ key: 'cw', x: levels.callWall, ink: CALL_WALL, word: `CALL WALL ${fmtStrike(levels.callWall)}` });
+  if (inBand(levels.supreme)) rules.push({ key: 'sup', x: levels.supreme, ink: SUPREME, word: `SUPREME ${fmtStrike(levels.supreme)}` });
+  if (curve.flip != null && inBand(curve.flip)) rules.push({ key: 'flip', x: curve.flip, ink: FLIP, word: `FLIP ${curve.flip.toFixed(2)}`, dash: true });
+  if (inBand(spot)) rules.push({ key: 'spot', x: spot, ink: SILVER, word: `SPOT ${spot.toFixed(2)}` });
+  if (selectedStrike != null && inBand(selectedStrike)) rules.push({ key: 'kept', x: selectedStrike, ink: SILVER, word: `KEPT ${fmtStrike(selectedStrike)}`, dash: true });
+  rules.sort((a, b) => a.x - b.x);
+  /* the tags on as many rows as they need (2026-10-13: five levels within a strike or two of spot ran out of the three
+     rows and printed over each other — "PUT CALL WALL 457"): each takes the first row whose last tag ends before this one
+     begins, else a row of its own, and the plot starts under the last row */
+  const rowEnds: number[] = [];
+  const rowOf = rules.map(r => {
+    const half = (r.word.length * TAG_PX) / 2;
+    const left = xOf(r.x) - half;
+    let row = rowEnds.findIndex(end => end < left - 6);
+    if (row < 0) {
+      rowEnds.push(-Infinity);
+      row = rowEnds.length - 1;
+    }
+    rowEnds[row] = xOf(r.x) + half;
+    return row;
+  });
+  /* three rows' room at least (the "amplifies" word sits in it), a row more for each tag row past three */
+  const mt = Math.max(MT, rowEnds.length * 13 + 5);
+  const plotH = Math.max(10, H - mt - MB);
+  const yOf = (v: number) => mt + plotH / 2 - (v / curve.maxAbs) * (plotH / 2);
   const y0 = yOf(0);
 
   /* the hovered point — the pointer's, or the keys' */
@@ -100,27 +128,6 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
     const top = points.map((p, i) => `${i ? 'L' : 'M'}${xOf(p.spot).toFixed(1)} ${yOf(sign > 0 ? Math.max(0, p.total) : Math.min(0, p.total)).toFixed(1)}`).join(' ');
     return `${top} L${xOf(x1).toFixed(1)} ${y0.toFixed(1)} L${xOf(x0).toFixed(1)} ${y0.toFixed(1)} Z`;
   };
-  /* the rules across the plot: spot, the flip, the walls, the supreme — those inside the band, their tags on two rows */
-  const { levels } = surface;
-  const rules: { key: string; x: number; ink: string; word: string; dash?: boolean }[] = [];
-  const inBand = (v: number) => Number.isFinite(v) && v >= x0 && v <= x1;
-  if (inBand(levels.putWall)) rules.push({ key: 'pw', x: levels.putWall, ink: PUT_WALL, word: `PUT WALL ${fmtStrike(levels.putWall)}` });
-  if (inBand(levels.callWall)) rules.push({ key: 'cw', x: levels.callWall, ink: CALL_WALL, word: `CALL WALL ${fmtStrike(levels.callWall)}` });
-  if (inBand(levels.supreme)) rules.push({ key: 'sup', x: levels.supreme, ink: SUPREME, word: `SUPREME ${fmtStrike(levels.supreme)}` });
-  if (curve.flip != null && inBand(curve.flip)) rules.push({ key: 'flip', x: curve.flip, ink: FLIP, word: `FLIP ${curve.flip.toFixed(2)}`, dash: true });
-  if (inBand(spot)) rules.push({ key: 'spot', x: spot, ink: SILVER, word: `SPOT ${spot.toFixed(2)}` });
-  if (selectedStrike != null && inBand(selectedStrike)) rules.push({ key: 'kept', x: selectedStrike, ink: SILVER, word: `KEPT ${fmtStrike(selectedStrike)}`, dash: true });
-  rules.sort((a, b) => a.x - b.x);
-  /* the tags on three rows: each takes the first row whose last tag ends before this one begins */
-  const rowEnds = [-Infinity, -Infinity, -Infinity];
-  const rowOf = rules.map(r => {
-    const half = (r.word.length * TAG_PX) / 2;
-    const left = xOf(r.x) - half;
-    let row = rowEnds.findIndex(end => end < left - 6);
-    if (row < 0) row = rowEnds.indexOf(Math.min(...rowEnds));
-    rowEnds[row] = xOf(r.x) + half;
-    return row;
-  });
   /* y ticks: five, symmetric; x ticks: every ~90px, on a round figure */
   const yTicks = [-1, -0.5, 0, 0.5, 1].map(f => f * curve.maxAbs);
   /* x ticks on round figures: the strikes' own step, or a multiple of it that keeps ~90px between ticks */
@@ -177,7 +184,7 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
               </text>
             </g>
           ))}
-          <text x={ML - 8} y={MT - 10} textAnchor="end" fontFamily={MONO} fontSize={11} fill={SHORT_GAMMA}>amplifies</text>
+          <text x={ML - 8} y={mt - 10} textAnchor="end" fontFamily={MONO} fontSize={11} fill={SHORT_GAMMA}>amplifies</text>
           <text x={ML - 8} y={H - MB + 16} textAnchor="end" fontFamily={MONO} fontSize={11} fill={LONG_GAMMA}>absorbs</text>
           {/* the x figures */}
           {xTicks.map(s => (
@@ -196,10 +203,10 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
           ))}
           {/* the total, loud */}
           <path d={line(p => p.total)} fill="none" stroke={INK} strokeWidth={2} strokeLinejoin="round" />
-          {/* the rules and their tags, on two rows so they never overprint */}
+          {/* the rules and their tags, on as many rows as they need so they never overprint */}
           {rules.map((r, i) => (
             <g key={r.key} data-profile-rule={r.key}>
-              <line x1={xOf(r.x)} x2={xOf(r.x)} y1={MT - 2} y2={H - MB} stroke={r.ink} strokeOpacity={r.key === 'spot' ? 0.9 : 0.6} strokeDasharray={r.dash ? '3 3' : undefined} />
+              <line x1={xOf(r.x)} x2={xOf(r.x)} y1={mt - 2} y2={H - MB} stroke={r.ink} strokeOpacity={r.key === 'spot' ? 0.9 : 0.6} strokeDasharray={r.dash ? '3 3' : undefined} />
               <text x={xOf(r.x)} y={12 + rowOf[i] * 13} textAnchor="middle" fontFamily={MONO} fontSize={11} fontWeight={700} fill={r.ink}>
                 {r.word}
               </text>
@@ -208,7 +215,7 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
           {/* the pointer's spot */}
           {hp && (
             <g>
-              <line x1={xOf(hp.spot)} x2={xOf(hp.spot)} y1={MT} y2={H - MB} stroke={SILVER} strokeOpacity={0.5} />
+              <line x1={xOf(hp.spot)} x2={xOf(hp.spot)} y1={mt} y2={H - MB} stroke={SILVER} strokeOpacity={0.5} />
               <circle cx={xOf(hp.spot)} cy={yOf(hp.total)} r={3.5} fill={SILVER} />
             </g>
           )}
@@ -218,7 +225,7 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
       {hp && (
         <div
           className="pointer-events-none absolute z-10 w-[220px] rounded-md border border-borderMuted bg-card/95 px-2.5 py-2 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm"
-          style={{ top: MT + 4, left: cardLeft }}
+          style={{ top: mt + 4, left: cardLeft }}
           data-profile-card={hp.spot.toFixed(2)}
         >
           <div className="flex items-baseline justify-between gap-2">
