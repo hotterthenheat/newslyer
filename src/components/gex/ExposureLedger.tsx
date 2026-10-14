@@ -51,6 +51,8 @@ import SpotRule from '../ui/SpotRule';
 import { fmtUsd } from '../../data/gex';
 import { GREEK_UNIT, type ExposureSurface, type Greek } from '../../data/exposureSurface';
 import { LONG_GAMMA, SHORT_GAMMA, SUPREME } from './paletteInk';
+import { strikeRole, underlineClass } from './strikeRole';
+import StrikeNum, { hasCents } from './StrikeNum';
 import { afterGlide, onGlide, promisedWidth } from '../../core/glide';
 import { netInk } from './ExposureReadout';
 import type { SurfaceCell } from './exposureView';
@@ -378,6 +380,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
   }, [surface, rings, pinned, left]);
   const strikes = useMemo(() => [...above, ...below], [above, below]);
   /** The longest strike this book prints — the strike column's reserve (see the head) */
+  const cents = useMemo(() => hasCents(surface.strikes), [surface]);
   const widestStrike = useMemo(() => surface.strikes.map(fmtStrike).reduce((a, b) => (b.length > a.length ? b : a), ''), [surface]);
   const cols = greeks.length * shownIdx.length;
   const pinStrike = surface.front.strikes.find(r => r.pin)?.strike;
@@ -451,7 +454,14 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
      are cut to the width (the branch stays for the unmeasured frame). The date
      heads lose their "· 2d" the same way. */
   const figure: Figure = cellW >= 71 ? 'full' : cellW >= CELL_MIN_W ? 'short' : 'none';
-  const narrowHead = cellW < 60;
+  /* THE DATE HEAD'S "· 2d" ONLY WHERE IT FITS (2026-10-13): the cut was a fixed 60px from before the 11px floor, and the
+     full head is ~100px at 11px — "OCT 14 · TODAY" ran over its neighbours and back over the strike column. Measured off
+     the widest full head among the columns drawn (11px mono, wider tracking: ~7.2px a character, and the 16px padding). */
+  const widestHead = shownIdx.reduce((m, e) => {
+    const ex = surface.expiries[e];
+    return ex ? Math.max(m, `${ex.date} · ${e === todayIdx ? 'today' : ex.short}`.length) : m;
+  }, 0);
+  const narrowHead = cellW < widestHead * 7.2 + 16;
   /* a greek's group head too narrow for its unit (a phone's five groups of one column) prints the greek alone */
   const narrowGroup = cellW * shownIdx.length < 96;
   const rowsTemplate = [
@@ -811,17 +821,10 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
   const kings = useMemo(() => new Map(greeks.map(g => [g, kingFor(g)] as const)), [greeks, kingFor]);
   const supremes = useMemo(() => new Map(greeks.map(g => [g, supremeFor(g)] as const)), [greeks, supremeFor]);
   const supremeStrike = surface.supreme[supremeGreek].strike;
-  /** A row's tags, most telling first, two at most: yours, the wall, the pin — printed as the matrix prints them
-      (the re-audit's L1: "CW · PW PIN" here against "call wall · supreme" there was three spellings of one vocabulary) */
-  const TAG_WORD: Record<string, string> = { you: 'you own', cw: 'call wall', pw: 'put wall', pin: 'pin' };
-  const tagsFor = (strike: number): string[] => {
-    const t: string[] = [];
-    if (marks?.has(strike)) t.push('you');
-    if (strike === levels.callWall) t.push('cw');
-    if (strike === levels.putWall) t.push('pw');
-    if (strike === pinStrike) t.push('pin');
-    return t.slice(0, 2);
-  };
+  /* A ROW'S LEVEL IN THE STRIKE'S INK (strikeRole.ts, 2026-10-13): the words after the strike made the column as wide as
+     its widest label; the strike carries its level in its ink and its underline, the words on its title */
+  const roleOf = (strike: number) =>
+    strikeRole(strike, { supreme: supremeStrike, callWall: levels.callWall, putWall: levels.putWall, flip: levels.flip, pin: pinStrike, owned: !!marks?.has(strike) });
   const showStar = cellW >= 96;
 
   return (
@@ -915,13 +918,12 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
           style={{ gridTemplateColumns: `max-content repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: rowsTemplate, ...(gliding && box.w > 0 ? { width: box.w, willChange: 'transform' } : null) }}
         >
           {/* HEAD — sticky under scroll */}
-          <div ref={setStrikeHead} className={`sticky top-0 z-10 ${ground} px-2 flex flex-col items-start justify-end pb-1 font-mono text-[11px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle`} style={{ gridRow: 'span 2' }}>
+          <div ref={setStrikeHead} className={`sticky top-0 z-10 ${ground} pl-2 pr-1.5 flex flex-col items-end justify-end pb-1 font-mono text-[11px] font-semibold uppercase tracking-normal text-textSecondary border-b border-borderSubtle`} style={{ gridRow: 'span 2' }}>
             {/* THE COLUMN'S WIDTH IS RESERVED (2026-10-12, the replay): the widest row this book can print — its
                 longest strike with the two widest tags — set invisibly here, so a wall tag moving from row to row
                 never moves the column, and the cells beside it keep their width while the replay runs */}
-            <span aria-hidden className="invisible block h-0 w-max overflow-hidden whitespace-nowrap normal-case tracking-normal text-[11px] font-normal tnum">
+            <span aria-hidden className="invisible block h-0 w-max overflow-hidden whitespace-nowrap normal-case tracking-normal text-[11px] font-bold tnum">
               {widestStrike}
-              <span className="ml-1.5 text-[11px] uppercase tracking-widest">you pin</span>
             </span>
             Strike
           </div>
@@ -949,7 +951,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
                   data-pinned-col={pinned && pinned.greek === g && pinned.e === e ? '' : undefined}
                   data-kept-col={keptCols.has(`${g}|${e}`) ? '' : undefined}
                   /* narrow: the date at its natural tracking in 2px of padding — 40px in a 48px column (the audit's H3) */
-                  className={`sticky z-10 ${ground} ${narrowHead ? 'px-0.5 overflow-hidden tracking-normal' : 'px-2 tracking-wider'} flex items-center justify-end font-mono text-[11px] uppercase text-textSecondary border-b border-borderSubtle whitespace-nowrap ${
+                  className={`sticky z-10 ${ground} ${narrowHead ? 'px-0.5 tracking-normal' : 'px-2 tracking-wider'} overflow-hidden flex items-center justify-end font-mono text-[11px] uppercase text-textSecondary border-b border-borderSubtle whitespace-nowrap ${
                     ci === 0 ? 'border-l' : ''
                   } ${(pinned ? pinned.greek === g && pinned.e === e : hovered && hovered.greek === g && hovered.e === e) ? 'text-textPrimary' : ''}`}
                   style={{ top: HEAD_H / 2 }}
@@ -966,6 +968,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
             const s = surface.strikes.indexOf(strike);
             const isPinnedRow = strike === pinned?.strike;
             const isSupremeRow = strike === supremeStrike;
+            const role = roleOf(strike);
             const isHoverRow = strike === hoverRow;
             const rowWash = isHoverRow ? 'bg-silver/[0.05]' : '';
             return [
@@ -984,25 +987,19 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
                 data-pinned-row={isPinnedRow ? '' : undefined}
                 data-kept-row={keptRows.has(strike) ? '' : undefined}
                 onClick={() => onSelectStrike?.(strike)}
-                className={`pl-2 pr-1 flex items-center gap-1.5 overflow-hidden font-mono text-[11px] tnum cursor-pointer whitespace-nowrap ${rowWash} ${
-                  isPinnedRow ? `text-silver font-bold ${paper ? '' : 'shadow-[inset_2px_0_0_0_rgba(199,211,232,0.7)]'}` : isSupremeRow ? 'font-bold' : 'text-textPrimary'
+                className={`pl-2 pr-1.5 flex items-center justify-end overflow-hidden font-mono text-[11px] tnum cursor-pointer whitespace-nowrap ${rowWash} ${
+                  isPinnedRow ? `text-silver font-bold ${paper ? '' : 'shadow-[inset_2px_0_0_0_rgba(199,211,232,0.7)]'}` : role.ink ? 'font-bold' : 'text-textPrimary'
                 }`}
-                style={!isPinnedRow && isSupremeRow ? { color: SUPREME } : undefined}
+                style={!isPinnedRow && role.ink ? { color: role.ink } : undefined}
+                title={role.words.length ? `${fmtStrike(strike)} · ${role.words.join(' · ')}` : undefined}
+                aria-label={role.words.length ? `${fmtStrike(strike)} · ${role.words.join(' · ')}` : undefined}
                 data-supreme-row={isSupremeRow ? '' : undefined}
+                data-row-roles={role.words.length ? role.words.join(' · ') : undefined}
               >
-                {/* THE SUPREME is the strike printed in magenta — the chart's ink, no word
-                    (a word did not fit beside "497.50"); THE TAGS follow the number, two at
-                    most (Noah, 2026-09-08: "supreme, you, and pin … look crooked"). THE
-                    STRIKE AT THE FAR LEFT and the column no wider than its widest row
-                    (Noah, 2026-10-12: "the strikes should be furthest left", no empty band —
-                    the grid's `max-content` column above). */}
-                {fmtStrike(strike)}
-                <span className="inline-flex items-center gap-1 text-[11px] uppercase tracking-widest whitespace-nowrap" data-row-tags>
-                  {tagsFor(strike).map(t => (
-                    <span key={t} className={t === 'you' ? 'text-silver' : 'text-textMuted'} title={t === 'you' ? marks?.get(strike) : undefined} data-yours={t === 'you' ? '' : undefined}>
-                      {TAG_WORD[t] ?? t}
-                    </span>
-                  ))}
+                {/* THE STRIKE COLUMN AT THE FAR LEFT, ITS LEVEL IN ITS INK (strikeRole.ts, 2026-10-13): the column is the
+                    strike's own width and the strike sits flush right, so the capsules start right after it */}
+                <span className={underlineClass(role.underline)}>
+                  <StrikeNum v={strike} cents={cents} />
                 </span>
               </div>,
               ...greeks.flatMap(g => {

@@ -44,6 +44,8 @@ import PointerCard, { CardRow, PointerFollowCard } from '../ui/PointerCard';
 import { fmtUsd } from '../../data/gex';
 import { GREEKS, GREEK_UNIT, type ExposureSurface, type Greek } from '../../data/exposureSurface';
 import { CALL_WALL, FLIP, PUT_WALL, SUPREME } from './paletteInk';
+import { strikeRole, underlineClass } from './strikeRole';
+import StrikeNum, { hasCents } from './StrikeNum';
 import { useResolvedTheme } from '../../theme/theme';
 import type { SurfaceCell } from './exposureView';
 
@@ -91,7 +93,7 @@ const ROW_MIN = 17;
    the book, the panes pack to this; where nothing stands beside them (the day box under the book, fullscreen) the
    table fills its pane and the lanes take the room, so there is never an empty band on either side. */
 const LANE_MAX = 240;
-const FIG_W = 64;
+const FIG_W = 50; /* "−$40.5M", seven mono characters at 11px — the longest the house's figures print */
 /** A leg's column at its widest: the figure, the gap, the lane, the cell's padding and the group's rule */
 export const MATRIX_COL_W = FIG_W + 6 + LANE_MAX + 24 + 1;
 /* THE CARD (the owner, 2026-10-13: "the side panel thing is so damn big"): four rows, one line under them, and wide
@@ -183,6 +185,7 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
   }, [rows]);
 
   const levels = surface.levels;
+  const cents = useMemo(() => hasCents(rows.map(r => r.strike)), [rows]);
   const pinStrike = surface.front.strikes.find(r => r.pin)?.strike;
   const tagFor = (strike: number): { word: string; ink: string } | null =>
     strike === levels.supreme ? { word: 'supreme', ink: SUPREME }
@@ -347,17 +350,19 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
      in its head), the legs sharing the rest equally. */
   const [strikeColW, setStrikeColW] = useState(0);
   const [reserve, setReserve] = useState<HTMLSpanElement | null>(null);
+  const [strikeWord, setStrikeWord] = useState<HTMLSpanElement | null>(null);
   useLayoutEffect(() => {
     if (!reserve) return;
     const read = () => {
-      const w = Math.ceil(reserve.offsetWidth) + 12; // pl-2 + pr-1
+      /* the widest strike, or the column's own word if that is wider — the column is never narrower than its head */
+      const w = Math.ceil(Math.max(reserve.offsetWidth, strikeWord?.offsetWidth ?? 0) + 14); // pl-2 + pr-1.5
       setStrikeColW(prev => (prev === w ? prev : w));
     };
     read();
     const ro = new ResizeObserver(read);
     ro.observe(reserve);
     return () => ro.disconnect();
-  }, [reserve]);
+  }, [reserve, strikeWord]);
   const [boxW, setBoxW] = useState(0);
   /* A LEG'S COLUMN AS DRAWN: the box (or the natural width, if less) past the strike column, shared by the legs; under the
      figure, its gap and 40px of lane it stacks the figure over the bar instead (a phone, four names on a laptop) */
@@ -412,6 +417,7 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
     const on = keptStrike === r.strike;
     const lit = hoverStrike === r.strike || hovered === r.strike;
     const walked = keyRow != null && Math.abs(keyRow - r.strike) < 1e-9;
+    const role = strikeRole(r.strike, { supreme: levels.supreme, callWall: levels.callWall, putWall: levels.putWall, flip: levels.flip, pin: pinStrike, owned: !!marks?.has(r.strike) });
     const tag = tagFor(r.strike);
     const you = marks?.get(r.strike);
     return (
@@ -450,14 +456,17 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
         {/* THE STRIKE AT THE FAR LEFT, ITS TAGS AFTER IT, THE COLUMN NO WIDER THAN ITS WIDEST ROW (Noah, 2026-10-12:
             "the strikes should be furthest left" and no empty band — the table sizes the column to its content, the
             cells take the rest) */}
-        <td className={`pl-2 pr-1 ${rowH < 20 ? 'py-0' : 'py-0.5'} leading-tight bg-inset border-r border-borderSubtle/40 font-mono text-[11px] font-semibold tnum text-textSecondary whitespace-nowrap`}>
-          <span className={on || lit ? 'text-textPrimary' : ''}>{fmtStrike(r.strike)}</span>
-          {tag && (
-            <span className={TAG} style={{ color: tag.ink }} data-matrix-role={tag.word}>
-              {tag.word}
-            </span>
-          )}
-          {you && <span className={`${TAG} text-silver`}>you own</span>}
+        <td className={`pl-2 pr-1.5 ${rowH < 20 ? 'py-0' : 'py-0.5'} leading-tight bg-inset text-right font-mono text-[11px] font-semibold tnum text-textSecondary whitespace-nowrap`}>
+          {/* THE LEVEL IN THE STRIKE'S INK (strikeRole.ts, 2026-10-13): the words after it made the column as wide as its
+              widest label, and every plain strike carried the gap */}
+          <span
+            className={`${role.ink ? 'font-bold' : on || lit ? 'text-textPrimary' : ''} ${underlineClass(role.underline)}`}
+            style={role.ink ? { color: role.ink } : undefined}
+            title={role.words.length ? `${fmtStrike(r.strike)} · ${role.words.join(' · ')}` : undefined}
+            data-matrix-role={role.words.length ? role.words.join(' · ') : undefined}
+          >
+            <StrikeNum v={r.strike} cents={cents} />
+          </span>
         </td>
         {shownGreeks.map((g, gi) =>
           LEGS.map((leg, li) => (
@@ -498,16 +507,13 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
         )}
         <thead ref={theadRef} className="sticky top-0 z-10 bg-panel">
           <tr>
-            <th className={`${head} px-2 pt-2 pb-1 text-left text-textSecondary border-b border-borderSubtle`}>
+            <th className={`${head} !tracking-normal pl-2 pr-1.5 pt-2 pb-1 text-right text-textSecondary border-b border-borderSubtle`}>
               {/* THE COLUMN'S WIDTH IS RESERVED (2026-10-12, the replay): the widest row this table can print, set
                   invisibly, so a wall's words moving from row to row never move the column or the cells beside it */}
               <span ref={setReserve} aria-hidden className="invisible block h-0 w-max overflow-hidden whitespace-nowrap normal-case tracking-normal text-[11px] font-semibold tnum">
-                {rows.map(r => fmtStrike(r.strike)).reduce((a, b) => (b.length > a.length ? b : a), '')}
-                <span className={TAG}>call wall</span>
-                {/* …and "you own" only while a strike is owned (the owner, 2026-10-13: the column was wide for words no row had) */}
-                {marks && marks.size > 0 && <span className={TAG}>you own</span>}
+                {cents ? `${Math.floor(Math.max(...rows.map(r => r.strike), 0))}.00` : rows.map(r => fmtStrike(r.strike)).reduce((a, b) => (b.length > a.length ? b : a), '')}
               </span>
-              Strike
+              <span ref={setStrikeWord}>Strike</span>
             </th>
             {shownGreeks.map((g, gi) => (
               <th
