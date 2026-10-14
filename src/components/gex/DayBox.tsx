@@ -14,7 +14,7 @@ import { useBoxFold } from '../../data/boxFold';
 ==================================================
 */
 
-const DayBox = ({ scope, children }: { scope?: ReactNode; children: ReactNode }) => {
+const DayBox = ({ scope, grip, children }: { scope?: ReactNode; /** the handle the box is moved by (ui/BoxGrip.tsx) */ grip?: ReactNode; children: ReactNode }) => {
   const [open, toggle] = useBoxFold('day');
   /* min-h-0: the box is handed the row's height (MapDesk bookH) and must shrink its plots to it — without it the plots
      kept their flex basis and the box ran 80px into the clock card at 1440×900 (2026-10-14) */
@@ -23,6 +23,7 @@ const DayBox = ({ scope, children }: { scope?: ReactNode; children: ReactNode })
       {/* the name alone (2026-10-14): what the box is, is in its guide and its parts' own titles */}
       <div className="px-5 pt-3 pb-1">
         <div className="flex items-center gap-3 flex-wrap">
+          {grip}
           <h3 className="text-[16px] font-semibold leading-tight text-textPrimary">The day</h3>
           {scope}
           <FoldDoor open={open} onToggle={toggle} what="the day" testId="day" />

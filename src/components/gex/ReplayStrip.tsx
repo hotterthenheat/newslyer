@@ -335,6 +335,10 @@ const ReplayStrip = ({ phase, pos, length, day, startMin, playing, onPlay, pace,
           {track('flex-1 min-w-[160px]', false)}
           <span className="w-1" aria-hidden="true" />
           {moment}
+          {/* THE PACE ON THE BAR TOO (the owner, 2026-10-14, the replay in fullscreen: "i cant even control it"): the bar
+              across a box had the transport and the moment, and the speed only on the card — in the Map's fullscreen
+              there is no card, so the replay ran at one pace with nothing to turn */}
+          <DropdownSelect label="Pace" value={pace} options={paceOptions} onChange={onPace} title="How fast it plays back" testId="replay-pace" size="sm" flat />
           {exitDoor(true)}
         </div>
       );

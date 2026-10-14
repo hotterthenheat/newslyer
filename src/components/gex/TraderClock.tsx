@@ -174,7 +174,9 @@ type Pin = { kind: 'block'; i: number } | { kind: 'phase'; key: string } | null;
 /** `scope`: the host's chip saying which name these figures belong to.
     `at`: minutes from midnight ET to stand the clock at instead of now — the
     Map's replay (2026-09-08) walks the strip to the minute it is rewound to. */
-const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?: ReactNode; at?: number | null }) => {
+const TraderClock = ({ snapshot, scope, grip, at }: { snapshot: MarketSnapshot; scope?: ReactNode;
+  /** the handle the box is moved by (ui/BoxGrip.tsx) */
+  grip?: ReactNode; at?: number | null }) => {
   const clock = readSessionClock();
   const [hover, setHover] = useState<number | null>(null);
   const [pin, setPin] = useState<Pin>(null);
@@ -330,6 +332,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
       <div className="px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap">
         <div className="min-w-[min(100%,300px)] flex-1">
           <div className="flex items-center gap-3 flex-wrap">
+            {grip}
             <h3 className="text-[16px] font-semibold leading-tight text-textPrimary">The trader's clock</h3>
             {scope}
             <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the strip and the phases mean" testId="clock-guide" />

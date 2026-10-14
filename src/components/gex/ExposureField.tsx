@@ -124,6 +124,8 @@ interface ExposureFieldProps {
   /** A bar across the top of the book, under the band — the Map's replay transport (2026-10-13: in the band it widened the
       band and the page under it jumped 34px) */
   above?: ReactNode;
+  /** THE BOX'S GRIP (the Map, 2026-10-14 — ui/BoxGrip.tsx): drawn first on the band, the handle the book box is moved by */
+  grip?: ReactNode;
   /** THE FULLSCREEN'S SHAPE (Noah, 2026-09-10: "i really love the full screen
       transition on the two books on one ruler … make that the same for the
       heatmap and ladder"): 'move' = the ruler's own — THIS BOX glides to the
@@ -294,7 +296,7 @@ const SHOW_OPTIONS: DropdownOption<'now' | 'after'>[] = [
   { value: 'after', label: 'After the close', hint: "The same calendar once today's contracts have expired" },
 ];
 
-const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike, openRatio, onTicker, toolbar = 'desk', marks, lead, greeks: greeksProp, onGreeks, fresh = false, after, fullMode = 'portal', fullOpen, headFull = false, multi = false, selectedStrikeFor, onSelectStrikeFor, snapshotFor, onNaturalWidth, onBandNeed, headSlot, pack = false, above }: ExposureFieldProps) => {
+const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike, openRatio, onTicker, toolbar = 'desk', marks, lead, greeks: greeksProp, onGreeks, fresh = false, after, fullMode = 'portal', fullOpen, headFull = false, multi = false, selectedStrikeFor, onSelectStrikeFor, snapshotFor, onNaturalWidth, onBandNeed, headSlot, pack = false, above, grip }: ExposureFieldProps) => {
   const [ownPick, setOwnPick] = useState<string[]>(['gex']);
   const pick = greeksProp ?? ownPick;
   /* the page's theme: on paper the island and everything drawn in it wear the light set and the paper ramps */
@@ -1226,10 +1228,13 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       {after}
       {divider}
       {moreDoor}
-      <Fold open={!many} gap={8} className="ml-auto" testId="data-band-supreme">
+      {/* THE BAND KEEPS ITS DOORS WHEN NAMES COME (the owner, 2026-10-14: "so many things missing"): the supreme and the
+          read used to step down into the host's column head the moment a second name stood beside it, and the band
+          lost two doors for adding one — they stay, the host's own; a name beside it has its own in its head */}
+      <Fold open gap={8} className="ml-auto" testId="data-band-supreme">
         {supremeDoor}
       </Fold>
-      <Fold open={!many} gap={8} testId="data-band-read">
+      <Fold open gap={8} testId="data-band-read">
         {readDoor}
       </Fold>
       {guideButton}
@@ -1239,6 +1244,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const head = toolbar === 'band' ? (
     bandRows === 'one' ? (
       <div ref={bandRef} className="shrink-0 flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-1.5 border-b border-borderSubtle/60 bg-panel" data-ledger-toolbar data-ledger-toolbar-rows="one" data-ledger-toolbar-mode={bandMode}>
+        {!full && grip}
         {backButton}
         {leadFold}
         {strips}
@@ -1249,6 +1255,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
          thumb's box (.hit, index.css) needs the row itself to be the box */
       <div ref={bandRef} className={`shrink-0 flex flex-col px-3 border-b border-borderSubtle/60 bg-panel ${bandScroll ? 'gap-y-0 py-0' : 'gap-y-1.5 py-1.5'}`} data-ledger-toolbar data-ledger-toolbar-rows="two" data-ledger-toolbar-mode={bandMode} data-ledger-toolbar-scroll={bandScroll ? '' : undefined}>
         <div className={`flex items-center gap-x-2 gap-y-1.5 ${bandScroll ? 'flex-nowrap overflow-x-auto scroll-row [&>*]:shrink-0 py-2' : 'flex-wrap'}`} data-ledger-toolbar-row="picks">
+          {!full && grip}
           {backButton}
           {leadFold}
           {strips}
@@ -1446,10 +1453,12 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
           /* the host's chip is the band's own, stepped down — in the own-name chip's
              clothes so the chips side by side look alike; a quote only while there
              is room for one */
+          /* no quote on the chip (2026-10-14): the facts row under the head prints the price, the change, the flip and
+             the dealers for every column — the chip is the name alone */
           const chip = c.host ? (
-            isValidElement(lead) ? cloneElement(lead as ReactElement<{ quote?: boolean; full?: boolean }>, { quote: !tight, full: !tight }) : lead
+            isValidElement(lead) ? cloneElement(lead as ReactElement<{ quote?: boolean; full?: boolean }>, { quote: false, full: !tight }) : lead
           ) : (
-            <ScopeChip ticker={c.ticker} quote={!tight} onPick={sym => renameName(c.ticker, sym)} title={`${c.ticker} in this column · pick another name for it`} />
+            <ScopeChip ticker={c.ticker} quote={false} onPick={sym => renameName(c.ticker, sym)} title={`${c.ticker} in this column · pick another name for it`} />
           );
           const removeDoor = !c.host && (
             <button
@@ -1566,7 +1575,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                 <div className="flex items-center gap-2 px-3 h-9 border-b border-borderSubtle/60 bg-ink/[0.03] font-mono min-w-0" data-field-column-head={c.ticker}>
                   <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden" data-field-head-main>
                   <span className="shrink-0 inline-flex items-center">{chip}</span>
-                  <button
+                  {!c.host && <button
                     type="button"
                     onClick={() => keep?.(sup.strike)}
                     title={`${c.ticker}'s heaviest strike of the whole book by ${GREEK_LABEL[colGreeks[0] ?? 'gex']} — most of it on ${supEx?.date ?? ''} · click to keep the strike`}
@@ -1584,7 +1593,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                         </>
                       )}
                     </span>
-                  </button>
+                  </button>}
                   {/* ONE GREEK PER NAME when names stand side by side (Noah,
                       2026-09-12: "only one should be allowed for the multiple
                       ticker choice") — a single choice, never the multi pick */}
@@ -1601,10 +1610,45 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                   </span>
                   </div>
                   <div className="shrink-0 flex items-center gap-2" data-field-head-doors>
-                    <ReadDoor compact open={read === 'open'} onClick={() => toggleRead(c.ticker)} name={c.ticker} testId="data-column-read" />
+                    {!c.host && <ReadDoor compact open={read === 'open'} onClick={() => toggleRead(c.ticker)} name={c.ticker} testId="data-column-read" />}
                     {removeDoor}
                   </div>
                 </div>
+                {/* EACH NAME'S OWN FACTS OVER ITS OWN COLUMN (the owner, 2026-10-14: "if i have 4 names up i have the 1st
+                    ones info on the top"): the page's head is the room's name alone, so a name beside it carries its
+                    price, its flip and its dealers here — the head's grammar, one size down — and the host's column
+                    too, so four names read four ways alike */}
+                {(() => {
+                  const sp = book.snapshot.spot;
+                  const ch = book.snapshot.changePercent ?? 0;
+                  const lv = roomLevels(book.snapshot, levelsScope);
+                  const fl = lv && lv.flip != null && Number.isFinite(lv.flip) ? lv.flip : null;
+                  const absorb = fl != null && sp >= fl;
+                  return (
+                    <div className="flex items-center gap-x-3 px-3 h-7 border-b border-borderSubtle/60 font-mono whitespace-nowrap overflow-hidden" data-field-column-facts={c.ticker}>
+                      <span className="text-[13px] font-semibold tnum text-textPrimary">{sp.toFixed(2)}</span>
+                      <span className={`text-[11px] tnum ${ch >= 0 ? 'text-bull' : 'text-bear'}`}>
+                        {ch >= 0 ? '+' : ''}
+                        {ch.toFixed(2)}%
+                      </span>
+                      <span className="inline-flex items-baseline gap-1.5 border-l border-borderSubtle pl-3">
+                        <span className="text-[11px] uppercase tracking-wider text-textMuted">Flip</span>
+                        <span className="text-[11px] font-semibold tnum text-textPrimary">{fl != null ? fmtStrike(fl) : '—'}</span>
+                        {fl != null && !tight && (
+                          <span className="text-[11px] tnum text-textMuted">
+                            ${Math.abs(fl - sp).toFixed(2)} {fl >= sp ? 'above' : 'below'}
+                          </span>
+                        )}
+                      </span>
+                      <span className="inline-flex items-baseline gap-1.5 border-l border-borderSubtle pl-3">
+                        <span className="text-[11px] uppercase tracking-wider text-textMuted">Dealers</span>
+                        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: fl == null ? undefined : absorb ? ABSORB : AMPLIFY }}>
+                          {fl == null ? '—' : absorb ? 'absorb' : 'amplify'}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })()}
               </Fold>
               <div className="relative flex-1 min-h-0" data-ledger-body={c.ticker}>
                 {/* the arriving view fades in — opacity only, the way a box of figures is allowed to */}

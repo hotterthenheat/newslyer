@@ -312,6 +312,15 @@ html[data-gate-up] .skeleton {
   .skeleton { animation: none; background: rgba(255, 255, 255, 0.08); }
 }
 
+/* A BOX UNDER A DRAGGED BOX (ui/BoxGrip.tsx, pages/pinpoint/boxOrder.ts): the silver ring says "drop here" */
+[data-drop-over] {
+  outline: 2px solid rgb(var(--silver));
+  outline-offset: -2px;
+}
+html[data-box-dragging] [data-box-grip] {
+  cursor: grabbing;
+}
+
 /* FALLING INTO PLACE (2026-10-14): the boxes of a page settle as it opens — a short drop with one soft bounce, each box
    a beat after the last (--settle-i, from ui/Settle.ts). Under the launch gate a box waits unseen (.settle-wait) and
    settles the moment the gate lifts; opened from inside the terminal it settles on mount. The animation fills

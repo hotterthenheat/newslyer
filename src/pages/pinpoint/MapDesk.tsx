@@ -39,6 +39,9 @@ import { useFocus } from '../../context/FocusContext';
 import ScopeChip from '../../components/ui/ScopeChip';
 import { Deferred } from '../../components/ui/Skeleton';
 import { useSettle } from '../../components/ui/Settle';
+import BoxGrip, { BOX_DRAG_TYPE } from '../../components/ui/BoxGrip';
+import { besideOf, boxOrders, moveBox, useBoxOrder, type MapBox } from './boxOrder';
+import type { DragEvent } from 'react';
 import { CalendarInner, DayInner, MapPageSkeleton, ReportInner } from './pinpointSkeletons';
 import ExposureField from '../../components/gex/ExposureField';
 import TraderClock from '../../components/gex/TraderClock';
@@ -158,6 +161,33 @@ const MapDesk = () => {
   const minutePos = useDeferredValue(Math.floor(framePos / 60) * 60);
   /* the boxes fall into place as the page opens, a beat apart, after the head (ui/Settle.ts) */
   const settle = useSettle();
+  /* WHERE THE BOXES STAND (the owner, 2026-10-14: "it makes no sense not to be able to move the day and the book"):
+     each box has a grip in its head; dragged onto the box beside it the two swap sides, onto the other row the rows
+     swap — boxOrder.ts keeps it. The order is CSS `order` on the page's column and on each row, so nothing remounts. */
+  const boxes = useBoxOrder();
+  const ord = boxOrders(boxes);
+  const BOX_WORDS: Record<MapBox, string> = { book: 'the book', day: 'the day', clock: 'the clock', report: 'the report' };
+  const gripFor = (b: MapBox) => <BoxGrip box={b} label={BOX_WORDS[b]} onSwap={() => moveBox(b, besideOf(b))} />;
+  const dropOn = (b: MapBox) => ({
+    onDragOver: (e: DragEvent<HTMLDivElement>) => {
+      if (!e.dataTransfer.types.includes(BOX_DRAG_TYPE)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    },
+    onDragEnter: (e: DragEvent<HTMLDivElement>) => {
+      if (e.dataTransfer.types.includes(BOX_DRAG_TYPE)) e.currentTarget.setAttribute('data-drop-over', '');
+    },
+    onDragLeave: (e: DragEvent<HTMLDivElement>) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) e.currentTarget.removeAttribute('data-drop-over');
+    },
+    onDrop: (e: DragEvent<HTMLDivElement>) => {
+      e.currentTarget.removeAttribute('data-drop-over');
+      const from = e.dataTransfer.getData(BOX_DRAG_TYPE) as MapBox;
+      if (!from) return;
+      e.preventDefault();
+      moveBox(from, b);
+    },
+  });
   const replayBars = useMemo(() => (range ? barsAt(range, minutePos) : undefined), [range, minutePos]);
   /* ONE PRICE IN THE REPLAY TOO (2026-10-14): the minute's book carries the price it was figured at — the bar's open —
      while the tape's Last is that minute's close; the book is handed the close, so the spot row and the tape agree */
@@ -475,10 +505,10 @@ const MapDesk = () => {
           3,000px screen left 1,300px of the box empty): the book box at its natural width, the day box taking the rest
           from 640px up and stretched to the book's height, its two charts sharing the extra; where the day box would
           be under 640 it wraps under the book at the page's full width, as before. */}
-      <div id="map-book" className="flex flex-col gap-2 max-sm:scroll-mt-24 sm:scroll-mt-12" data-map-book-wrap>
+      <div id="map-book" className="flex flex-col gap-2 max-sm:scroll-mt-24 sm:scroll-mt-12" style={{ order: boxes.rows === 'book-first' ? 0 : 10 }} data-map-book-wrap>
       <div ref={setBandSlot} {...settle(1)} className={`empty:hidden border border-borderSubtle rounded-md bg-panel overflow-hidden [&>[data-ledger-toolbar]]:border-b-0 ${settle(1).className}`} data-map-band-slot />
       <div ref={setTopRow} className="flex flex-wrap items-stretch gap-4" data-map-top-row data-day-beside={dayBeside || undefined} data-band-need={bandNeed || undefined} data-head-room={headRoom || undefined} data-band-up={bandUp || undefined}>
-      <div ref={calRef} {...settle(2)} className={`shrink-0 grow-0 max-w-full border border-borderSubtle rounded-md overflow-hidden flex flex-col ${settle(2).className}`} style={{ ...settle(2).style, width: dayBeside ? bookW : '100%', height: bookH }} data-book-w={bookW || undefined} data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
+      <div ref={calRef} {...settle(2)} {...dropOn('book')} className={`shrink-0 grow-0 max-w-full border border-borderSubtle rounded-md overflow-hidden flex flex-col ${settle(2).className}`} style={{ ...settle(2).style, width: dayBeside ? bookW : '100%', height: bookH, order: ord.book % 10 }} data-book-w={bookW || undefined} data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
         <Deferred index={0} frames={0} fallback={<CalendarInner />} className="h-full min-h-0 flex flex-col animate-fade-in">
           <ExposureField
             snapshot={calSnap ?? scan}
@@ -500,6 +530,7 @@ const MapDesk = () => {
             onSelectStrikeFor={(t, price) => toggleFocus(price, t)}
             snapshotFor={columnSnap}
             onNaturalWidth={setBookW}
+            grip={gripFor('book')}
             headSlot={bandUp && headBand ? headBand : bandSlot}
             onBandNeed={setBandNeed}
             pack={dayBeside}
@@ -511,8 +542,8 @@ const MapDesk = () => {
           foldable, remembered. The replay rewinds it with the report's bars. */}
       {/* …AND THE BOOK THROUGH THE DAY UNDER IT ON THE SAME CLOCK (idea 1, 2026-10-13): one box, the tape over the net
           gamma, the minute under the pointer marked on both — DayBox.tsx */}
-      <div ref={tapeRef} id="map-session" {...settle(3)} className={`flex-[1_1_640px] min-w-0 flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12 ${settle(3).className}`} style={dayBeside ? { ...settle(3).style, height: bookH } : settle(3).style} data-session data-scope-ticker={tapeTicker} data-on-screen={tapeOn}>
-        <DayBox scope={chipFor('tape', tapeTicker)}>
+      <div ref={tapeRef} id="map-session" {...settle(3)} {...dropOn('day')} className={`flex-[1_1_640px] min-w-0 flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12 ${settle(3).className}`} style={dayBeside ? { ...settle(3).style, height: bookH, order: ord.day % 10 } : { ...settle(3).style, order: ord.day % 10 }} data-session data-scope-ticker={tapeTicker} data-on-screen={tapeOn}>
+        <DayBox scope={chipFor('tape', tapeTicker)} grip={gripFor('day')}>
           <TapeBox part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} at={playing && tapeTicker === ticker ? replayMinute(framePos, range) : undefined} />
           <BookThroughDay part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} at={playing && tapeTicker === ticker ? replayMinute(framePos, range) : undefined} />
         </DayBox>
@@ -528,17 +559,17 @@ const MapDesk = () => {
       {/* THE CLOCK BESIDE THE REPORT from 1,880px (idea 4, 2026-10-13): both ran the full width for a 178px strip and
           370px of rows; side by side a big monitor's page is a screen shorter. `contents` below that, so the flex column
           above still lays them out one under the other. */}
-      <div className="contents min-[1880px]:grid min-[1880px]:grid-cols-[580px_minmax(0,1fr)] min-[1880px]:gap-4 min-[1880px]:items-stretch" data-map-wide-row>
-      <div ref={dayRef} id="map-clock" {...settle(4)} className={`flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12 ${settle(4).className}`} data-day data-scope-ticker={dayTicker} data-on-screen={dayOn}>
+      <div className={`contents min-[1880px]:grid ${boxes.bottom[0] === 'clock' ? 'min-[1880px]:grid-cols-[580px_minmax(0,1fr)]' : 'min-[1880px]:grid-cols-[minmax(0,1fr)_580px]'} min-[1880px]:gap-4 min-[1880px]:items-stretch`} style={{ order: boxes.rows === 'book-first' ? 10 : 0 }} data-map-wide-row>
+      <div ref={dayRef} id="map-clock" {...settle(4)} {...dropOn('clock')} style={{ ...settle(4).style, order: ord.clock }} className={`flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12 ${settle(4).className}`} data-day data-scope-ticker={dayTicker} data-on-screen={dayOn}>
         <Deferred index={1} frames={22} fallback={<DayInner />} className="flex-1 flex flex-col animate-fade-in">
-          <TraderClock snapshot={daySnap ?? scan} scope={chipFor('day', dayTicker)} at={playing && dayTicker === ticker ? replayMinute(framePos, range) : undefined} />
+          <TraderClock snapshot={daySnap ?? scan} scope={chipFor('day', dayTicker)} grip={gripFor('clock')} at={playing && dayTicker === ticker ? replayMinute(framePos, range) : undefined} />
         </Deferred>
       </div>
       {/* HOW THE LEVELS HELD TODAY — full width, in the approved grammar: the
           page grows rather than cramming (Noah, 2026-09-05) */}
-      <div ref={reportRef} id="map-report" {...settle(5)} className={`border border-borderSubtle rounded-md overflow-hidden bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12 ${settle(5).className}`} data-report data-scope-ticker={reportTicker} data-on-screen={reportOn}>
+      <div ref={reportRef} id="map-report" {...settle(5)} {...dropOn('report')} style={{ ...settle(5).style, order: ord.report }} className={`border border-borderSubtle rounded-md overflow-hidden bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12 ${settle(5).className}`} data-report data-scope-ticker={reportTicker} data-on-screen={reportOn}>
         <Deferred index={2} frames={26} fallback={<ReportInner />} className="animate-fade-in">
-          <WallReportCard snapshot={reportSnap ?? scan} focus={focusFor(reportTicker)} onPick={price => toggleFocus(price, reportTicker)} scope={chipFor('report', reportTicker)} bars={playing && reportTicker === ticker ? reportBars : undefined} />
+          <WallReportCard snapshot={reportSnap ?? scan} focus={focusFor(reportTicker)} onPick={price => toggleFocus(price, reportTicker)} scope={chipFor('report', reportTicker)} grip={gripFor('report')} bars={playing && reportTicker === ticker ? reportBars : undefined} />
         </Deferred>
       </div>
       </div>
