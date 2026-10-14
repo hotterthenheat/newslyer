@@ -25,7 +25,7 @@ const DayBox = ({ scope, children }: { scope?: ReactNode; children: ReactNode })
           <FoldDoor open={open} onToggle={toggle} what="the day" testId="day" />
         </div>
         <p className="mt-0.5 text-[11px] text-textMuted">
-          Today's price with the book's levels and the flip's path on it, and the book's net gamma under it on the same clock · hover either and the minute is marked on both · a tag keeps the strike, its bell sets an alert · the cone ahead is one expected move to the close
+          Today's price with the book's levels and the flip's path on it, and the book's net gamma under it on the same clock · hover either and the minute is marked on both · a level's chip keeps the strike, its bell sets an alert · the dotted lines ahead are one expected move to the close
         </p>
       </div>
       {open && children}

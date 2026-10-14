@@ -924,6 +924,21 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   /* the book's strikes either side of spot — the Strikes menu's counts */
   const bookAbove = surface ? surface.strikes.filter(k => k >= surface.spot).length : WHOLE_BOOK;
   const bookBelow = surface ? surface.strikes.filter(k => k < surface.spot).length : WHOLE_BOOK;
+  /* WHAT A PANE'S HEAD NEEDS side by side: the name, the supreme and the greek at their own widths, the read's door and
+     the ×, the gaps and the padding — read off the heads drawn, after every commit (the content's widths, never the
+     pane's, so the answer holds still) */
+  const [headNeed, setHeadNeed] = useState(0);
+  useLayoutEffect(() => {
+    const island = islandRef.current;
+    if (!island) return;
+    let need = 0;
+    island.querySelectorAll<HTMLElement>('[data-field-column-head]').forEach(h => {
+      const main = h.querySelector<HTMLElement>('[data-field-head-main]');
+      const doors = h.querySelector<HTMLElement>('[data-field-head-doors]');
+      if (main && doors) need = Math.max(need, main.scrollWidth + doors.offsetWidth + 8 + 24 + 2);
+    });
+    setHeadNeed(prev => (Math.abs(prev - need) < 2 ? prev : Math.ceil(need)));
+  });
   if (!snapshot || !surface) {
     return (
       <div className="h-full min-h-[300px] grid place-items-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
@@ -1329,7 +1344,8 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      throws the island open for a frame. */
   const packs = !!onNaturalWidth && d.view !== 'profile';
   const knownNaturals = allColumns.filter(c => !c.leaving).map(c => naturals[`${c.ticker}|${d.view}`]).filter((v): v is number => v > 0);
-  const paneNatural = knownNaturals.length ? Math.max(...knownNaturals) : 0;
+  /* …and never narrower than a pane's head, side by side (headNeed) */
+  const paneNatural = knownNaturals.length ? Math.max(...knownNaturals, many ? headNeed : 0) : 0;
   const naturalW = packs && paneNatural > 0 ? staying * (paneNatural + 2 + (many ? 8 : 0)) + (many ? 8 : 0) : 0;
   const islandMax = pack && !full ? naturalW : 0;
   const islandRoom = islandRef.current?.parentElement?.clientWidth ?? islandRef.current?.clientWidth ?? 0;
@@ -1545,7 +1561,13 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                   follows the terminal, the others change in place), its
                   supreme, its one greek, its read's door, and × on the added */}
               <Fold axis="y" open={many} className="shrink-0" testId="data-field-column-fold">
+                {/* THE × NEVER LEAVES THE PANE (the owner, 2026-10-14: "the matrix when i have two rows only i cant click X
+                    cause i cant see it"): two names on the matrix packed each pane to its table, 374px, under a head that
+                    needs ~505 — the read's door and the × sat past the pane's edge, clipped. The name, the supreme and the
+                    greek are one group that gives way; the read and the × stand pinned at the right, and the island packs
+                    the panes no narrower than their heads (headNeed below). */}
                 <div className="flex items-center gap-2 px-3 h-9 border-b border-borderSubtle/60 bg-ink/[0.03] font-mono min-w-0" data-field-column-head={c.ticker}>
+                  <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden" data-field-head-main>
                   <span className="shrink-0 inline-flex items-center">{chip}</span>
                   <button
                     type="button"
@@ -1579,8 +1601,11 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                       align="end"
                     />
                   </span>
-                  <ReadDoor compact open={read === 'open'} onClick={() => toggleRead(c.ticker)} name={c.ticker} testId="data-column-read" />
-                  {removeDoor}
+                  </div>
+                  <div className="shrink-0 flex items-center gap-2" data-field-head-doors>
+                    <ReadDoor compact open={read === 'open'} onClick={() => toggleRead(c.ticker)} name={c.ticker} testId="data-column-read" />
+                    {removeDoor}
+                  </div>
                 </div>
               </Fold>
               <div className="relative flex-1 min-h-0" data-ledger-body={c.ticker}>

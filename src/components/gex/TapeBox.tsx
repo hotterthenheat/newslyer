@@ -7,25 +7,30 @@
   trader's own chart" is the first thing every
   practitioner asks a dealer-positioning tool for,
   and the Map sent them to another page for it). One
-  session, 09:30 to 16:00 New York, the close as a
-  line; the call wall, the flip, the put wall, the
-  pin and the supreme as rules across it, each with a
-  tag at the right edge that KEEPS the strike, and a
-  bell beside it that sets an alert on the level
-  (components/gex/alertStore.ts armLevel — the same
-  alert the Alerts drawer arms); ahead of now, the
-  shaded cone is one expected move to the close on
-  the name's vol. The replay rewinds it with the
-  rest of the page. Hover for the minute; the arrow
-  keys walk the bars.
+  session, the close as a line; the call wall, the
+  flip, the put wall, the pin and the supreme as
+  price lines across it, each named on the line and
+  priced on the scale; the flip's own path through
+  the day under them; ahead of now, one expected move
+  to the close. The levels' chips in the head KEEP the
+  strike, and the bell beside each sets an alert on
+  the level (components/gex/alertStore.ts armLevel —
+  the same alert the Alerts drawer arms). The replay
+  rewinds it with the rest of the page. Hover for the
+  minute; the arrow keys walk the bars.
 
-  Plain SVG, the profile's hand — the full chart,
-  drawings and all, is Terrain's; this is the tape
-  with the levels on it and nothing else.
+  DRAWN BY THE CHART LIBRARY, Compare's way (the
+  owner, 2026-10-14, of Compare's "Since the open":
+  "i need charts that look that clean in the map page
+  … i dont want ones AI created"): the hand-drawn SVG
+  — hour rules, a grey fill, three ticks in a margin,
+  a lane of tags — is gone; the library's line, scale,
+  crosshair and clock are the chart (dayChart.ts).
 ==================================================
 */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { createChart, LineSeries, LineStyle, LineType, type IChartApi, type IPriceLine, type ISeriesApi, type LineData, type Time, type UTCTimestamp, type WhitespaceData } from 'lightweight-charts';
 import { Bell, BellRing, ChevronDown } from 'lucide-react';
 import { roomLevels } from '../../data/roomLevels';
 import { sessionBars } from '../../data/levelview';
@@ -34,29 +39,20 @@ import { pickFlip } from '../../core/walls';
 import { readSessionClock } from '../../data/moc';
 import { YEAR_MINUTES } from '../../data/measure';
 import { CLOSE_MIN, hhmm } from '../../data/ahead';
-import { dayAxisFrom, dayAxisTo, dayHours } from '../../data/dayAxis';
+import { dayAxisFrom, dayAxisTo } from '../../data/dayAxis';
 import { besideDot } from './besideDot';
 import { nyMinutes } from '../../core/nyTime';
 import { armLevel, removeAlert, useAlerts, type LevelName } from './alertStore';
 import { useLevelsScope } from '../../data/levelsScope';
 import { setDayHover, useDayHover } from '../../data/dayHover';
-import { CALL_WALL, FLIP, PUT_WALL, SUPREME, alpha } from './paletteInk';
-import type { Candle, MarketSnapshot } from '../../types/market';
-
+import { useResolvedTheme } from '../../theme/theme';
+import { CALL_WALL, FLIP, PUT_WALL, SUPREME, alpha, resolveInk } from './paletteInk';
+import { CLOCK_SCALE, dayChartOptions, dayClock, daySurface, dayStartOf, feedSeries } from './dayChart';
+import type { Candle, GexSnapshot, MarketSnapshot } from '../../types/market';
 
 const SILVER = 'rgb(var(--silver))';
-const INK = 'rgb(var(--text-primary))';
 const INK_3 = 'rgb(var(--text-muted))';
-const RULE = 'rgb(var(--ink) / 0.12)';
-const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 const fmtStrike = (v: number) => (!Number.isFinite(v) ? '—' : v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
-const ML = 8;
-const ML_PART = 64; /* as a part of the day box: the net gamma's y labels sit in the margin under it, so the clocks align */
-const MB_PART = 8; /* …and the hours are printed once, under the lower plot */
-const MR_WIDE = 150; /* the tags' lane */
-const MR_OVER = 24; /* a phone's plot keeps the day — the tags sit over its right edge instead (the re-audit's L8) */
-const MT = 10;
-const MB = 22;
 const TAPE_KEY = 'slayer_map_tape';
 
 interface Level {
@@ -88,9 +84,17 @@ const readOpen = (): boolean => {
   }
 };
 
+/** Levels on one price share one line and one chip — the highest of them names its ink (the strike column's rule) */
+const PRIORITY: Level['key'][] = ['supreme', 'callWall', 'putWall', 'flip', 'pin'];
+interface Group {
+  key: string;
+  price: number;
+  levels: Level[];
+  ink: string;
+}
+
 const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = false }: Props) => {
-  const ml = part ? ML_PART : ML;
-  const mb = part ? MB_PART : MB;
+  const paper = useResolvedTheme() === 'light';
   const [openOwn, setOpen] = useState(readOpen);
   const open = part || openOwn;
   const toggle = () => {
@@ -113,43 +117,59 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
       const l = roomLevels(snapshot, levelsScope);
       if (!l) return [];
       const all: Level[] = [
-        { key: 'callWall', word: 'CALL WALL', ink: CALL_WALL, price: l.callWall },
-        { key: 'flip', word: 'FLIP', ink: FLIP, price: l.flip },
-        { key: 'putWall', word: 'PUT WALL', ink: PUT_WALL, price: l.putWall },
-        { key: 'pin', word: 'PIN', ink: INK_3, price: l.pin },
-        { key: 'supreme', word: 'SUPREME', ink: SUPREME, price: l.supreme },
+        { key: 'callWall', word: 'Call wall', ink: CALL_WALL, price: l.callWall },
+        { key: 'flip', word: 'Flip', ink: FLIP, price: l.flip },
+        { key: 'putWall', word: 'Put wall', ink: PUT_WALL, price: l.putWall },
+        { key: 'pin', word: 'Pin', ink: INK_3, price: l.pin },
+        { key: 'supreme', word: 'Supreme', ink: SUPREME, price: l.supreme },
       ];
       return all.filter(x => Number.isFinite(x.price));
     } catch {
       return [];
     }
   }, [snapshot, levelsScope]);
-  /* THE FLIP'S PATH (idea 2, 2026-10-13): the flip of each minute's own book, paired to the bars by time — the line the
-     gauge counts crossings of, drawn on the price rather than left as a number. A minute with no book, or a one-sided
-     book, breaks the path. */
-  const flipTrail = useMemo(() => {
+  /* ONE LINE AND ONE CHIP WHERE LEVELS COINCIDE (the re-audit's M4) */
+  const groups = useMemo<Group[]>(() => {
+    const out: Group[] = [];
+    for (const l of levels) {
+      const g = out.find(x => Math.abs(x.price - l.price) < 1e-9);
+      if (g) {
+        g.levels.push(l);
+        g.key = `${g.key}+${l.key}`;
+      } else out.push({ key: l.key, price: l.price, levels: [l], ink: l.ink });
+    }
+    for (const g of out) {
+      g.levels.sort((a, b) => PRIORITY.indexOf(a.key) - PRIORITY.indexOf(b.key));
+      g.ink = g.levels[0].ink;
+    }
+    return out.sort((a, b) => b.price - a.price);
+  }, [levels]);
+  /* the lines are drawn again only when a level moves — the levels are read afresh every tick, the same prices */
+  const groupsKey = groups.map(g => `${g.key}@${g.price}`).join('|');
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
+  /* THE FLIP'S PATH (idea 2, 2026-10-13): the flip of each minute's own book, paired to the bars by time. A closed
+     minute's book never changes, so its flip is worked out once (kept by the book itself) — a tick re-reads the last. */
+  const flipMemo = useRef(new WeakMap<GexSnapshot, number | null>());
+  const flipTrail = useMemo<(LineData<Time> | WhitespaceData<Time>)[]>(() => {
     const snaps = bookMarket().getGexHistory(snapshot.ticker);
-    if (!snaps?.length || !bars.length) return [] as { min: number; flip: number | null }[];
+    if (!snaps?.length || !bars.length) return [];
     const byTime = new Map(snaps.map(s => [s.time, s]));
     return bars.map(b => {
       const s = byTime.get(b.time);
-      return { min: nyMinutes(b.time * 1000), flip: s ? pickFlip(s.levels, b.close, l => l.value) : null };
+      let f: number | null | undefined = null;
+      if (s) {
+        f = flipMemo.current.get(s);
+        if (f === undefined) {
+          f = pickFlip(s.levels, b.close, l => l.value);
+          flipMemo.current.set(s, f);
+        }
+      }
+      return f != null && Number.isFinite(f) ? { time: b.time as UTCTimestamp, value: f } : { time: b.time as UTCTimestamp };
     });
   }, [snapshot.ticker, bars]);
   const alerts = useAlerts(snapshot.ticker);
   const watched = (key: Level['key']) => alerts.find(a => a.kind === 'level' && a.level === key && !a.firedAt);
-
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const [box, setBox] = useState({ w: 0, h: 0 });
-  useLayoutEffect(() => {
-    const el = hostRef.current;
-    if (!el) return;
-    const read = () => setBox(prev => (prev.w === el.clientWidth && prev.h === el.clientHeight ? prev : { w: el.clientWidth, h: el.clientHeight }));
-    read();
-    const ro = new ResizeObserver(read);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [open]);
 
   /* the clock: now, in session minutes — the replay's minute when rewound */
   const clock = readSessionClock();
@@ -165,72 +185,213 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
   const iv = bookMarket().cfg(snapshot.ticker)?.iv ?? 0.2;
   const minLeft = Math.max(0, CLOSE_MIN - nowMin);
   const w1 = spot * iv * Math.sqrt(minLeft / YEAR_MINUTES);
+  const dayStart = bars.length ? dayStartOf(bars[0].time, nyMinutes(bars[0].time * 1000)) : 0;
 
-  /* the scales: the session across, price up — the bars' range and the levels within reach of it */
-  const W = box.w;
-  const H = box.h;
-  const over = W > 0 && W < 520;
-  const MR = over ? MR_OVER : MR_WIDE;
-  const plotW = Math.max(10, W - ml - MR);
-  const plotH = Math.max(10, H - MT - mb);
-  const xOfMin = (min: number) => ml + ((min - FROM) / Math.max(1, TO - FROM)) * plotW;
-  const minOf = (b: Candle) => nyMinutes(b.time * 1000);
-  const { lo, hi } = useMemo(() => {
-    let lo = Infinity;
-    let hi = -Infinity;
-    for (const b of bars) {
-      lo = Math.min(lo, b.low);
-      hi = Math.max(hi, b.high);
-    }
-    if (!Number.isFinite(lo)) {
-      lo = spot * 0.995;
-      hi = spot * 1.005;
-    }
-    const reach = Math.max(hi - lo, spot * 0.004);
-    for (const l of levels) if (l.price >= lo - reach && l.price <= hi + reach) {
-      lo = Math.min(lo, l.price);
-      hi = Math.max(hi, l.price);
-    }
-    if (minLeft > 0) {
-      lo = Math.min(lo, spot - w1);
-      hi = Math.max(hi, spot + w1);
-    }
-    const pad = (hi - lo) * 0.08 || spot * 0.002;
-    return { lo: lo - pad, hi: hi + pad };
-  }, [bars, levels, spot, w1, minLeft]);
-  const yOf = (p: number) => MT + ((hi - p) / Math.max(1e-9, hi - lo)) * plotH;
+  /* ---- the chart ---- */
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const priceRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const flipRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const coneUpRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const coneDnRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const clockRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const linesRef = useRef<IPriceLine[]>([]);
+  const fedPrice = useRef<readonly LineData<Time>[] | null>(null);
+  const fedFlip = useRef<readonly (LineData<Time> | WhitespaceData<Time>)[] | null>(null);
+  /* what the scale must hold beyond the bars: the levels within reach and the cone (read by the autoscale at draw time) */
+  const reachRef = useRef<{ levels: number[]; cone: [number, number] | null; spot: number }>({ levels: [], cone: null, spot });
+  reachRef.current = { levels: [...levels.map(l => l.price), ...(focus != null ? [focus] : [])], cone: minLeft > 0 && bars.length ? [spot - w1, spot + w1] : null, spot };
+  const barsRef = useRef(bars);
+  barsRef.current = bars;
+  const indexOf = useMemo(() => new Map(bars.map((b, i) => [b.time, i] as const)), [bars]);
+  const indexRef = useRef(indexOf);
+  indexRef.current = indexOf;
 
-  /* the hovered bar — the pointer's, or the keys' */
-  const [hover, setHover] = useState<number | null>(null);
-  useEffect(() => setHover(null), [bars]);
-  const nearest = (clientX: number) => {
-    const r = hostRef.current?.getBoundingClientRect();
-    if (!r || !bars.length) return null;
-    const min = FROM + ((clientX - r.left - ml) / plotW) * (TO - FROM);
-    let best = 0;
-    for (let i = 1; i < bars.length; i++) if (Math.abs(minOf(bars[i]) - min) < Math.abs(minOf(bars[best]) - min)) best = i;
-    return best;
-  };
-  const onKeys = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.target !== e.currentTarget || !bars.length) return;
-    const cur = hover ?? bars.length - 1;
-    if (e.key === 'ArrowLeft') setHover(Math.max(0, cur - 1));
-    else if (e.key === 'ArrowRight') setHover(Math.min(bars.length - 1, cur + 1));
-    else if (e.key === 'Home') setHover(0);
-    else if (e.key === 'End') setHover(bars.length - 1);
-    else return;
-    e.preventDefault();
-  };
-  const hb = hover != null ? bars[hover] : null;
-  /* THE MINUTE, SHARED (idea 1): as a part of the day box the pointer's minute is told to the plot under it, and its
-     pointer's minute drawn here as a quiet rule */
+  /* the hovered bar — the pointer's, or the keys' — and where its dot is on the chart */
+  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
+  const hoverRef = useRef(hover);
+  hoverRef.current = hover;
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || !open) return;
+    const s = daySurface(host, paper);
+    const chart = createChart(host, dayChartOptions(s, { clock: !part, logo: !part }));
+    /* the scale holds the bars, the levels within reach of them, the cone and the kept strike — a level a day's range
+       away would flatten the tape to a line, so it waits in the chips instead */
+    const price = chart.addSeries(LineSeries, {
+      color: s.ink,
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerRadius: 3,
+      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+      autoscaleInfoProvider: (original: () => { priceRange: { minValue: number; maxValue: number } } | null) => {
+        const r = original();
+        if (!r) return r;
+        let lo = r.priceRange.minValue;
+        let hi = r.priceRange.maxValue;
+        const { levels: lv, cone, spot: sp } = reachRef.current;
+        const reach = Math.max(hi - lo, sp * 0.004);
+        for (const p of lv) if (p >= lo - reach && p <= hi + reach) {
+          lo = Math.min(lo, p);
+          hi = Math.max(hi, p);
+        }
+        if (cone) {
+          lo = Math.min(lo, cone[0]);
+          hi = Math.max(hi, cone[1]);
+        }
+        return { priceRange: { minValue: lo, maxValue: hi } };
+      },
+    });
+    const flip = chart.addSeries(LineSeries, { color: alpha(resolveInk(FLIP, host), 0.55), lineWidth: 1, lineStyle: LineStyle.Dashed, lineType: LineType.WithSteps, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, autoscaleInfoProvider: () => null });
+    const silver = resolveInk(SILVER, host);
+    const coneOpts = { color: alpha(silver, 0.55), lineWidth: 1 as const, lineStyle: LineStyle.Dotted, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
+    const coneUp = chart.addSeries(LineSeries, coneOpts);
+    const coneDn = chart.addSeries(LineSeries, coneOpts);
+    /* the clock: whitespace on every minute of the session, so the axis is the day and holds still as bars come */
+    /* the clock (dayChart.ts dayClock): every minute of the session, hidden, on a scale of its own */
+    const clockS = chart.addSeries(LineSeries, { visible: false, priceScaleId: CLOCK_SCALE, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    chart.subscribeCrosshairMove(param => {
+      /* the other plot's minute is set on this one from code — no pointer behind it, nothing to answer */
+      if (!param.sourceEvent) {
+        if (param.point === undefined && hoverRef.current) setHover(null);
+        return;
+      }
+      if (param.point === undefined || param.time === undefined) {
+        setHover(null);
+        return;
+      }
+      const i = indexRef.current.get(param.time as number);
+      const b = i != null ? barsRef.current[i] : null;
+      if (i == null || !b) {
+        setHover(null);
+        return;
+      }
+      const x = chart.timeScale().timeToCoordinate(param.time) ?? param.point.x;
+      const y = price.priceToCoordinate(b.close) ?? param.point.y;
+      setHover({ i, x, y });
+    });
+    chartRef.current = chart;
+    priceRef.current = price;
+    flipRef.current = flip;
+    coneUpRef.current = coneUp;
+    coneDnRef.current = coneDn;
+    clockRef.current = clockS;
+    fedPrice.current = null;
+    fedFlip.current = null;
+    linesRef.current = [];
+    return () => {
+      chart.remove();
+      chartRef.current = null;
+      priceRef.current = null;
+    };
+  }, [paper, part, open]);
+
+  /* the clock, when the day's span moves */
+  useEffect(() => {
+    const chart = chartRef.current;
+    const c = clockRef.current;
+    if (!chart || !c || !bars.length) return;
+    c.setData(dayClock(dayStart, FROM, TO));
+    chart.timeScale().fitContent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayStart, FROM, TO, paper, part, open, bars.length > 0]);
+
+  /* the price and the flip's path — the newest minute only, unless the day itself changed */
+  const pricePoints = useMemo<LineData<Time>[]>(() => bars.map(b => ({ time: b.time as UTCTimestamp, value: b.close })), [bars]);
+  useEffect(() => {
+    if (priceRef.current) feedSeries(priceRef.current, pricePoints, fedPrice);
+    if (flipRef.current) feedSeries(flipRef.current, flipTrail, fedFlip);
+  }, [pricePoints, flipTrail, paper, part, open]);
+
+  /* the cone: one expected move from the last bar to the close */
+  useEffect(() => {
+    const up = coneUpRef.current;
+    const dn = coneDnRef.current;
+    if (!up || !dn) return;
+    if (minLeft > 0 && bars.length) {
+      const t0 = bars[bars.length - 1].time as UTCTimestamp;
+      const t1 = (dayStart + CLOSE_MIN * 60) as UTCTimestamp;
+      if (t1 > t0) {
+        up.setData([{ time: t0, value: spot }, { time: t1, value: spot + w1 }]);
+        dn.setData([{ time: t0, value: spot }, { time: t1, value: spot - w1 }]);
+        return;
+      }
+    }
+    up.setData([]);
+    dn.setData([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minLeft > 0, bars.length, spot, w1.toFixed(3), dayStart, paper, part, open]);
+
+  /* the levels as price lines — named on the line, priced on the scale — and the kept strike in silver */
+  useEffect(() => {
+    const series = priceRef.current;
+    const host = hostRef.current;
+    if (!series || !host) return;
+    for (const l of linesRef.current) series.removePriceLine(l);
+    linesRef.current = groupsRef.current.map(g =>
+      series.createPriceLine({
+        price: g.price,
+        color: g.levels[0].key === 'pin' ? alpha(resolveInk(g.ink, host), 0.7) : resolveInk(g.ink, host),
+        lineWidth: 1,
+        lineStyle: g.levels[0].key === 'flip' ? LineStyle.Dashed : g.levels[0].key === 'pin' ? LineStyle.Dotted : LineStyle.Solid,
+        axisLabelVisible: true,
+        title: g.levels.map(l => l.word).join(' · '),
+      })
+    );
+    if (focus != null) linesRef.current.push(series.createPriceLine({ price: focus, color: resolveInk(SILVER, host), lineWidth: 2, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'Kept' }));
+  }, [groupsKey, focus, paper, part, open]);
+
+  /* THE MINUTE, SHARED (idea 1): the pointer's minute is told to the plot under it, and its pointer's minute is set here
+     as this chart's own crosshair — one clock, one rule across both */
+  const hb = hover != null ? bars[hover.i] : null;
   const shared = useDayHover();
   useEffect(() => {
     if (!part) return;
-    setDayHover(hb ? { min: minOf(hb), from: 'tape' } : null);
+    setDayHover(hb ? { min: nyMinutes(hb.time * 1000), from: 'tape' } : null);
   }, [part, hb]);
   useEffect(() => () => setDayHover(null), []);
-  const otherMin = part && hb == null && shared?.from === 'through' ? shared.min : null;
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = priceRef.current;
+    if (!chart || !series || hover) return;
+    if (part && shared?.from === 'through' && bars.length) {
+      const t = dayStart + shared.min * 60;
+      const i = indexOf.get(t);
+      if (i != null) {
+        chart.setCrosshairPosition(bars[i].close, t as UTCTimestamp, series);
+        return;
+      }
+    }
+    chart.clearCrosshairPosition();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shared, hover == null, part]);
+
+  /* the keys walk the bars: the crosshair and the card go with them */
+  const walk = (i: number) => {
+    const chart = chartRef.current;
+    const series = priceRef.current;
+    const b = bars[i];
+    if (!chart || !series || !b) return;
+    chart.setCrosshairPosition(b.close, b.time as UTCTimestamp, series);
+    setHover({ i, x: chart.timeScale().timeToCoordinate(b.time as UTCTimestamp) ?? 0, y: series.priceToCoordinate(b.close) ?? 0 });
+  };
+  const onKeys = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget || !bars.length) return;
+    const cur = hover?.i ?? bars.length - 1;
+    if (e.key === 'ArrowLeft') walk(Math.max(0, cur - 1));
+    else if (e.key === 'ArrowRight') walk(Math.min(bars.length - 1, cur + 1));
+    else if (e.key === 'Home') walk(0);
+    else if (e.key === 'End') walk(bars.length - 1);
+    else if (e.key === 'Escape') {
+      setHover(null);
+      chartRef.current?.clearCrosshairPosition();
+    } else return;
+    e.preventDefault();
+  };
+  useEffect(() => setHover(h => (h && h.i < bars.length ? h : null)), [bars]);
+
   /* the nearest level to the hovered close, in words */
   const nearLevel = (price: number) => {
     let best: Level | null = null;
@@ -239,95 +400,86 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
     const d = price - best.price;
     return `${Math.abs(d) < 0.005 ? 'on' : `${Math.abs(d).toFixed(2)} ${d > 0 ? 'over' : 'under'}`} the ${best.word.toLowerCase()}`;
   };
-
-  const path = bars.map((b, i) => `${i ? 'L' : 'M'}${xOfMin(minOf(b)).toFixed(1)} ${yOf(b.close).toFixed(1)}`).join(' ');
-  const area = bars.length ? `${path} L${xOfMin(minOf(bars[bars.length - 1])).toFixed(1)} ${(MT + plotH).toFixed(1)} L${xOfMin(minOf(bars[0])).toFixed(1)} ${(MT + plotH).toFixed(1)} Z` : '';
-  const flipPath = (() => {
-    let d = '';
-    let pen = false;
-    for (const p of flipTrail) {
-      if (p.flip == null || p.flip < lo || p.flip > hi) {
-        pen = false;
-        continue;
-      }
-      d += `${pen ? 'L' : 'M'}${xOfMin(p.min).toFixed(1)} ${yOf(p.flip).toFixed(1)} `;
-      pen = true;
-    }
-    return d;
-  })();
-  const xNow = xOfMin(nowMin);
-  const xClose = xOfMin(Math.max(FROM, Math.min(TO, CLOSE_MIN)));
-  const cone = minLeft > 0 && bars.length ? `M${xNow.toFixed(1)} ${yOf(spot).toFixed(1)} L${xClose.toFixed(1)} ${yOf(spot + w1).toFixed(1)} L${xClose.toFixed(1)} ${yOf(spot - w1).toFixed(1)} Z` : '';
-  /* a narrow plot (a phone) holds four hours, not eight — the labels overprinted at 390px */
-  const hours = dayHours(FROM, plotW < 480, TO);
-  /* ONE TAG WHERE LEVELS COINCIDE (the re-audit's M4): the report prints one row for levels on one strike; the tape
-     printed three tags. Levels that share a price share a tag, their words stacked in their own inks; its bell arms
-     every level in it that an alert can watch. */
-  const groups = (() => {
-    const out: { key: string; price: number; levels: Level[]; h: number }[] = [];
-    for (const l of levels) {
-      const g = out.find(x => Math.abs(x.price - l.price) < 1e-9);
-      if (g) {
-        g.levels.push(l);
-        g.key = `${g.key}+${l.key}`;
-      } else out.push({ key: l.key, price: l.price, levels: [l], h: 18 });
-    }
-    for (const g of out) if (g.levels.length > 1) g.h = 6 + 12 * g.levels.length;
-    return out;
-  })();
-  /* the tags in the right lane, pushed apart when two sit within each other's height, and kept inside the plot */
-  /* EACH TAG AT ITS OWN LINE (the paying-user audit's C2, 2026-10-13): a level off the plot was pulled in by moving EVERY
-     tag the same distance, so the flip's tag sat 111px under the flip's line. Now each tag is clamped into the plot on its
-     own — a level past the edge keeps its tag at that edge with an arrow — and only tags that would overprint are pushed
-     apart, down from the top and then back up from the foot. */
-  const plotTop = MT;
-  const plotBottom = MT + plotH;
-  const offOf = (p: number): 'up' | 'down' | null => (yOf(p) < plotTop ? 'up' : yOf(p) > plotBottom ? 'down' : null);
-  const tagYs = (() => {
-    const sorted = [...groups].map(g => ({ g, y: Math.max(plotTop + g.h / 2, Math.min(plotBottom - g.h / 2, yOf(g.price))) })).sort((a, b) => a.y - b.y);
-    const room = (a: { g: { h: number } }, b: { g: { h: number } }) => a.g.h / 2 + b.g.h / 2 + 2;
-    for (let i = 1; i < sorted.length; i++) if (sorted[i].y - sorted[i - 1].y < room(sorted[i - 1], sorted[i])) sorted[i].y = sorted[i - 1].y + room(sorted[i - 1], sorted[i]);
-    const last = sorted[sorted.length - 1];
-    if (last && last.y > plotBottom - last.g.h / 2) {
-      last.y = plotBottom - last.g.h / 2;
-      for (let i = sorted.length - 2; i >= 0; i--) if (sorted[i + 1].y - sorted[i].y < room(sorted[i], sorted[i + 1])) sorted[i].y = sorted[i + 1].y - room(sorted[i], sorted[i + 1]);
-    }
-    return new Map(sorted.map(s => [s.g.key, s.y]));
-  })();
-  /* THE PRICE SCALE in the left margin the day box keeps for the book's figures under it (the audit's C2: "the tape has no
-     price axis"): the top, the middle and the foot of the plot, on the cent */
-  const priceTicks = part && plotH > 60 ? [hi - (hi - lo) * 0.04, (hi + lo) / 2, lo + (hi - lo) * 0.04] : [];
   /* "the put wall, the pin and the supreme" — a group's levels in one breath */
   const say = (ws: string[]) => (ws.length <= 1 ? ws[0] ?? '' : `${ws.slice(0, -1).join(', ')} and ${ws[ws.length - 1]}`);
+  const plotW = hostRef.current?.clientWidth ?? 0;
+  const session = useMemo(() => (bars.length ? { lo: Math.min(...bars.map(b => b.low)), hi: Math.max(...bars.map(b => b.high)) } : null), [bars]);
+
+  /* THE LEVELS' CHIPS: keep the strike, or set the alert — the chart names the lines, the chips act on them */
+  const chips = groups.length > 0 && (
+    <div className="flex flex-wrap items-center gap-x-1 gap-y-1" data-tape-chips>
+      {groups.map(g => {
+        const on = focus != null && Math.abs(focus - g.price) < 1e-9;
+        const alertable = g.levels.filter((l): l is Level & { key: LevelName } => l.key !== 'pin');
+        const armed = alertable.map(l => watched(l.key)).filter((a): a is NonNullable<typeof a> => !!a);
+        const words = say(g.levels.map(l => l.word.toLowerCase()));
+        const bellWords = say(alertable.map(l => l.word.toLowerCase()));
+        return (
+          <span key={g.key} className={`inline-flex items-center rounded-md ${on ? 'bg-silver/[0.1]' : ''}`} data-tape-tag={g.key}>
+            <button
+              type="button"
+              onClick={() => onPick(g.price)}
+              aria-pressed={on}
+              title={`${words} ${fmtStrike(g.price)} — click to keep the strike${alertable.length === 0 ? ' · no bell: the pin is where price settles, not a line it crosses' : ''}`}
+              className="hit inline-flex items-center gap-1.5 h-6 pl-2 pr-1 rounded-md font-mono text-[11px] whitespace-nowrap hover:bg-ink/[0.05] transition-colors"
+            >
+              <span className="flex items-center gap-1">
+                {g.levels.map((l, i) => (
+                  <span key={l.key} style={{ color: l.ink }}>
+                    {i > 0 && <span className="text-textMuted">·</span>}
+                    {l.word}
+                  </span>
+                ))}
+              </span>
+              <span className="font-semibold tnum text-textPrimary">{fmtStrike(g.price)}</span>
+            </button>
+            {alertable.length > 0 && (
+              <button
+                type="button"
+                onClick={() => (armed.length ? armed.forEach(a => removeAlert(snapshot.ticker, a.id)) : alertable.forEach(l => armLevel(snapshot.ticker, l.key)))}
+                aria-pressed={armed.length > 0}
+                title={armed.length ? `Watching the ${bellWords} — click to stop` : `Tell me when price crosses the ${bellWords}`}
+                className={`hit inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors ${armed.length ? 'text-silver' : 'text-textMuted hover:text-textPrimary hover:bg-ink/[0.05]'}`}
+                data-tape-alert={alertable.map(l => l.key).join('+')}
+                data-watching={armed.length ? '' : undefined}
+              >
+                {armed.length ? <BellRing className="w-3 h-3" /> : <Bell className="w-3 h-3" />}
+              </button>
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
 
   return (
     <section className={`relative flex flex-col min-w-0 ${part ? 'flex-1' : ''}`} data-tape-box data-tape-open={open || undefined} data-tape-part={part || undefined}>
-      <div className={part ? 'px-5 pt-2 pb-2 flex items-end gap-6 flex-wrap' : 'px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap'}>
+      <div className={part ? 'px-5 pt-2 pb-2 flex items-end gap-x-6 gap-y-2 flex-wrap' : 'px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap'}>
         {part ? (
           <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted" data-tape-part-word>
             The tape
           </span>
         ) : (
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h3 className="text-[15px] font-semibold leading-tight text-textPrimary">The tape</h3>
-            {scope}
-            <button
-              type="button"
-              onClick={toggle}
-              aria-expanded={open}
-              title={open ? 'Fold the tape away' : 'Show the tape'}
-              className="hit inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[11px] text-textMuted hover:text-textPrimary hover:bg-ink/[0.05] transition-colors"
-              data-tape-fold
-            >
-              <ChevronDown className={`w-3 h-3 transition-transform ${open ? '' : '-rotate-90'}`} />
-              {open ? 'Fold' : 'Unfold'}
-            </button>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h3 className="text-[15px] font-semibold leading-tight text-textPrimary">The tape</h3>
+              {scope}
+              <button
+                type="button"
+                onClick={toggle}
+                aria-expanded={open}
+                title={open ? 'Fold the tape away' : 'Show the tape'}
+                className="hit inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[11px] text-textMuted hover:text-textPrimary hover:bg-ink/[0.05] transition-colors"
+                data-tape-fold
+              >
+                <ChevronDown className={`w-3 h-3 transition-transform ${open ? '' : '-rotate-90'}`} />
+                {open ? 'Fold' : 'Unfold'}
+              </button>
+            </div>
+            <p className="mt-0.5 text-[11px] text-textMuted">Today's price with the book's levels on it and the flip's path as it moved · a chip keeps the strike, its bell sets an alert on the level · the dotted lines ahead are one expected move to the close</p>
           </div>
-          <p className="mt-0.5 text-[11px] text-textMuted">Today's price with the book's levels on it and the flip's path as it moved · a tag keeps the strike, its bell sets an alert on the level · the cone ahead is one expected move to the close</p>
-        </div>
         )}
-        {bars.length > 0 && (
+        {bars.length > 0 && session && (
           <dl className={part ? 'flex flex-wrap gap-x-6 gap-y-1' : 'grid grid-cols-3 gap-x-6'}>
             <div>
               <dt className="text-[11px] text-textMuted">Last</dt>
@@ -336,7 +488,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
             <div>
               <dt className="text-[11px] text-textMuted">Session</dt>
               <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap">
-                {Math.min(...bars.map(b => b.low)).toFixed(2)} – {Math.max(...bars.map(b => b.high)).toFixed(2)}
+                {session.lo.toFixed(2)} – {session.hi.toFixed(2)}
               </dd>
             </div>
             <div>
@@ -347,121 +499,32 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
             </div>
           </dl>
         )}
+        {part && <div className="ml-auto">{chips}</div>}
       </div>
+      {!part && open && chips && <div className="px-5 pb-2">{chips}</div>}
       {open && (
         /* AS A PART OF THE DAY BOX the plot takes its share of the box's height — 240 at least, more when the box stands
            beside the book and is stretched to its height (2026-10-13) */
-        <div className={part ? 'px-3 pb-3 flex-1 flex flex-col' : 'px-3 pb-3'}>
+        <div className={part ? 'flex-1 flex flex-col border-t border-borderSubtle/60' : 'border-t border-borderSubtle/60'}>
           <div
-            ref={hostRef}
-            className={`relative ${part ? 'flex-[1_1_240px] min-h-[150px]' : 'h-[240px]'} rounded-md border border-borderSubtle/60 bg-inset outline-none`}
+            className={`relative ${part ? 'flex-[1_1_240px] min-h-[150px]' : 'h-[260px]'} outline-none`}
             tabIndex={0}
             role="group"
             aria-label={`${snapshot.ticker}'s tape with the book's levels — the arrow keys walk the bars`}
             onKeyDown={onKeys}
-            onPointerMove={e => setHover(nearest(e.clientX))}
-            onPointerLeave={() => setHover(null)}
             data-tape-plot
           >
-            {W > 0 && H > 0 && (
-              <svg width={W} height={H} className="block" role="img" aria-label={`${snapshot.ticker} today, ${bars.length} minute bars, last ${spot.toFixed(2)}`}>
-                {/* the hours */}
-                {hours.map(t => (
-                  <g key={t}>
-                    <line x1={xOfMin(t)} x2={xOfMin(t)} y1={MT} y2={MT + plotH} stroke={RULE} />
-                    {!part && (
-                      <text x={xOfMin(t)} y={H - 7} textAnchor={t === FROM ? 'start' : t === TO ? 'end' : 'middle'} fontFamily={MONO} fontSize={11} fill={INK_3}>
-                        {hhmm(t)}
-                      </text>
-                    )}
-                  </g>
-                ))}
-                {priceTicks.map((p, i) => (
-                  <text key={i} x={ml - 8} y={yOf(p)} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={11} fill={INK_3} data-tape-price-tick>
-                    {p.toFixed(2)}
-                  </text>
-                ))}
-                {/* the flip's path through the day, under the levels */}
-                {flipPath && <path d={flipPath} fill="none" stroke={FLIP} strokeOpacity={0.7} strokeWidth={1} strokeDasharray="2 2" strokeLinejoin="round" data-tape-flip-path />}
-                {/* the cone ahead: one expected move to the close */}
-                {cone && <path d={cone} fill={alpha(SILVER, 0.1)} stroke={SILVER} strokeOpacity={0.35} strokeDasharray="3 3" />}
-                {/* the levels */}
-                {levels.map(l => (
-                  <line key={l.key} x1={ml} x2={W - MR + 6} y1={yOf(l.price)} y2={yOf(l.price)} stroke={l.ink} strokeOpacity={l.key === 'pin' ? 0.5 : 0.75} strokeDasharray={l.key === 'flip' ? '3 3' : undefined} data-tape-level={l.key} />
-                ))}
-                {/* the kept strike */}
-                {focus != null && focus >= lo && focus <= hi && <line x1={ml} x2={W - MR + 6} y1={yOf(focus)} y2={yOf(focus)} stroke={SILVER} strokeOpacity={0.9} strokeWidth={1.5} data-tape-kept={focus} />}
-                {/* the price */}
-                {area && <path d={area} fill={alpha(INK, 0.06)} />}
-                {path && <path d={path} fill="none" stroke={INK} strokeWidth={1.5} strokeLinejoin="round" />}
-                {/* now */}
-                {bars.length > 0 && <line x1={xNow} x2={xNow} y1={MT} y2={MT + plotH} stroke={SILVER} strokeOpacity={0.6} />}
-                {/* the other plot's minute, as a part of the day box */}
-                {otherMin != null && <line x1={xOfMin(otherMin)} x2={xOfMin(otherMin)} y1={MT} y2={MT + plotH} stroke={SILVER} strokeOpacity={0.35} strokeDasharray="2 2" data-tape-shared-minute />}
-                {/* the pointer's bar */}
-                {hb && (
-                  <g>
-                    <line x1={xOfMin(minOf(hb))} x2={xOfMin(minOf(hb))} y1={MT} y2={MT + plotH} stroke={SILVER} strokeOpacity={0.4} />
-                    <circle cx={xOfMin(minOf(hb))} cy={yOf(hb.close)} r={3.5} fill={SILVER} />
-                  </g>
-                )}
-              </svg>
-            )}
-            {/* the tags: keep the strike, or set the alert */}
-            {W > 0 &&
-              groups.map(g => {
-                const on = focus != null && Math.abs(focus - g.price) < 1e-9;
-                const alertable = g.levels.filter((l): l is Level & { key: LevelName } => l.key !== 'pin');
-                const armed = alertable.map(l => watched(l.key)).filter((a): a is NonNullable<typeof a> => !!a);
-                const words = say(g.levels.map(l => l.word.toLowerCase()));
-                const bellWords = say(alertable.map(l => l.word.toLowerCase()));
-                const y = tagYs.get(g.key) ?? 0;
-                return (
-                  <div key={g.key} className={`absolute flex items-center gap-1 ${over ? 'rounded bg-inset/90' : ''}`} style={over ? { right: 6, top: y - g.h / 2 } : { left: W - MR + 10, top: y - g.h / 2 }} data-tape-tag={g.key}>
-                    <button
-                      type="button"
-                      onClick={() => onPick(g.price)}
-                      title={`${words} ${fmtStrike(g.price)} — click to keep the strike${alertable.length === 0 ? ' · no bell: the pin is where price settles, not a line it crosses' : ''}`}
-                      className={`hit inline-flex items-center gap-1.5 rounded px-1.5 font-mono text-[11px] font-bold tracking-wider transition-colors ${on ? 'bg-silver/[0.12]' : 'hover:bg-ink/[0.06]'}`}
-                      style={{ height: g.h }}
-                    >
-                      {offOf(g.price) && (
-                        <span className="text-textMuted" aria-label={offOf(g.price) === 'up' ? 'above the chart' : 'below the chart'} data-tape-tag-off={offOf(g.price)!}>
-                          {offOf(g.price) === 'up' ? '↑' : '↓'}
-                        </span>
-                      )}
-                      <span className="flex flex-col leading-[12px]">
-                        {g.levels.map(l => (
-                          <span key={l.key} className={on ? 'text-textPrimary' : undefined} style={{ color: on ? undefined : l.ink }}>
-                            {l.word}
-                          </span>
-                        ))}
-                      </span>
-                      <span className="font-semibold tnum text-textPrimary">{fmtStrike(g.price)}</span>
-                    </button>
-                    {alertable.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => (armed.length ? armed.forEach(a => removeAlert(snapshot.ticker, a.id)) : alertable.forEach(l => armLevel(snapshot.ticker, l.key)))}
-                        aria-pressed={armed.length > 0}
-                        title={armed.length ? `Watching the ${bellWords} — click to stop` : `Tell me when price crosses the ${bellWords}`}
-                        className={`hit inline-flex h-[18px] w-[18px] items-center justify-center rounded transition-colors ${armed.length ? 'text-silver' : 'text-textMuted hover:text-textPrimary hover:bg-ink/[0.06]'}`}
-                        data-tape-alert={alertable.map(l => l.key).join('+')}
-                        data-watching={armed.length ? '' : undefined}
-                      >
-                        {armed.length ? <BellRing className="w-3 h-3" /> : <Bell className="w-3 h-3" />}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            {/* the pointer's minute */}
-            {hb && (
-              /* BESIDE THE POINT IT READS (the paying-user audit's M14, 2026-10-13): pinned to a top corner, the eye went to the
-                 corner and back for every minute; it stands at the dot now, right of it (left past the middle), above it
-                 unless the plot's head has no room. A phone's plot keeps the corner — there is no room beside anything. */
-              <div className="pointer-events-none absolute whitespace-nowrap rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm" style={over ? { left: 8, top: 8 } : besideDot(xOfMin(minOf(hb)), yOf(hb.close), xOfMin(minOf(hb)) > ml + plotW / 2)} data-tape-card={hhmm(minOf(hb))}>
-                <span className="font-semibold tnum text-textPrimary">{hhmm(minOf(hb))}</span>
+            <div ref={hostRef} className="absolute inset-0" data-tape-chart />
+            {/* the pointer's minute — Compare's glass, beside the point it reads */}
+            {hb && hover && (
+              <div
+                className="pointer-events-none absolute z-10 whitespace-nowrap rounded-md border border-borderSubtle px-2.5 py-1.5 font-mono text-[11px] text-textSecondary"
+                style={{ ...besideDot(hover.x, hover.y, hover.x > plotW / 2), background: 'rgba(8,8,10,0.88)', backdropFilter: 'blur(3px)' }}
+                data-theme="dark"
+                data-chart-glass
+                data-tape-card={hhmm(nyMinutes(hb.time * 1000))}
+              >
+                <span className="font-bold tnum text-textPrimary">{hhmm(nyMinutes(hb.time * 1000))}</span>
                 <span className="ml-2 tnum text-textPrimary">{hb.close.toFixed(2)}</span>
                 <span className="ml-2 text-textMuted">{nearLevel(hb.close)}</span>
               </div>

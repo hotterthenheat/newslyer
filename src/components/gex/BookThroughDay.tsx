@@ -11,9 +11,10 @@
   a book a minute):
 
     NET GAMMA   the whole book's net through the
-                session as a line, the ground tinted
-                where hedging amplified (above zero)
-                and absorbed (below); spot beside it,
+                session as a baseline at zero — the
+                line and its ground red where hedging
+                amplified (above zero), green where it
+                absorbed (below); spot beside it,
                 quiet, on its own scale
     STRIKE × TIME   every strike's net, minute by
                 minute, as a heat surface — the
@@ -25,35 +26,32 @@
   per-minute net is the vendor's own series where it
   keeps one (bookMinutes), the surface its recorded
   books.
+
+  DRAWN BY THE CHART LIBRARY, Compare's way (the
+  owner, 2026-10-14 — dayChart.ts): the net is the
+  library's baseline series, the clock and the scale
+  are its own, and the surface is painted on the same
+  axes, minute for minute under the tape above.
 ==================================================
 */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { BaselineSeries, createChart, LineSeries, LineStyle, type IChartApi, type ISeriesApi, type LineData, type Time, type UTCTimestamp } from 'lightweight-charts';
 import { bookMarket } from '../../data/bookMarket';
 import { sessionBars } from '../../data/levelview';
 import { fmtUsd } from '../../data/gex';
 import { hhmm } from '../../data/ahead';
-import { dayAxisFrom, dayAxisTo, dayHours } from '../../data/dayAxis';
+import { dayAxisFrom, dayAxisTo } from '../../data/dayAxis';
 import { besideDot } from './besideDot';
 import { nyMinutes } from '../../core/nyTime';
 import { HEAT_MODE, heatLaneColor } from './heatmap';
-import { LONG_GAMMA, SHORT_GAMMA, alpha } from './paletteInk';
-import { useResolvedTheme } from '../../theme/theme';
+import { LONG_GAMMA, SHORT_GAMMA, alpha, resolveInk } from './paletteInk';
+import { readToken, useResolvedTheme } from '../../theme/theme';
 import { setDayHover, useDayHover } from '../../data/dayHover';
+import { CLOCK_SCALE, dayChartOptions, dayClock, daySurface, dayStartOf, feedSeries } from './dayChart';
 import type { Candle, GexSnapshot, MarketSnapshot } from '../../types/market';
 
-const SILVER = 'rgb(var(--silver))';
-const INK = 'rgb(var(--text-primary))';
-const INK_3 = 'rgb(var(--text-muted))';
-const RULE = 'rgb(var(--ink) / 0.12)';
-const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
-const ML = 64;
-const MR = 56;
-const MR_PART = 150; /* as a part of the day box: the tape's tag lane above, so the clocks align */
-const MR_PART_OVER = 24; /* …a phone's tape keeps the day, its tags over the plot's edge */
-const MT = 10;
-const MB = 22;
 /** Strikes each side of spot on the surface */
 const HALF = 20;
 
@@ -78,6 +76,12 @@ interface Minute {
   byStrike: Map<number, number>;
 }
 
+/** A book's net and its strikes, read once a book — a closed minute's book never changes, only the live one does */
+interface BookRead {
+  net: number;
+  byStrike: Map<number, number>;
+}
+
 const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part = false }: Props) => {
   const paper = useResolvedTheme() === 'light';
   const [face, setFace] = useState<Face>('net');
@@ -87,6 +91,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
   const first = bars[0]?.time ?? 0;
 
   /* THE MINUTES: the books kept this session, each with its net and the price at its minute */
+  const reads = useRef(new WeakMap<GexSnapshot, BookRead>());
   const minutes = useMemo<Minute[]>(() => {
     const market = bookMarket();
     const snaps: GexSnapshot[] = market.getGexHistory(ticker).filter(s => s.time >= first && s.time <= until);
@@ -94,110 +99,262 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
     const own = market.bookMinutes(ticker);
     const netAt = own ? new Map(own.filter(m => m.time >= first && m.time <= until).map(m => [m.time, m.netGex] as const)) : null;
     return snaps.map(s => {
-      let net = 0;
-      const byStrike = new Map<number, number>();
-      for (const l of s.levels) {
-        net += l.value;
-        byStrike.set(l.strike, l.value);
+      let r = reads.current.get(s);
+      if (!r) {
+        let net = 0;
+        const byStrike = new Map<number, number>();
+        for (const l of s.levels) {
+          net += l.value;
+          byStrike.set(l.strike, l.value);
+        }
+        r = { net, byStrike };
+        reads.current.set(s, r);
       }
-      return { time: s.time, min: nyMinutes(s.time * 1000), net: netAt?.get(s.time) ?? net, spot: s.spot ?? priceAt.get(s.time) ?? null, byStrike };
+      return { time: s.time, min: nyMinutes(s.time * 1000), net: netAt?.get(s.time) ?? r.net, spot: s.spot ?? priceAt.get(s.time) ?? null, byStrike: r.byStrike };
     });
   }, [ticker, bars, first, until]);
 
   /* the strikes on the surface: round the last book's spot */
   const spotNow = minutes.length ? (minutes[minutes.length - 1].spot ?? snapshot.spot) : snapshot.spot;
+  /* only the surface reads them — the line face never pays for forty strikes by four hundred minutes */
   const strikes = useMemo(() => {
+    if (face !== 'heat') return [] as number[];
     const all = [...new Set(minutes.flatMap(m => [...m.byStrike.keys()]))].sort((a, b) => b - a);
     const above = all.filter(k => k >= spotNow).slice(-HALF);
     const below = all.filter(k => k < spotNow).slice(0, HALF);
     return [...above, ...below];
-  }, [minutes, spotNow]);
+  }, [minutes, spotNow, face]);
   const maxAbs = useMemo(() => {
     let m = 1;
+    if (face !== 'heat') return m;
     for (const mi of minutes) for (const k of strikes) m = Math.max(m, Math.abs(mi.byStrike.get(k) ?? 0));
     return m;
-  }, [minutes, strikes]);
-  const netMax = useMemo(() => Math.max(1, ...minutes.map(m => Math.abs(m.net))), [minutes]);
-  const spotLo = useMemo(() => Math.min(...minutes.map(m => m.spot ?? Infinity)), [minutes]);
-  const spotHi = useMemo(() => Math.max(...minutes.map(m => m.spot ?? -Infinity)), [minutes]);
+  }, [minutes, strikes, face]);
 
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [box, setBox] = useState({ w: 0, h: 0 });
-  useLayoutEffect(() => {
-    const el = hostRef.current;
-    if (!el) return;
-    const read = () => setBox(prev => (prev.w === el.clientWidth && prev.h === el.clientHeight ? prev : { w: el.clientWidth, h: el.clientHeight }));
-    read();
-    const ro = new ResizeObserver(read);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [face]);
-  const W = box.w;
-  const H = box.h;
-  const mr = part ? (W > 0 && W < 520 ? MR_PART_OVER : MR_PART) : MR;
-  const plotW = Math.max(10, W - ML - mr);
-  const plotH = Math.max(10, H - MT - MB);
   /* the tape's clock, off the same bars (data/dayAxis.ts) */
   const FROM = dayAxisFrom(bars[0]?.time);
   const TO = dayAxisTo(bars[bars.length - 1]?.time);
-  const xOfMin = (min: number) => ML + ((min - FROM) / Math.max(1, TO - FROM)) * plotW;
-  const yOfNet = (v: number) => MT + plotH / 2 - (v / netMax) * (plotH / 2);
-  const yOfSpot = (p: number) => (spotHi > spotLo ? MT + ((spotHi - p) / (spotHi - spotLo)) * plotH : MT + plotH / 2);
-  const rowH = strikes.length ? plotH / strikes.length : 0;
-  const yOfRow = (i: number) => MT + i * rowH;
+  const dayStart = bars.length ? dayStartOf(bars[0].time, nyMinutes(bars[0].time * 1000)) : 0;
 
-  /* THE HEAT SURFACE, painted on a canvas — forty strikes by four hundred minutes is sixteen thousand cells */
+  /* ---- the chart ---- */
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const netRef = useRef<ISeriesApi<'Baseline'> | null>(null);
+  const spotRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const clockRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const fedNet = useRef<readonly LineData<Time>[] | null>(null);
+  const fedSpot = useRef<readonly LineData<Time>[] | null>(null);
+  /* the plot's own box — the time scale's width and the pane's height — for the surface painted on it */
+  const [plot, setPlot] = useState({ w: 0, h: 0 });
+  const minutesRef = useRef(minutes);
+  minutesRef.current = minutes;
+  const indexOf = useMemo(() => new Map(minutes.map((m, i) => [m.time, i] as const)), [minutes]);
+  const indexRef = useRef(indexOf);
+  indexRef.current = indexOf;
+  const faceRef = useRef(face);
+  faceRef.current = face;
+  const strikesRef = useRef(strikes);
+  strikesRef.current = strikes;
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
+
+  /* the hovered minute (and row, on the surface), and where its point is on the chart */
+  const [hover, setHover] = useState<{ i: number; row: number | null; x: number; y: number } | null>(null);
+  const hoverRef = useRef(hover);
+  hoverRef.current = hover;
+  const rowOf = (y: number, h: number) => (strikesRef.current.length && h > 0 ? Math.max(0, Math.min(strikesRef.current.length - 1, Math.floor(y / (h / strikesRef.current.length)))) : null);
+
   useEffect(() => {
-    if (face !== 'heat') return;
+    const host = hostRef.current;
+    if (!host) return;
+    const s = daySurface(host, paper);
+    const chart = createChart(host, dayChartOptions(s, { clock: true, logo: true }));
+    const amp = resolveInk(SHORT_GAMMA, host);
+    const abs = resolveInk(LONG_GAMMA, host);
+    /* THE NET AS A BASELINE AT ZERO — the library's own two-sided line, Compare's gap band: red and its ground above,
+       green and its ground below */
+    const net = chart.addSeries(BaselineSeries, {
+      baseValue: { type: 'price', price: 0 },
+      topLineColor: amp,
+      topFillColor1: alpha(amp, paper ? 0.22 : 0.3),
+      topFillColor2: alpha(amp, 0.03),
+      bottomLineColor: abs,
+      bottomFillColor1: alpha(abs, 0.03),
+      bottomFillColor2: alpha(abs, paper ? 0.22 : 0.3),
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerRadius: 3,
+      priceFormat: { type: 'custom', formatter: (v: number) => fmtUsd(v), minMove: 1 },
+    });
+    net.createPriceLine({ price: 0, color: s.zero, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
+    /* spot beside it, quiet, on a scale of its own that prints nothing */
+    const spot = chart.addSeries(LineSeries, { priceScaleId: 'spot', color: alpha(readToken('--text-muted', undefined, host), 0.6), lineWidth: 1, lineStyle: LineStyle.Dotted, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    /* room over the top tick: at 0.1 the scale's top figure was cut by the pane's edge */
+    chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.14, bottom: 0.08 } });
+    chart.priceScale('spot').applyOptions({ scaleMargins: { top: 0.14, bottom: 0.08 }, visible: false });
+    /* the clock (dayChart.ts dayClock): every minute of the session, hidden, on a scale of its own */
+    const clockS = chart.addSeries(LineSeries, { visible: false, priceScaleId: CLOCK_SCALE, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    chart.subscribeCrosshairMove(param => {
+      if (!param.sourceEvent) {
+        if (param.point === undefined && hoverRef.current) setHover(null);
+        return;
+      }
+      if (param.point === undefined || param.time === undefined) {
+        setHover(null);
+        return;
+      }
+      const i = indexRef.current.get(param.time as number);
+      const mi = i != null ? minutesRef.current[i] : null;
+      if (i == null || !mi) {
+        setHover(null);
+        return;
+      }
+      const x = chart.timeScale().timeToCoordinate(param.time) ?? param.point.x;
+      const heat = faceRef.current === 'heat';
+      const row = heat ? rowOf(param.point.y, chart.paneSize().height) : null;
+      const y = heat ? param.point.y : net.priceToCoordinate(mi.net) ?? param.point.y;
+      setHover({ i, row, x, y });
+    });
+    /* a click on the surface keeps its row's strike */
+    chart.subscribeClick(param => {
+      if (faceRef.current !== 'heat' || !param.point) return;
+      const row = rowOf(param.point.y, chart.paneSize().height);
+      const k = row != null ? strikesRef.current[row] : undefined;
+      if (k != null) onPickRef.current(k);
+    });
+    const readPlot = () => setPlot(prev => {
+      const w = chart.timeScale().width();
+      const h = chart.paneSize().height;
+      return prev.w === w && prev.h === h ? prev : { w, h };
+    });
+    chart.timeScale().subscribeSizeChange(readPlot);
+    const ro = new ResizeObserver(readPlot);
+    ro.observe(host);
+    chartRef.current = chart;
+    netRef.current = net;
+    spotRef.current = spot;
+    clockRef.current = clockS;
+    fedNet.current = null;
+    fedSpot.current = null;
+    return () => {
+      ro.disconnect();
+      chart.remove();
+      chartRef.current = null;
+      netRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paper]);
+
+  /* the face: the line, or the surface under the same clock (the chart's ground goes clear so the cells show through) */
+  useEffect(() => {
+    const host = hostRef.current;
+    netRef.current?.applyOptions({ visible: face === 'net' });
+    spotRef.current?.applyOptions({ visible: face === 'net' });
+    chartRef.current?.applyOptions({
+      layout: { background: { color: face === 'net' && host ? daySurface(host, paper).bg : 'transparent' } },
+      crosshair: { horzLine: { visible: face === 'net', labelVisible: face === 'net' } },
+    });
+    /* the scale keeps its width (the tape's plot ends on the same pixel) but prints no dollars over the strikes' names */
+    chartRef.current?.priceScale('right').applyOptions({ textColor: face === 'net' && host ? daySurface(host, paper).text : 'transparent', ticksVisible: face === 'net' });
+  }, [face, paper]);
+
+  /* the clock, when the day's span moves */
+  useEffect(() => {
+    const chart = chartRef.current;
+    const c = clockRef.current;
+    if (!chart || !c || !bars.length) return;
+    c.setData(dayClock(dayStart, FROM, TO));
+    chart.timeScale().fitContent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayStart, FROM, TO, paper, bars.length > 0]);
+
+  /* the net and spot — the newest minute only, unless the day itself changed */
+  const netPoints = useMemo<LineData<Time>[]>(() => minutes.map(m => ({ time: m.time as UTCTimestamp, value: m.net })), [minutes]);
+  const spotPoints = useMemo<LineData<Time>[]>(() => minutes.filter(m => m.spot != null).map(m => ({ time: m.time as UTCTimestamp, value: m.spot! })), [minutes]);
+  useEffect(() => {
+    if (netRef.current) feedSeries(netRef.current, netPoints, fedNet);
+    if (spotRef.current) feedSeries(spotRef.current, spotPoints, fedSpot);
+  }, [netPoints, spotPoints, paper]);
+
+  /* THE HEAT SURFACE, painted on a canvas over the chart's own plot — forty strikes by four hundred minutes is sixteen
+     thousand cells, each minute at the clock's own x; the strikes are named in the scale's lane */
+  useEffect(() => {
     const c = canvasRef.current;
-    if (!c || !W || !H) return;
+    const chart = chartRef.current;
+    const host = hostRef.current;
+    if (!c || !chart || !host) return;
+    const W = host.clientWidth;
+    const H = plot.h;
     const dpr = window.devicePixelRatio || 1;
     c.width = Math.round(W * dpr);
     c.height = Math.round(H * dpr);
+    c.style.width = `${W}px`;
+    c.style.height = `${H}px`;
     const ctx = c.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    const colW = Math.max(1, plotW / Math.max(1, TO - FROM));
+    if (face !== 'heat' || !strikes.length || !plot.w) return;
+    const ts = chart.timeScale();
+    const colW = Math.max(1, plot.w / Math.max(1, TO - FROM + 1));
+    const rowH = H / strikes.length;
+    /* rows and columns snapped to whole pixels, each cell meeting the next — fractional edges left a hairline between
+       every row */
+    const rowY = strikes.map((_, i) => Math.round(i * rowH));
+    rowY.push(Math.round(H));
     for (const m of minutes) {
-      const x = xOfMin(m.min);
-      strikes.forEach((k, i) => {
-        const v = m.byStrike.get(k);
-        if (v == null || v === 0) return;
+      const xc = ts.timeToCoordinate(m.time as UTCTimestamp);
+      if (xc == null) continue;
+      const x0 = Math.floor(xc - colW / 2);
+      const x1 = Math.ceil(xc + colW / 2);
+      for (let i = 0; i < strikes.length; i++) {
+        const v = m.byStrike.get(strikes[i]);
+        if (v == null || v === 0) continue;
         ctx.fillStyle = heatLaneColor(v, maxAbs, HEAT_MODE, 0.12, paper);
-        ctx.fillRect(x, yOfRow(i), colW + 0.5, Math.max(1, rowH - 0.5));
-      });
+        ctx.fillRect(x0, rowY[i], x1 - x0, rowY[i + 1] - rowY[i]);
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [face, minutes, strikes, maxAbs, W, H, paper, FROM, TO]);
+    /* the strikes, named in the scale's lane — every tenth or so, and the kept one */
+    const s = daySurface(host, paper);
+    ctx.font = "10px 'Inter', sans-serif";
+    ctx.textBaseline = 'middle';
+    const every = Math.max(1, Math.round(strikes.length / 10));
+    strikes.forEach((k, i) => {
+      const kept = focus != null && Math.abs(k - focus) < 1e-9;
+      if (i % every !== 0 && !kept) return;
+      ctx.fillStyle = kept ? resolveInk('rgb(var(--silver))', host) : s.text;
+      ctx.fillText(fmtStrike(k), plot.w + 8, i * rowH + rowH / 2);
+    });
+  }, [face, minutes, strikes, maxAbs, plot, paper, focus, FROM, TO]);
 
-  /* the hovered minute (and row, on the surface) */
-  const [hover, setHover] = useState<{ i: number; row: number | null } | null>(null);
-  useEffect(() => setHover(null), [minutes]);
-  const onMove = (clientX: number, clientY: number) => {
-    const r = hostRef.current?.getBoundingClientRect();
-    if (!r || !minutes.length) return setHover(null);
-    const min = FROM + ((clientX - r.left - ML) / plotW) * (TO - FROM);
-    let best = 0;
-    for (let i = 1; i < minutes.length; i++) if (Math.abs(minutes[i].min - min) < Math.abs(minutes[best].min - min)) best = i;
-    const row = face === 'heat' && rowH > 0 ? Math.max(0, Math.min(strikes.length - 1, Math.floor((clientY - r.top - MT) / rowH))) : null;
-    setHover({ i: best, row });
-  };
+  /* THE MINUTE, SHARED (idea 1): the pointer's minute told to the tape above; the tape's set here as this chart's own
+     crosshair */
   const hm = hover ? minutes[hover.i] : null;
-  /* THE MINUTE, SHARED (idea 1): the pointer's minute told to the tape above, the tape's drawn here as a quiet rule */
   const shared = useDayHover();
   useEffect(() => {
     if (!part) return;
     setDayHover(hm ? { min: hm.min, from: 'through' } : null);
   }, [part, hm]);
   useEffect(() => () => setDayHover(null), []);
-  const otherMin = part && hm == null && shared?.from === 'tape' ? shared.min : null;
-  /* a narrow plot (a phone) holds four hours, not eight */
-  const hours = dayHours(FROM, plotW < 480, TO);
-  const netPath = minutes.map((m, i) => `${i ? 'L' : 'M'}${xOfMin(m.min).toFixed(1)} ${yOfNet(m.net).toFixed(1)}`).join(' ');
-  const netArea = (sign: 1 | -1) => (minutes.length ? `${minutes.map((m, i) => `${i ? 'L' : 'M'}${xOfMin(m.min).toFixed(1)} ${yOfNet(sign > 0 ? Math.max(0, m.net) : Math.min(0, m.net)).toFixed(1)}`).join(' ')} L${xOfMin(minutes[minutes.length - 1].min).toFixed(1)} ${yOfNet(0).toFixed(1)} L${xOfMin(minutes[0].min).toFixed(1)} ${yOfNet(0).toFixed(1)} Z` : '');
-  const spotPath = minutes.filter(m => m.spot != null).map((m, i) => `${i ? 'L' : 'M'}${xOfMin(m.min).toFixed(1)} ${yOfSpot(m.spot!).toFixed(1)}`).join(' ');
+  useEffect(() => {
+    const chart = chartRef.current;
+    const net = netRef.current;
+    if (!chart || !net || hover) return;
+    if (part && shared?.from === 'tape' && minutes.length) {
+      const t = dayStart + shared.min * 60;
+      const i = indexOf.get(t);
+      if (i != null) {
+        chart.setCrosshairPosition(minutes[i].net, t as UTCTimestamp, net);
+        return;
+      }
+    }
+    chart.clearCrosshairPosition();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shared, hover == null, part]);
+  useEffect(() => setHover(h => (h && h.i < minutes.length ? h : null)), [minutes]);
+
   const flips = useMemo(() => {
     let n = 0;
     for (let i = 1; i < minutes.length; i++) if (Math.sign(minutes[i].net) !== Math.sign(minutes[i - 1].net) && minutes[i].net !== 0 && minutes[i - 1].net !== 0) n++;
@@ -205,22 +362,36 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
   }, [minutes]);
   const last = minutes[minutes.length - 1];
   const focusRow = focus != null ? strikes.findIndex(k => Math.abs(k - focus) < 1e-9) : -1;
+  const rowH = strikes.length && plot.h ? plot.h / strikes.length : 0;
   /* THE KEYS WALK IT TOO (the re-audit's M6) — the tape's walk: left and right along the minutes, up and down the
      strikes on the surface, Enter keeps the row's strike */
+  const walk = (i: number, row: number | null) => {
+    const chart = chartRef.current;
+    const net = netRef.current;
+    const mi = minutes[i];
+    if (!chart || !net || !mi) return;
+    chart.setCrosshairPosition(mi.net, mi.time as UTCTimestamp, net);
+    const x = chart.timeScale().timeToCoordinate(mi.time as UTCTimestamp) ?? 0;
+    setHover({ i, row, x, y: face === 'heat' && row != null ? row * rowH + rowH / 2 : net.priceToCoordinate(mi.net) ?? 0 });
+  };
   const onKeys = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget || !minutes.length) return;
     const i = hover?.i ?? minutes.length - 1;
     const row = hover?.row ?? (face === 'heat' ? (focusRow >= 0 ? focusRow : Math.floor(strikes.length / 2)) : null);
-    if (e.key === 'ArrowLeft') setHover({ i: Math.max(0, i - 1), row });
-    else if (e.key === 'ArrowRight') setHover({ i: Math.min(minutes.length - 1, i + 1), row });
-    else if (e.key === 'ArrowUp' && face === 'heat') setHover({ i, row: Math.max(0, (row ?? 0) - 1) });
-    else if (e.key === 'ArrowDown' && face === 'heat') setHover({ i, row: Math.min(strikes.length - 1, (row ?? -1) + 1) });
-    else if (e.key === 'Home') setHover({ i: 0, row });
-    else if (e.key === 'End') setHover({ i: minutes.length - 1, row });
+    if (e.key === 'ArrowLeft') walk(Math.max(0, i - 1), row);
+    else if (e.key === 'ArrowRight') walk(Math.min(minutes.length - 1, i + 1), row);
+    else if (e.key === 'ArrowUp' && face === 'heat') walk(i, Math.max(0, (row ?? 0) - 1));
+    else if (e.key === 'ArrowDown' && face === 'heat') walk(i, Math.min(strikes.length - 1, (row ?? -1) + 1));
+    else if (e.key === 'Home') walk(0, row);
+    else if (e.key === 'End') walk(minutes.length - 1, row);
     else if ((e.key === 'Enter' || e.key === ' ') && face === 'heat' && row != null && strikes[row] != null) onPick(strikes[row]);
-    else return;
+    else if (e.key === 'Escape') {
+      setHover(null);
+      chartRef.current?.clearCrosshairPosition();
+    } else return;
     e.preventDefault();
   };
+  const plotW = plot.w;
 
   return (
     <section className={`relative flex flex-col min-w-0 ${part ? 'flex-1' : ''}`} data-through-day data-through-face={face} data-through-part={part || undefined}>
@@ -275,89 +446,40 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
           </dl>
         )}
       </div>
-      <div className={part ? 'px-3 pb-3 flex-1 flex flex-col' : 'px-3 pb-3'}>
+      <div className={part ? 'flex-1 flex flex-col border-t border-borderSubtle/60' : 'border-t border-borderSubtle/60'}>
         <div
-          ref={hostRef}
-          className={`relative ${part ? 'flex-[1_1_260px] min-h-[170px]' : 'h-[260px]'} rounded-md border border-borderSubtle/60 bg-inset outline-none`}
+          className={`relative ${part ? 'flex-[1_1_260px] min-h-[170px]' : 'h-[260px]'} outline-none`}
           tabIndex={0}
           role="group"
           aria-label={`${ticker}'s book through the day — the arrow keys walk the minutes${face === 'heat' ? ' and the strikes, Enter keeps the strike' : ''}`}
           onKeyDown={onKeys}
-          onPointerMove={e => onMove(e.clientX, e.clientY)}
-          onPointerLeave={() => setHover(null)}
-          onClick={() => {
-            if (face === 'heat' && hover?.row != null && strikes[hover.row] != null) onPick(strikes[hover.row]);
-          }}
           data-through-plot
         >
-          {face === 'heat' && <canvas ref={canvasRef} className="absolute inset-0" style={{ width: W, height: H }} aria-hidden />}
-          {W > 0 && H > 0 && (
-            <svg width={W} height={H} className="relative block" role="img" aria-label={face === 'net' ? `${ticker}'s net gamma through the session, ${minutes.length} minutes` : `${ticker}'s gamma by strike through the session`}>
-              {hours.map(t => (
-                <g key={t}>
-                  <line x1={xOfMin(t)} x2={xOfMin(t)} y1={MT} y2={MT + plotH} stroke={RULE} />
-                  <text x={xOfMin(t)} y={H - 7} textAnchor={t === FROM ? 'start' : t === TO ? 'end' : 'middle'} fontFamily={MONO} fontSize={11} fill={INK_3}>
-                    {hhmm(t)}
-                  </text>
-                </g>
-              ))}
-              {face === 'net' && minutes.length > 1 && (
-                <g>
-                  <path d={netArea(1)} fill={alpha(SHORT_GAMMA, paper ? 0.1 : 0.14)} />
-                  <path d={netArea(-1)} fill={alpha(LONG_GAMMA, paper ? 0.1 : 0.14)} />
-                  <line x1={ML} x2={W - mr} y1={yOfNet(0)} y2={yOfNet(0)} stroke="rgb(var(--ink) / 0.35)" />
-                  {[-1, 0, 1].map(f => (
-                    <text key={f} x={ML - 8} y={yOfNet(f * netMax)} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={11} fill={INK_3}>
-                      {f === 0 ? '0' : fmtUsd(f * netMax)}
-                    </text>
-                  ))}
-                  {spotPath && <path d={spotPath} fill="none" stroke={INK_3} strokeOpacity={0.6} strokeWidth={1} strokeDasharray="2 2" />}
-                  {spotHi > spotLo && mr >= 100 && (
-                    <>
-                      <text x={W - mr + 8} y={MT + 4} fontFamily={MONO} fontSize={11} fill={INK_3}>{spotHi.toFixed(2)}</text>
-                      <text x={W - mr + 8} y={MT + plotH} fontFamily={MONO} fontSize={11} fill={INK_3}>{spotLo.toFixed(2)}</text>
-                      <text x={W - mr + 8} y={MT + plotH / 2 + 3} fontFamily={MONO} fontSize={11} fill={INK_3}>spot</text>
-                    </>
-                  )}
-                  <path d={netPath} fill="none" stroke={INK} strokeWidth={1.5} strokeLinejoin="round" />
-                </g>
-              )}
-              {face === 'heat' &&
-                strikes.map((k, i) =>
-                  i % Math.max(1, Math.round(strikes.length / 10)) === 0 || i === focusRow ? (
-                    <text key={k} x={ML - 8} y={yOfRow(i) + rowH / 2} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={11} fill={i === focusRow ? SILVER : INK_3} fontWeight={i === focusRow ? 700 : 400}>
-                      {fmtStrike(k)}
-                    </text>
-                  ) : null
-                )}
-              {face === 'heat' && focusRow >= 0 && <rect x={ML} y={yOfRow(focusRow)} width={plotW} height={Math.max(1, rowH)} fill="none" stroke={SILVER} strokeWidth={1.5} data-through-kept-row={focus ?? undefined} />}
-              {face === 'heat' && hover?.row != null && <rect x={ML} y={yOfRow(hover.row)} width={plotW} height={Math.max(1, rowH)} fill={alpha(SILVER, 0.08)} />}
-              {otherMin != null && <line x1={xOfMin(otherMin)} x2={xOfMin(otherMin)} y1={MT} y2={MT + plotH} stroke={SILVER} strokeOpacity={0.35} strokeDasharray="2 2" data-through-shared-minute />}
-              {hm && (
-                <g>
-                  <line x1={xOfMin(hm.min)} x2={xOfMin(hm.min)} y1={MT} y2={MT + plotH} stroke={SILVER} strokeOpacity={0.5} />
-                  {face === 'net' && <circle cx={xOfMin(hm.min)} cy={yOfNet(hm.net)} r={3.5} fill={SILVER} />}
-                </g>
-              )}
-            </svg>
-          )}
-          {hm && (
-            /* beside the point it reads (components/gex/besideDot.ts): the net line's dot, or the hovered strike's row */
+          {/* the surface, on the chart's own plot and UNDER it — the chart goes transparent on this face, so its crosshair,
+              its clock and its scale draw over the cells */}
+          <canvas ref={canvasRef} className="pointer-events-none absolute left-0 top-0" style={{ display: face === 'heat' ? 'block' : 'none' }} aria-hidden />
+          <div ref={hostRef} className="absolute inset-0" data-through-chart />
+          {face === 'heat' && rowH > 0 && focusRow >= 0 && <div className="pointer-events-none absolute left-0 border-y border-silver" style={{ top: focusRow * rowH, height: rowH, width: plotW }} data-through-kept-row={focus ?? undefined} />}
+          {face === 'heat' && rowH > 0 && hover?.row != null && <div className="pointer-events-none absolute left-0 bg-silver/[0.08]" style={{ top: hover.row * rowH, height: rowH, width: plotW }} />}
+          {hm && hover && (
+            /* Compare's glass, beside the point it reads (components/gex/besideDot.ts): the net line's dot, or the row */
             <div
-              className="pointer-events-none absolute whitespace-nowrap rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm"
-              style={W < 520 ? { left: 8, top: 8 } : besideDot(xOfMin(hm.min), face === 'net' ? yOfNet(hm.net) : hover?.row != null ? yOfRow(hover.row) + rowH / 2 : MT + plotH / 2, xOfMin(hm.min) > ML + plotW / 2)}
+              className="pointer-events-none absolute z-10 whitespace-nowrap rounded-md border border-borderSubtle px-2.5 py-1.5 font-mono text-[11px] text-textSecondary"
+              style={{ ...besideDot(hover.x, hover.y, hover.x > plotW / 2), background: 'rgba(8,8,10,0.88)', backdropFilter: 'blur(3px)' }}
+              data-theme="dark"
+              data-chart-glass
               data-through-card={hhmm(hm.min)}
             >
-              <span className="font-semibold tnum text-textPrimary">{hhmm(hm.min)}</span>
+              <span className="font-bold tnum text-textPrimary">{hhmm(hm.min)}</span>
               {face === 'net' ? (
                 <>
                   <span className="ml-2 tnum" style={{ color: hm.net >= 0 ? SHORT_GAMMA : LONG_GAMMA }}>
-                    {fmtUsd(hm.net)}
+                    {fmtUsd(hm.net)} · {hm.net >= 0 ? 'amplifies' : 'absorbs'}
                   </span>
                   {hm.spot != null && <span className="ml-2 tnum text-textMuted">spot {hm.spot.toFixed(2)}</span>}
                 </>
               ) : (
-                hover?.row != null &&
+                hover.row != null &&
                 strikes[hover.row] != null && (
                   <>
                     <span className="ml-2 tnum text-textPrimary">{fmtStrike(strikes[hover.row])}</span>
