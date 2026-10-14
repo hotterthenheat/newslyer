@@ -1510,7 +1510,10 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                 <div
                   key={drawn.key}
                   className={`h-full min-h-0 flex flex-col ${swapped ? 'animate-view-in' : ''}`}
-                  style={{ opacity: fading ? 0 : 1, transition: `opacity ${SWAP_OUT_MS}ms ease-in` }}
+                  /* THE READ MAKES ROOM (the paying-user audit's M10, 2026-10-13): laid over the right of the book it hid two
+                     greeks of a five-greek calendar; the book now steps left of it and re-fits — the read's own width, 460 or
+                     62% of the pane, the panel's own rule (BookRead) */
+                  style={{ opacity: fading ? 0 : 1, transition: `opacity ${SWAP_OUT_MS}ms ease-in`, paddingRight: read === 'open' && !tight ? 'min(460px, 62%)' : undefined }}
                   data-ledger-view={d.view}
                   data-ledger-shape={drawn.key}
                   data-ledger-fading={fading || undefined}

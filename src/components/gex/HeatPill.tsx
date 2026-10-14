@@ -74,7 +74,8 @@ export interface HeatPillProps {
   fontSize?: number;
   /** Another ramp for THIS surface only (the Ledger's thermal try) — the house ramp otherwise */
   mode?: HeatMode;
-  /** Half the side padding — a narrow cell (the Ledger's All at forty columns) keeps its short figure */
+  /** Less side padding — a narrow cell (the Ledger's All at forty columns) keeps its short figure: right-aligned, the
+      figure keeps its 4px on the right and gives the left up (the paying-user audit: "−187M" was 39px in 38) */
   tight?: boolean;
   /** On paper (the light page): the tint ramp, a faint colour on the page's grey — the surface says so, never the pill
       itself, because the surfaces that stay dark islands on the light page keep the dark ramp */
@@ -128,7 +129,7 @@ const HeatPill = ({
       title={title}
       onClick={onClick}
       style={{ ...heat, textShadow: halo, ...(selected ? { boxShadow: ring(ringColor ?? SELECTION_INK) } : null), ...(fontSize ? { fontSize } : null) }}
-      className={`relative flex min-w-0 items-center justify-end gap-1 rounded-full ${tight ? 'px-1' : 'px-2'} font-mono text-[11px] font-bold tnum leading-none transition-colors duration-700 ${
+      className={`relative flex min-w-0 items-center justify-end gap-1 rounded-full ${tight ? 'pl-px pr-1' : 'px-2'} font-mono text-[11px] font-bold tnum leading-none transition-colors duration-700 ${
         onClick ? 'cursor-pointer' : ''
       } ${className}`}
     >
