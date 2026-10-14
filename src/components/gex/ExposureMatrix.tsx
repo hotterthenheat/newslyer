@@ -331,7 +331,10 @@ const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, ring
       </PointerFollowCard>
     );
   };
-  const cardRow = card && !pinned ? rows.find(r => Math.abs(r.strike - card.strike) < 1e-9) ?? null : null;
+  /* THE HOVER GOES ON WHILE A STRIKE IS KEPT (the owner, 2026-10-14: "it should only do that if they click on that strike
+     and then it'll stay but for normal should just be an easy hover"): a kept strike keeps its card on its row, and the
+     pointer still reads every other row out — one card at a time, the kept one back when the pointer leaves */
+  const cardRow = card && !(keptStrike != null && Math.abs(card.strike - keptStrike) < 1e-9) ? rows.find(r => Math.abs(r.strike - card.strike) < 1e-9) ?? null : null;
   const keptRow = pinned ? rows.find(r => Math.abs(r.strike - keptStrike) < 1e-9) ?? null : null;
 
   /* THE KEYS REACH THE ROWS (the audit's H10, 2026-10-13): the table is one tab stop; ↑ ↓ walk the strikes, Home and End
@@ -604,7 +607,7 @@ const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, ring
         </tbody>
       </table>
       {cardRow && card && <Fragment key="card">{rowCard(cardRow, card)}</Fragment>}
-      {keptRow && keptPos && <Fragment key="kept">{rowCard(keptRow, keptPos, true)}</Fragment>}
+      {keptRow && keptPos && !cardRow && <Fragment key="kept">{rowCard(keptRow, keptPos, true)}</Fragment>}
     </div>
   );
 };

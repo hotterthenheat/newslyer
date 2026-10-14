@@ -695,7 +695,11 @@ const ExposureLedger = ({ surface, liveSpot, live = true, open = null, focusOn =
 
   const supremeGreek = greeks[0];
   const supremeDefault = supremeFor(supremeGreek);
-  const focus: Focus = pinned ?? hovered ?? { strike: supremeDefault.strike, e: supremeDefault.e, greek: supremeGreek };
+  /* THE HOVER GOES ON WHILE A CELL IS KEPT (the owner, 2026-10-14: a click keeps, "but for normal should just be an easy
+     hover"): the kept cell keeps its card, and the pointer still reads every other cell out — one card at a time, the kept
+     one back when the pointer leaves */
+  const hoveringElsewhere = !!(pinned && hovered && !(hovered.strike === pinned.strike && hovered.e === pinned.e && hovered.greek === pinned.greek));
+  const focus: Focus = hoveringElsewhere ? hovered! : pinned ?? hovered ?? { strike: supremeDefault.strike, e: supremeDefault.e, greek: supremeGreek };
   const fs = surface.strikes.indexOf(focus.strike);
   const ex = surface.expiries[focus.e];
   const putV = fs >= 0 ? surface.put[focus.greek][focus.e][fs] : 0;
@@ -1107,12 +1111,12 @@ const ExposureLedger = ({ surface, liveSpot, live = true, open = null, focusOn =
         </div>
       </div>
       {/* THE CARD — following the pointer over the cells, and on the clicked node (see `keptPos`) until the next click */}
-      {!pinned && hovered && hoverStart && (
+      {hovered && hoverStart && (!pinned || hoveringElsewhere) && (
         <PointerFollowCard start={hoverStart} dense width={CARD_W} title={cardTitle} aside={cardAside} foot={cardFoot} testId="data-ledger-card" testValue={keyOf(focus)}>
           {cardBody}
         </PointerFollowCard>
       )}
-      {pinned && keptPos && (
+      {pinned && keptPos && !hoveringElsewhere && (
         <PointerCard x={keptPos.x} y={keptPos.y} width={CARD_W} still dense title={cardTitle} aside={cardAside} foot={cardFoot} testId="data-ledger-card" testValue={keyOf(focus)}>
           {cardBody}
         </PointerCard>
