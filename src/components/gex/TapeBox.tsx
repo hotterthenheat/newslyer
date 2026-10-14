@@ -521,7 +521,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
   );
 
   return (
-    <section className={`relative flex flex-col min-w-0 ${part ? 'flex-1' : ''}`} data-tape-box data-tape-open={open || undefined} data-tape-part={part || undefined}>
+    <section className={`relative flex flex-col min-w-0 ${part ? 'flex-1 min-h-0' : ''}`} data-tape-box data-tape-open={open || undefined} data-tape-part={part || undefined}>
       <div className={part ? 'px-5 pt-2 pb-2 flex items-end gap-x-6 gap-y-2 flex-wrap' : 'px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap'}>
         {part ? (
           <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted" data-tape-part-word>
@@ -575,7 +575,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
       {open && (
         /* AS A PART OF THE DAY BOX the plot takes its share of the box's height — 240 at least, more when the box stands
            beside the book and is stretched to its height (2026-10-13) */
-        <div className={part ? 'flex-1 flex flex-col border-t border-borderSubtle/60' : 'border-t border-borderSubtle/60'}>
+        <div className={part ? 'flex-1 min-h-0 flex flex-col border-t border-borderSubtle/60' : 'border-t border-borderSubtle/60'}>
           <div
             className={`relative ${part ? 'flex-[1_1_240px] min-h-[150px]' : 'h-[260px]'} outline-none`}
             tabIndex={0}

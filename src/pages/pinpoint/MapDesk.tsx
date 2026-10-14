@@ -154,8 +154,15 @@ const MapDesk = () => {
   /* the boxes follow the track a beat behind (the audit's H7: a drag step took 110–190ms to paint) — the track and its
      moment stay on the pointer */
   const minutePos = useDeferredValue(Math.floor(framePos / 60) * 60);
-  const replaySnapMinute = useMemo(() => (range && scan ? snapshotAt(scan, range, minutePos) : null), [range, scan, minutePos]);
   const replayBars = useMemo(() => (range ? barsAt(range, minutePos) : undefined), [range, minutePos]);
+  /* ONE PRICE IN THE REPLAY TOO (2026-10-14): the minute's book carries the price it was figured at — the bar's open —
+     while the tape's Last is that minute's close; the book is handed the close, so the spot row and the tape agree */
+  const replaySnapMinute = useMemo(() => {
+    if (!range || !scan) return null;
+    const snap = snapshotAt(scan, range, minutePos);
+    const close = replayBars?.[replayBars.length - 1]?.close;
+    return snap && close != null && Number.isFinite(close) && close !== snap.spot ? { ...snap, spot: close } : snap;
+  }, [range, scan, minutePos, replayBars]);
   useEffect(() => {
     if (!playing?.playing || !range) return;
     const id = window.setInterval(() => {
@@ -325,7 +332,10 @@ const MapDesk = () => {
   const tapeSnap = useDeferredValue(shown('tape', tapeOn));
   const daySnap = useDeferredValue(shown('day', dayOn));
   const reportSnap = useDeferredValue(shown('report', reportOn));
-  if (!replayOn || reportOn || !heldRef.current.bars) heldRef.current.bars = replayBars;
+  /* the bars move while ANY box that reads them is on the screen — the tape and the day box read them too, and gated on
+     the report alone the tape stood still through a replay on a laptop screen, where the report sits below the fold
+     (2026-10-14) */
+  if (!replayOn || reportOn || tapeOn || dayOn || !heldRef.current.bars) heldRef.current.bars = replayBars;
   const reportBars = useDeferredValue(heldRef.current.bars);
   /** The shared strike belongs to ONE name — a box on another name never draws it */
   const focusFor = (t: string) => (focus && focus.ticker === t ? focus.price : null);

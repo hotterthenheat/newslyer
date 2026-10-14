@@ -67,6 +67,8 @@ interface ExposureLedgerProps {
   surface: ExposureSurface;
   /** The live spot for the rule between the rows — the surface itself is rebuilt only when spot has moved (see ExposureField) */
   liveSpot?: number;
+  /** False while the book is a replayed minute's — the spot row reads that minute, not the room (2026-10-14) */
+  live?: boolean;
   /** The same book as it stood at the session's open (levelview's `snapshotAtOpen` through `buildExposureSurface`),
       for every cell's "since the open" badge; null or absent, no badges */
   open?: ExposureSurface | null;
@@ -269,7 +271,7 @@ const LedgerCell = memo(({ strike, e, g, v, maxAbs, date, first, wash, isKing, r
   </div>
 ));
 
-const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greeks, leg = 'net', expiries, rings, hoverStrike, palette = 'house', afterBell = false, selectedStrike, marks, onPointer, onSelectStrike, fitKey, onFit, paper = false, wantCols, onNatural }: ExposureLedgerProps) => {
+const ExposureLedger = ({ surface, liveSpot, live = true, open = null, focusOn = false, greeks, leg = 'net', expiries, rings, hoverStrike, palette = 'house', afterBell = false, selectedStrike, marks, onPointer, onSelectStrike, fitKey, onFit, paper = false, wantCols, onNatural }: ExposureLedgerProps) => {
   const mode = palette === 'thermal' ? ('thermal-yellow' as const) : undefined;
   /* one leg alone is painted against its own heaviest cell — the net's scale would read a call leg against puts it
      never had */
@@ -368,10 +370,15 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
   /* THE ROWS SPLIT ROUND THE PRICE NOW (one price on the page, 2026-10-14): the first strike at or over the room's price
      (pages/pinpoint/useRoomScan.ts) — the grid re-renders on it only when the price crosses a strike; the pill between
      the rows reads the price itself (RoomSpotRule). Infinity when the price stands over every strike. */
-  const spotAt = useRoomSpotRead(surface.ticker, sp => {
-    const price = sp ?? liveSpot ?? surface.spot;
-    return surface.strikes.find(s => s >= price) ?? Infinity;
-  });
+  const spotAt = useRoomSpotRead(
+    surface.ticker,
+    sp => {
+      const price = sp ?? liveSpot ?? surface.spot;
+      return surface.strikes.find(s => s >= price) ?? Infinity;
+    },
+    Object.is,
+    live
+  );
   // Descending, the ledger's way — the window's rings each side of spot
   const { above, below } = useMemo(() => {
     const desc = [...surface.strikes].sort((a, b) => b - a);
@@ -833,8 +840,9 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
   const cardBody = (
     <>
       {cardTags.length > 0 && <span className="col-span-2 -mt-0.5 mb-0.5 flex items-center gap-2 text-[11px] uppercase tracking-widest whitespace-nowrap">{cardTags}</span>}
-      <CardRow k="Put" v={fmtUsd(putV)} sub={pct(putV)} ink={PUT_INK} />
-      <CardRow k="Call" v={fmtUsd(callV)} sub={pct(callV)} ink={CALL_INK} />
+      {/* the percent says what it is of: the smaller leg against the bigger (2026-10-14) */}
+      <CardRow k="Put" v={fmtUsd(putV)} sub={empty ? '' : Math.abs(putV) >= Math.abs(callV) ? 'the bigger leg' : `${pct(putV)} of the calls`} ink={PUT_INK} />
+      <CardRow k="Call" v={fmtUsd(callV)} sub={empty ? '' : Math.abs(callV) > Math.abs(putV) ? 'the bigger leg' : `${pct(callV)} of the puts`} ink={CALL_INK} />
       <CardRow k={`Net · ${GREEK_LABEL[focus.greek]}`} v={fmtUsd(netV)} sub={empty ? 'nothing' : netV >= 0 ? 'put-heavy' : 'call-heavy'} ink={empty ? 'rgb(var(--text-muted))' : heatLaneColor(netV, surface.maxAbs[focus.greek], mode ?? HEAT_MODE, 0.35, paper)} />
       {oi > 0 && <CardRow k="Open interest" v={oi.toLocaleString('en-US')} sub="contracts" />}
       {sinceHere && <CardRow k="Since the open" v={sinceHere.figure ?? sinceHere.words} sub={sinceHere.figure ? sinceHere.words : undefined} ink={sinceInk(sinceHere.dir)} />}
@@ -1025,7 +1033,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
               si === above.length && <div key="spot-strike" aria-hidden />,
               si === above.length && (
                 <div key="spot" data-spot-row className="px-1.5 flex items-center" style={{ gridColumn: `span ${cols}` }}>
-                  <RoomSpotRule ticker={surface.ticker} fallback={liveSpot ?? surface.spot} centre />
+                  <RoomSpotRule ticker={surface.ticker} fallback={liveSpot ?? surface.spot} centre live={live} />
                 </div>
               ),
               <div

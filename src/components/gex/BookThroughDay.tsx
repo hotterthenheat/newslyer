@@ -257,7 +257,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, scope, part = false, at }: P
   const plotW = hostRef.current?.clientWidth ?? 0;
 
   return (
-    <section className={`relative flex flex-col min-w-0 ${part ? 'flex-1' : ''}`} data-through-day data-through-part={part || undefined}>
+    <section className={`relative flex flex-col min-w-0 ${part ? 'flex-1 min-h-0' : ''}`} data-through-day data-through-part={part || undefined}>
       <div className={part ? 'px-5 pt-2 pb-2 flex items-end gap-6 flex-wrap' : 'px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap'}>
         <div className={part ? 'flex items-center gap-3 flex-wrap' : 'min-w-0 flex-1'}>
           <div className="flex items-center gap-3 flex-wrap">
@@ -291,7 +291,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, scope, part = false, at }: P
           </dl>
         )}
       </div>
-      <div className={part ? 'flex-1 flex flex-col border-t border-borderSubtle/60' : 'border-t border-borderSubtle/60'}>
+      <div className={part ? 'flex-1 min-h-0 flex flex-col border-t border-borderSubtle/60' : 'border-t border-borderSubtle/60'}>
         <div
           className={`relative ${part ? 'flex-[1_1_260px] min-h-[170px]' : 'h-[260px]'} outline-none`}
           tabIndex={0}

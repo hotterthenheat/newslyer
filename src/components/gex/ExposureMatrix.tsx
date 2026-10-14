@@ -46,7 +46,7 @@ import PointerCard, { CardRow, PointerFollowCard, letGoWords } from '../ui/Point
 const letGo = letGoWords();
 import { fmtUsd } from '../../data/gex';
 import { GREEKS, GREEK_UNIT, type ExposureSurface, type Greek } from '../../data/exposureSurface';
-import { CALL_WALL, EMBER, FLIP, GLACIER, PUT_WALL, SUPREME } from './paletteInk';
+import { ABSORB, AMPLIFY, CALL_WALL, EMBER, FLIP, GLACIER, PUT_WALL, SUPREME } from './paletteInk';
 import { strikeRole, underlineClass } from './strikeRole';
 import StrikeNum, { hasCents } from './StrikeNum';
 import { useResolvedTheme } from '../../theme/theme';
@@ -55,6 +55,8 @@ import type { SurfaceCell } from './exposureView';
 interface ExposureMatrixProps {
   surface: ExposureSurface;
   liveSpot: number;
+  /** False while the book is a replayed minute's — the spot row reads that minute, not the room (2026-10-14) */
+  live?: boolean;
   /** The greeks drawn, in the band's pick — a column group each */
   greeks: Greek[];
   /** Indices into surface.expiries — the band's window, summed per cell */
@@ -150,7 +152,7 @@ const Cell = ({ value, leg, cap, mode, paper, gi, first, last, mirror, tight = f
   );
 };
 
-const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrike, palette = 'house', selectedStrike, marks, onPointer, onSelectStrike, lead: leadProp, legs: legsPick = 'net', onNatural }: ExposureMatrixProps) => {
+const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, rings, hoverStrike, palette = 'house', selectedStrike, marks, onPointer, onSelectStrike, lead: leadProp, legs: legsPick = 'net', onNatural }: ExposureMatrixProps) => {
   const mode: HeatMode = palette === 'thermal' ? 'thermal-yellow' : HEAT_MODE;
   const LEGS = useMemo(() => legsOf(legsPick), [legsPick]);
   const paper = useResolvedTheme() === 'light';
@@ -162,7 +164,7 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
   /* THE ROWS SPLIT ROUND THE PRICE NOW (one price on the page, 2026-10-14 — the spot row sat where the ten-second scan
      had left it while the head ticked on): the count of strikes at or over the room's price, re-rendered on only when
      it changes; the pill between them reads the price itself (RoomSpotRule) */
-  const splitAt = useRoomSpotRead(surface.ticker, sp => surface.strikes.filter(s => s >= (sp ?? liveSpot ?? surface.spot)).length);
+  const splitAt = useRoomSpotRead(surface.ticker, sp => surface.strikes.filter(s => s >= (sp ?? liveSpot ?? surface.spot)).length, Object.is, live);
   const { above, below } = useMemo(() => {
     const desc = [...surface.strikes].sort((a, b) => b - a);
     return {
@@ -258,6 +260,14 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
         return;
       }
       const r = row.getBoundingClientRect();
+      /* ONLY WHILE ITS ROW IS ON THE SCREEN (2026-10-14, the phone: clamped to the viewport, the card rode the top-left
+         corner over the day box and the report as the page scrolled) — the chip in the head keeps the strike meanwhile */
+      const b = box?.getBoundingClientRect();
+      const seen = r.bottom > 0 && r.top < window.innerHeight && (!b || (r.bottom > b.top && r.top < b.bottom));
+      if (!seen) {
+        setKeptPos(null);
+        return;
+      }
       const td = row.firstElementChild?.getBoundingClientRect();
       setKeptPos({ x: r.left + (at ? at.dx : (td?.width ?? 80) + 8), y: r.top + (at ? at.dy : r.height / 2) });
     };
@@ -296,20 +306,26 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
       </>
     );
     const aside = `${distPct >= 0 ? '+' : '−'}${Math.abs(distPct).toFixed(2)}% · ${distPct >= 0 ? 'above' : 'below'} spot`;
+    /* THE CARD ENDS IN PLAIN WORDS, the calendar's way (the owner's walks, 2026-10-14: the matrix is the view the page
+       opens on and its card stopped at a count of contracts); the percent says what it is of — the column's heaviest */
+    const empty = Math.abs(l.put) < 1e-9 && Math.abs(l.call) < 1e-9;
+    const verdict = empty ? 'nothing here · no hedging at this strike' : lead === 'gex' ? (l.net >= 0 ? 'peak · hedging amplifies a move here' : 'well · hedging absorbs a move here') : l.net >= 0 ? 'the put side wins here' : 'the call side wins here';
+    const verdictInk = empty ? 'rgb(var(--text-muted))' : l.net >= 0 ? AMPLIFY : ABSORB;
     const body = (
       <>
-        <CardRow k="Put" v={fmtUsd(l.put)} sub={pct(l.put, caps[lead].put)} ink={PUT_INK} />
-        <CardRow k="Call" v={fmtUsd(l.call)} sub={pct(l.call, caps[lead].call)} ink={CALL_INK} />
-        <CardRow k={`Net · ${GREEK_LABEL[lead]}`} v={fmtUsd(l.net)} sub={l.net >= 0 ? 'put-heavy' : 'call-heavy'} ink={ink} />
+        <CardRow k="Put" v={fmtUsd(l.put)} sub={`${pct(l.put, caps[lead].put)} of the heaviest`} ink={PUT_INK} />
+        <CardRow k="Call" v={fmtUsd(l.call)} sub={`${pct(l.call, caps[lead].call)} of the heaviest`} ink={CALL_INK} />
+        <CardRow k={`Net · ${GREEK_LABEL[lead]}`} v={fmtUsd(l.net)} sub={empty ? 'nothing' : l.net >= 0 ? 'put-heavy' : 'call-heavy'} ink={empty ? 'rgb(var(--text-muted))' : ink} />
         {oi > 0 && <CardRow k="Open interest" v={Math.round(oi).toLocaleString()} sub="contracts" />}
       </>
     );
+    const words = <span style={{ color: verdictInk }}>{verdict}</span>;
     return still ? (
-      <PointerCard x={start.x} y={start.y} still width={CARD_W} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside} foot={<span className="text-[11px] uppercase tracking-widest text-textMuted">kept · {letGo}</span>}>
+      <PointerCard x={start.x} y={start.y} still width={CARD_W} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside} foot={<>{words}<span className="block mt-0.5 text-[11px] uppercase tracking-widest text-textMuted">kept · {letGo}</span></>}>
         {body}
       </PointerCard>
     ) : (
-      <PointerFollowCard start={start} width={CARD_W} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside}>
+      <PointerFollowCard start={start} width={CARD_W} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside} foot={words}>
         {body}
       </PointerFollowCard>
     );
@@ -580,7 +596,7 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
                 past the pane's edge (four names at 768, 2026-10-13) */}
             {!stacked && <td aria-hidden />}
             <td colSpan={stacked ? cols : cols - 1} className="px-2 py-1">
-              <RoomSpotRule ticker={surface.ticker} fallback={liveSpot ?? surface.spot} centre />
+              <RoomSpotRule ticker={surface.ticker} fallback={liveSpot ?? surface.spot} centre live={live} />
             </td>
           </tr>
           {rowsBelow.map(renderRow)}

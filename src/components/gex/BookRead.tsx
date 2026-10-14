@@ -30,7 +30,7 @@
 ==================================================
 */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PanelRightClose, PanelRightOpen, X } from 'lucide-react';
 import { GREEK_LABEL } from '../../data/compare';
 import { buildExposureProfile, type StrikeWindow } from '../../data/exposure';
@@ -302,17 +302,33 @@ const BookRead = ({ surface, snapshot, greek, mode = HEAT_MODE, expiries, afterB
 
   const unit = GREEK_UNIT[greek];
   const label = GREEK_LABEL[greek];
+  /* THE WHOLE COLUMN WHEN THE COLUMN IS NARROW (the owner's walk, 2026-10-14): beside the day box the book's column is
+     ~374px, and a panel over 62% of it cut "SUPRE…", "$1.2" and ran VANNA into CHARM — under 620px the read takes the
+     column, as it does with names side by side */
+  const asideRef = useRef<HTMLElement | null>(null);
+  const [narrow, setNarrow] = useState(false);
+  useLayoutEffect(() => {
+    const host = asideRef.current?.parentElement;
+    if (!host) return;
+    const read = () => setNarrow(host.clientWidth < 620);
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(host);
+    return () => ro.disconnect();
+  }, []);
+  const whole = fill || narrow;
 
   return (
     <aside
+      ref={asideRef}
       className={`absolute inset-y-0 right-0 z-20 flex flex-col bg-card/85 backdrop-blur-md backdrop-saturate-150 animate-soft-in transition-opacity duration-200 motion-reduce:transition-none ${
         /* 460, the guide cards' width: at 400 the rail's five names wrapped inside their buttons and the head cut its
            own words (the audit's H6, 2026-10-13) */
-        fill ? 'w-full' : 'w-[460px] max-w-[62%] border-l border-borderMuted shadow-[-16px_0_48px_rgba(0,0,0,0.45)]'
+        whole ? 'w-full' : 'w-[460px] max-w-[62%] border-l border-borderMuted shadow-[-16px_0_48px_rgba(0,0,0,0.45)]'
       } ${closing ? 'opacity-0 pointer-events-none' : ''}`}
       aria-label={`${surface.ticker}'s read`}
       data-book-read={surface.ticker}
-      data-read-fill={fill || undefined}
+      data-read-fill={whole || undefined}
     >
       {/* THE HEAD — whose read, in which greek, over which window */}
       <div className="shrink-0 flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle/70 min-w-0">

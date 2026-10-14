@@ -15,8 +15,8 @@
 import SpotRule from '../ui/SpotRule';
 import { useRoomSpot } from '../../pages/pinpoint/useRoomScan';
 
-const RoomSpotRule = ({ ticker, fallback, centre = false }: { ticker: string; /** The book's own spot, for a name the room has no price for yet */ fallback: number; centre?: boolean }) => {
-  const spot = useRoomSpot(ticker);
+const RoomSpotRule = ({ ticker, fallback, centre = false, live = true }: { ticker: string; /** The book's own spot, for a name the room has no price for yet — and the replayed minute's while a replay runs */ fallback: number; centre?: boolean; /** False while the book is a replayed minute's: the pill reads that minute, not the room */ live?: boolean }) => {
+  const spot = useRoomSpot(ticker, live);
   return <SpotRule ticker={ticker} price={spot ?? fallback} centre={centre} />;
 };
 

@@ -53,6 +53,8 @@ interface Props {
   selectedStrike?: number | null;
   onSelectStrike?: (strike: number) => void;
   paper?: boolean;
+  /** False while the book is a replayed minute's — the spot rule reads that minute, not the room */
+  live?: boolean;
 }
 
 interface Rule {
@@ -65,12 +67,12 @@ interface Rule {
 
 type Chart = IChartApiBase<number>;
 
-const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSelectStrike, paper: paperProp }: Props) => {
+const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSelectStrike, paper: paperProp, live = true }: Props) => {
   const paper = useResolvedTheme() === 'light' || !!paperProp;
   const curve = useMemo(() => buildExposureCurve(surface, expiries), [surface, expiries]);
   const { points } = curve;
   /* the room's price (one price on the page, 2026-10-14) */
-  const roomSpot = useRoomSpot(surface.ticker);
+  const roomSpot = useRoomSpot(surface.ticker, live);
   const spot = roomSpot ?? liveSpot ?? surface.spot;
   const x0 = points[0]?.spot ?? spot;
   const x1 = points[points.length - 1]?.spot ?? spot;

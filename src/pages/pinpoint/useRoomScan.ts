@@ -42,19 +42,20 @@ export const ownScan = (ticker: string): MarketSnapshot | null => scanOf(ticker)
 */
 
 /** A name's price now, as every box on the page prints it — null for a name with no price yet */
-export function useRoomSpot(ticker: string | null | undefined): number | null {
+export function useRoomSpot(ticker: string | null | undefined, live = true): number | null {
   useBookVersion();
-  const tick = useSpot(ticker ?? null);
-  if (!ticker) return null;
+  const tick = useSpot(live ? ticker ?? null : null);
+  if (!ticker || !live) return null;
   if (bookMarket().src === 'feed') return scanOf(ticker)?.snap?.spot ?? tick;
   return tick;
 }
 
 /** A READING of a name's price now, re-rendering only when the reading changes — a grid that splits its rows round the
     price wants the strike the price is under, not every cent of every tick */
-export function useRoomSpotRead<T>(ticker: string, read: (spot: number | null) => T, isEqual: (a: T, b: T) => boolean = Object.is): T {
+export function useRoomSpotRead<T>(ticker: string, read: (spot: number | null) => T, isEqual: (a: T, b: T) => boolean = Object.is, live = true): T {
   useBookVersion();
-  const house = useMarketSelect(s => read(s.quotes[ticker]?.spot ?? (s.snapshot && s.snapshot.ticker === ticker ? s.snapshot.spot : null)), isEqual);
+  const house = useMarketSelect(s => read(live ? (s.quotes[ticker]?.spot ?? (s.snapshot && s.snapshot.ticker === ticker ? s.snapshot.spot : null)) : null), isEqual);
+  if (!live) return read(null);
   if (bookMarket().src === 'feed') return read(scanOf(ticker)?.snap?.spot ?? null);
   return house;
 }
