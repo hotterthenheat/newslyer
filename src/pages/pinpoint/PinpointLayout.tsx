@@ -1,6 +1,7 @@
 import { useRef, Suspense, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useOutlet } from 'react-router-dom';
 import { PinpointPageSkeleton } from './pinpointSkeletons';
+import { useSettle } from '../../components/ui/Settle';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowUpRight, Layers, Ruler, X } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
@@ -172,6 +173,8 @@ const PinpointLayout = () => {
   /* whether the head has scrolled away — the strip below shows then (idea 3) */
   const headRef = useRef<HTMLElement>(null);
   const [stuck, setStuck] = useState(false);
+  /* the head falls into place first as the page opens (ui/Settle.ts); the page's boxes follow it */
+  const settle = useSettle();
   useEffect(() => {
     const el = headRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
@@ -188,7 +191,7 @@ const PinpointLayout = () => {
       {/* THE FRAME OWNS THE SUBJECT AND THE PAGES (direction B, 2026-09-05): the
           sidebar carries the ticker and the Map · Ahead · … choice, so this head
           no longer repeats them. It names the page and reads the market. */}
-      <header ref={headRef} className="flex items-center gap-x-3 2xl:gap-x-5 gap-y-2 flex-wrap pb-2.5 border-b border-borderSubtle" data-shell>
+      <header ref={headRef} {...settle(0)} className={`flex items-center gap-x-3 2xl:gap-x-5 gap-y-2 flex-wrap pb-2.5 border-b border-borderSubtle ${settle(0).className}`} data-shell>
         {/* THE PAGE'S NAME, AND NOTHING ELSE AROUND IT (the owner, 2026-10-14): the icon in a box and the one-liner under the
             name were the generic page head — the name alone, the line in its title; a kept strike and a replay stand beside it
             as flat marks */}

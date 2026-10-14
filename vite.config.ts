@@ -37,6 +37,17 @@ export default defineConfig(({ mode }) => {
         clientFiles: ['./src/main.tsx', './src/pages/landing/Landing.tsx', './src/pages/workspace/Pulse.tsx'],
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          /* THE TERMINAL IN FEWER PIECES (2026-10-14, the load-time pass): with every page its own chunk, the modules
+             they share became chunks of their own — close to three hundred files, most under a kilobyte, and the shell
+             alone asked for 130 of them in one burst before it could render. Rollup folds the small ones into the
+             chunks loaded beside them where that loads nothing a page did not need. */
+          experimentalMinChunkSize: 8_000,
+        },
+      },
+    },
     resolve: {
       // One React, always — guards against mixed pre-bundle generations
       // ("Invalid hook call") when deps are installed mid-flight.

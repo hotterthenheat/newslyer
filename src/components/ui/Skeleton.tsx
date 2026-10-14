@@ -29,6 +29,7 @@
 */
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useGateUp } from '../layout/LaunchTransition';
 
 interface SkeletonProps {
   className?: string;
@@ -115,9 +116,12 @@ interface DeferredProps {
 /** Mounts its children a frame or two after first paint — the skeleton holds the box meanwhile */
 export const Deferred = ({ children, fallback, index = 0, frames = 1, className }: DeferredProps) => {
   const [ready, setReady] = useState(false);
+  /* under the launch gate nobody sees a frame (2026-10-14): the boxes mount one frame apart, not twenty, so the page
+     the gate lifts onto is whole — the gate itself waits for that (LaunchTransition) */
+  const gateUp = useGateUp();
   useEffect(() => {
     let raf = 0;
-    let n = frames + index;
+    let n = gateUp ? 1 + index : frames + index;
     const step = () => {
       if (n-- <= 0) {
         setReady(true);

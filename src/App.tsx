@@ -37,7 +37,8 @@ const AppShell = lazy(loadShell);
 /* the wrong address's pages, likewise only when an address is wrong */
 const NotFoundInside = lazy(() => import('./pages/notFound/NotFound').then(m => ({ default: m.NotFoundInside })));
 const NotFoundPrompt = lazy(() => import('./pages/notFound/NotFound').then(m => ({ default: m.NotFoundPrompt })));
-const Pulse = lazy(() => import('./pages/workspace/Pulse'));
+const loadPulse = () => import('./pages/workspace/Pulse');
+const Pulse = lazy(loadPulse);
 const PulseBoard = lazy(() => import('./pages/PulseBoard'));
 const Terrain = lazy(() => import('./pages/terrain/Terrain'));
 /* Compass walked (2026-09-11): one shell over the board and a setup's own page */
@@ -115,8 +116,10 @@ const GlossaryPage = lazy(() => import('./pages/glossary/Glossary'));
 const TerrainPopOut = lazy(() => import('./pages/popout/TerrainPopOut'));
 /* THE SETTINGS (2026-09-12): the theme first, the rest of the desk's preferences behind it */
 const Settings = lazy(() => import('./pages/settings/Settings'));
-const PinpointLayout = lazy(() => import('./pages/pinpoint/PinpointLayout'));
-const MapDesk = lazy(() => import('./pages/pinpoint/MapDesk'));
+const loadPinpointLayout = () => import('./pages/pinpoint/PinpointLayout');
+const loadMapDesk = () => import('./pages/pinpoint/MapDesk');
+const PinpointLayout = lazy(loadPinpointLayout);
+const MapDesk = lazy(loadMapDesk);
 const Ahead = lazy(() => import('./pages/pinpoint/Ahead'));
 const Building = lazy(() => import('./pages/pinpoint/Building'));
 const AtTheWall = lazy(() => import('./pages/pinpoint/AtTheWall'));
@@ -158,7 +161,23 @@ const PaperProduct = lazy(() => import('./pages/landing/products/PracticePages')
 const BacktestProduct = lazy(() => import('./pages/landing/products/PracticePages').then(m => ({ default: m.BacktestPage })));
 const JournalProduct = lazy(() => import('./pages/landing/products/PracticePages').then(m => ({ default: m.JournalPage })));
 /* THE START PAGE (2026-10-03): every page of the rail as a card; where the landing's launch door lands the first time */
-const Start = lazy(() => import('./pages/start/Start'));
+const loadStart = () => import('./pages/start/Start');
+const Start = lazy(loadStart);
+
+/* THE PAGE A LOAD LANDS ON IS FETCHED WITH THE SHELL (2026-10-14, the load-time pass): a page's chunk was asked for
+   only once the shell stood and its route rendered — on the Map, 700ms into the load, after the room's source was
+   known — and then parsed on the critical path to the first number. The pages a full load commonly lands on (the
+   front door, the start page, the Map) are fetched here, in the first script, beside the shell's own chunks; the
+   route's lazy import finds them in. Nothing else changes: a page not listed loads as it did. */
+const BOOT_PAGES: [RegExp, () => Promise<unknown>][] = [
+  [/^\/pulse\/?$/, loadPulse],
+  [/^\/start\/?$/, loadStart],
+  [/^\/pinpoint\/map\/?$/, () => Promise.all([loadPinpointLayout(), loadMapDesk()])],
+];
+if (typeof window !== 'undefined' && !EMBEDDED) {
+  const page = BOOT_PAGES.find(([at]) => at.test(window.location.pathname));
+  if (page) void page[1]().catch(() => undefined);
+}
 
 /* WHERE A PAGE OUTSIDE THE TERMINAL OPENS (2026-10-09, the audit's L-3 and OU-B2): a page reached by a link opens at its
    top — the landing's "Choose Compass", after a Back from the sign-up form, opened /signup scrolled to its foot, the

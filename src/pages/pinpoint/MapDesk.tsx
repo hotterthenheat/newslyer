@@ -38,6 +38,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { useFocus } from '../../context/FocusContext';
 import ScopeChip from '../../components/ui/ScopeChip';
 import { Deferred } from '../../components/ui/Skeleton';
+import { useSettle } from '../../components/ui/Settle';
 import { CalendarInner, DayInner, MapPageSkeleton, ReportInner } from './pinpointSkeletons';
 import ExposureField from '../../components/gex/ExposureField';
 import TraderClock from '../../components/gex/TraderClock';
@@ -155,6 +156,8 @@ const MapDesk = () => {
   /* the boxes follow the track a beat behind (the audit's H7: a drag step took 110–190ms to paint) — the track and its
      moment stay on the pointer */
   const minutePos = useDeferredValue(Math.floor(framePos / 60) * 60);
+  /* the boxes fall into place as the page opens, a beat apart, after the head (ui/Settle.ts) */
+  const settle = useSettle();
   const replayBars = useMemo(() => (range ? barsAt(range, minutePos) : undefined), [range, minutePos]);
   /* ONE PRICE IN THE REPLAY TOO (2026-10-14): the minute's book carries the price it was figured at — the bar's open —
      while the tape's Last is that minute's close; the book is handed the close, so the spot row and the tape agree */
@@ -473,9 +476,9 @@ const MapDesk = () => {
           from 640px up and stretched to the book's height, its two charts sharing the extra; where the day box would
           be under 640 it wraps under the book at the page's full width, as before. */}
       <div id="map-book" className="flex flex-col gap-2 max-sm:scroll-mt-24 sm:scroll-mt-12" data-map-book-wrap>
-      <div ref={setBandSlot} className="empty:hidden border border-borderSubtle rounded-md bg-panel overflow-hidden [&>[data-ledger-toolbar]]:border-b-0" data-map-band-slot />
+      <div ref={setBandSlot} {...settle(1)} className={`empty:hidden border border-borderSubtle rounded-md bg-panel overflow-hidden [&>[data-ledger-toolbar]]:border-b-0 ${settle(1).className}`} data-map-band-slot />
       <div ref={setTopRow} className="flex flex-wrap items-stretch gap-4" data-map-top-row data-day-beside={dayBeside || undefined} data-band-need={bandNeed || undefined} data-head-room={headRoom || undefined} data-band-up={bandUp || undefined}>
-      <div ref={calRef} className="shrink-0 grow-0 max-w-full border border-borderSubtle rounded-md overflow-hidden flex flex-col" style={{ width: dayBeside ? bookW : '100%', height: bookH }} data-book-w={bookW || undefined} data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
+      <div ref={calRef} {...settle(2)} className={`shrink-0 grow-0 max-w-full border border-borderSubtle rounded-md overflow-hidden flex flex-col ${settle(2).className}`} style={{ ...settle(2).style, width: dayBeside ? bookW : '100%', height: bookH }} data-book-w={bookW || undefined} data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
         <Deferred index={0} frames={0} fallback={<CalendarInner />} className="h-full min-h-0 flex flex-col animate-fade-in">
           <ExposureField
             snapshot={calSnap ?? scan}
@@ -508,7 +511,7 @@ const MapDesk = () => {
           foldable, remembered. The replay rewinds it with the report's bars. */}
       {/* …AND THE BOOK THROUGH THE DAY UNDER IT ON THE SAME CLOCK (idea 1, 2026-10-13): one box, the tape over the net
           gamma, the minute under the pointer marked on both — DayBox.tsx */}
-      <div ref={tapeRef} id="map-session" className="flex-[1_1_640px] min-w-0 flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12" style={dayBeside ? { height: bookH } : undefined} data-session data-scope-ticker={tapeTicker} data-on-screen={tapeOn}>
+      <div ref={tapeRef} id="map-session" {...settle(3)} className={`flex-[1_1_640px] min-w-0 flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12 ${settle(3).className}`} style={dayBeside ? { ...settle(3).style, height: bookH } : settle(3).style} data-session data-scope-ticker={tapeTicker} data-on-screen={tapeOn}>
         <DayBox scope={chipFor('tape', tapeTicker)}>
           <TapeBox part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} at={playing && tapeTicker === ticker ? replayMinute(framePos, range) : undefined} />
           <BookThroughDay part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} at={playing && tapeTicker === ticker ? replayMinute(framePos, range) : undefined} />
@@ -526,14 +529,14 @@ const MapDesk = () => {
           370px of rows; side by side a big monitor's page is a screen shorter. `contents` below that, so the flex column
           above still lays them out one under the other. */}
       <div className="contents min-[1880px]:grid min-[1880px]:grid-cols-[580px_minmax(0,1fr)] min-[1880px]:gap-4 min-[1880px]:items-stretch" data-map-wide-row>
-      <div ref={dayRef} id="map-clock" className="flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12" data-day data-scope-ticker={dayTicker} data-on-screen={dayOn}>
+      <div ref={dayRef} id="map-clock" {...settle(4)} className={`flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12 ${settle(4).className}`} data-day data-scope-ticker={dayTicker} data-on-screen={dayOn}>
         <Deferred index={1} frames={22} fallback={<DayInner />} className="flex-1 flex flex-col animate-fade-in">
           <TraderClock snapshot={daySnap ?? scan} scope={chipFor('day', dayTicker)} at={playing && dayTicker === ticker ? replayMinute(framePos, range) : undefined} />
         </Deferred>
       </div>
       {/* HOW THE LEVELS HELD TODAY — full width, in the approved grammar: the
           page grows rather than cramming (Noah, 2026-09-05) */}
-      <div ref={reportRef} id="map-report" className="border border-borderSubtle rounded-md overflow-hidden bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12" data-report data-scope-ticker={reportTicker} data-on-screen={reportOn}>
+      <div ref={reportRef} id="map-report" {...settle(5)} className={`border border-borderSubtle rounded-md overflow-hidden bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12 ${settle(5).className}`} data-report data-scope-ticker={reportTicker} data-on-screen={reportOn}>
         <Deferred index={2} frames={26} fallback={<ReportInner />} className="animate-fade-in">
           <WallReportCard snapshot={reportSnap ?? scan} focus={focusFor(reportTicker)} onPick={price => toggleFocus(price, reportTicker)} scope={chipFor('report', reportTicker)} bars={playing && reportTicker === ticker ? reportBars : undefined} />
         </Deferred>

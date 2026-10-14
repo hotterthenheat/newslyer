@@ -285,6 +285,13 @@
    loading screen look for the boxes"): the house's own dark surface with a
    slow light passing over it. One gradient, one keyframe, GPU-composited
    (background-position only), and it stops moving under reduced motion. */
+/* THE LIGHT STANDS STILL UNDER THE GATE (2026-10-14, the load-time pass): the skeletons' light moved under the launch
+   gate too, where nobody could see it, and the main thread repainted every block of the page's skeleton sixty times a
+   second while the terminal was trying to boot. It rests while the gate is up (data-gate-up, LaunchTransition.tsx).
+   It stays a painted background-position, not a transform: a transform puts every block on a compositor layer of its
+   own, and measured, those layers held the browser's frames back for half a second at a time — the feed's publish,
+   the deferred boxes and the gate's own clock all ride the frame. A paint a frame for the moment a skeleton is seen
+   costs less than that. */
 @keyframes skeleton-shimmer {
   from { background-position: -200% 0; }
   to { background-position: 200% 0; }
@@ -298,8 +305,36 @@
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.6s ease-in-out infinite;
 }
+html[data-gate-up] .skeleton {
+  animation: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .skeleton { animation: none; background: rgba(255, 255, 255, 0.08); }
+}
+
+/* FALLING INTO PLACE (2026-10-14): the boxes of a page settle as it opens — a short drop with one soft bounce, each box
+   a beat after the last (--settle-i, from ui/Settle.ts). Under the launch gate a box waits unseen (.settle-wait) and
+   settles the moment the gate lifts; opened from inside the terminal it settles on mount. The animation fills
+   backwards only: once it has run the box is its own plain self again — no transform left on it to catch a fixed card
+   or a sticky strip inside. Reduced motion: the fade alone. */
+.settle-wait {
+  opacity: 0;
+}
+.settle {
+  animation: settle 560ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--settle-i, 0) * 55ms) backwards;
+}
+@keyframes settle {
+  0% { opacity: 0; transform: translateY(14px) scale(0.985); }
+  55% { opacity: 1; transform: translateY(-3px) scale(1.003); }
+  78% { transform: translateY(1px) scale(1); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes settle-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settle { animation: settle-fade 300ms ease-out calc(var(--settle-i, 0) * 30ms) backwards; }
 }
 
 /* The slower sibling — view-level swaps (scanner/sleeve boards) where 0.2s

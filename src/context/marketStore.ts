@@ -356,6 +356,15 @@ export function startFeed(): () => void {
       if (!ready) warm = window.setTimeout(again, 80);
     };
     if (!ready) warm = window.setTimeout(again, 80);
+    /* …and the walk's own last slice says so the moment it lands (Simulator.onWhole, 2026-10-14): a timer set while
+       the page loads is held back by the browser, and the first snapshot came hundreds of milliseconds after the walk */
+    if (!ready) {
+      const off = Simulator.onWhole(sym => {
+        if (sym !== Simulator.getActiveTicker()) return;
+        off();
+        if (!ready) processTick();
+      });
+    }
   }
   return () => {
     starts--;

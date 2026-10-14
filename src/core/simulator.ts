@@ -94,6 +94,10 @@ const Simulator = (() => {
   const gexHistory: Record<string, GexSnapshot[]> = {};
   const RECENT_GEX_BARS = SESSIONS * SESSION_BARS;
   const GEX_LIMIT = RECENT_GEX_BARS + 600;
+  /** The bars the active name's seed builds levels for inside its own slices: the last two sessions (walkSeed); the
+      older ones follow in idle slices once the history is whole (levelIdle) */
+  const EAGER_LEVELS = 2 * SESSION_BARS;
+  const EAGER_FROM = SESSIONS * SESSION_BARS - EAGER_LEVELS;
 
   function symbolHash(sym: string): number {
     let h = 2166136261;
@@ -301,6 +305,10 @@ const Simulator = (() => {
     rng: () => number;
   }
   const seedJobs: Record<string, SeedJob> = {};
+  /* WHO IS TOLD WHEN A HISTORY IS WHOLE (2026-10-14, the load-time pass): the feed used to ask every 80ms whether the
+     active name had finished walking — a timer, held back by the browser through the page's load like any other, so
+     the first snapshot came hundreds of milliseconds after the walk. Now the walk's own last slice tells the feed. */
+  const wholeListeners = new Set<(sym: string) => void>();
 
   /* THE HISTORY ENDS AT A REAL CLOSE OUTSIDE THE SESSION (the paying-user audit, 2026-10-13): the walk always ended at
      the wall clock, so a desk opened at 22:30 had a "today" of 16:13–22:42 — the replay walked an evening the trader's
@@ -394,8 +402,14 @@ const Simulator = (() => {
         /* the name on screen has its whole history read the moment a chart opens (the trails): when its seed walks in
            slices, its levels are built here, inside them, not all at once in the chart's first frame. A seed someone
            is waiting on (no budget) stays lazy — whoever reads the levels builds them, and a page that only wanted the
-           candles (Net Flow's pane) never pays for them. */
-        if (sym === activeTicker && until !== Infinity) void snap.levels;
+           candles (Net Flow's pane) never pays for them.
+           THE LAST TWO SESSIONS HERE, THE MONTH AFTER (2026-10-14, the load-time pass): the levels were most of the
+           name's seed — 8,580 bars at ~0.14ms each, 1.2s of the 1.3s — and the first page reads two days of them at
+           most (the gauge, the tape, the day box, the report card's sessions: data/flipGauge.ts, levelRecord.ts,
+           levelview.ts). So the seed builds those and hands the rest to levelIdle (finishSeed), which walks the older
+           bars in slices once the history is whole: the Map's first numbers come 1.5s sooner, and a chart that reads
+           the month (Terrain's heat) finds the rest built, or builds what it reads on first read as any name does. */
+        if (sym === activeTicker && until !== Infinity && job.snaps.length >= EAGER_FROM) void snap.levels;
         job.snaps.push(snap);
         job.t += BAR_SECONDS;
         job.i++;
@@ -444,6 +458,27 @@ const Simulator = (() => {
     gexHistory[sym] = snaps.slice(-GEX_LIMIT);
     priceHistory[sym] = bars.map(b => b.close).slice(-historyLimit);
     delete seedJobs[sym];
+    if (sym === activeTicker && typeof window !== 'undefined') levelIdle(sym);
+    for (const fn of Array.from(wholeListeners)) fn(sym);
+  }
+
+  /* THE OLDER LEVELS, NEWEST FIRST, IN IDLE SLICES (2026-10-14): once the name on screen is whole, its month of
+     levels before the eager two sessions is built here, six milliseconds every 24 (beside the boot pump's own slices
+     for the rest of the watchlist), from the newest bar back — the range a chart shows first. A re-seed drops the
+     old walk: the loop stops the moment the history it was levelling is no longer the name's. Any reader that comes
+     earlier builds what it reads on first read, as a name off screen always has (packedSnapshot). */
+  function levelIdle(sym: string): void {
+    const snaps = gexHistory[sym];
+    if (!snaps) return;
+    let i = Math.min(snaps.length, EAGER_FROM) - 1;
+    const step = () => {
+      if (gexHistory[sym] !== snaps) return;
+      const until = performance.now() + 6;
+      while (i >= 0 && performance.now() < until) void snaps[i--].levels;
+      if (i >= 0) setTimeout(step, 40);
+    };
+    /* after the page has opened (the gate's hold is 1.35s): ~150ms of work in all, none of it on the first paint */
+    setTimeout(step, 1500);
   }
 
   // Forward-simulate a multi-session OHLC buffer from basePrice: price walks
@@ -748,6 +783,14 @@ const Simulator = (() => {
        callbacks only fire on their timeout — three names took minutes. */
     /* The order is read on every slice, so a name set lazily (setActiveTicker's `lazy`: the name the terminal
        opens on, context/marketStore.ts) is the next one walked, ahead of the watchlist */
+    /* THE NAME ON SCREEN WALKS ON A MESSAGE, NOT A TIMER (2026-10-14, the load-time pass): a timer chain while the
+       page is still loading is held back by the browser — measured, the slices were their eight milliseconds but the
+       gaps between them grew from eight to 200, 400, 800 (Chromium defers a page's timers through its load), and the
+       walk took 2.3s instead of half a second, the gate long gone before the first number. A message port's task is
+       not deferred (React's own scheduler runs on one for the same reason), and the browser still draws between
+       messages, so the gate's bar keeps its frames. The rest of the watchlist, nobody waiting on it, stays on the
+       timer, four milliseconds every forty. */
+    const port = typeof MessageChannel !== 'undefined' ? new MessageChannel() : null;
     const pump = () => {
       const next = [activeTicker, ...WATCHLIST].find(t => !candleHistory[t]);
       if (!next) {
@@ -756,9 +799,13 @@ const Simulator = (() => {
       }
       pumping = true;
       const urgent = next === activeTicker;
-      seedAsync(next, urgent ? 8 : 5);
-      setTimeout(pump, urgent ? 16 : 24);
+      /* the rest of the watchlist, nobody waiting: four milliseconds every forty — a tenth of the clock, so the page
+         opening beside it keeps its frames (it took half the clock at five every 24, beside the levels' slices) */
+      seedAsync(next, urgent ? 8 : 4);
+      if (urgent && port) port.port2.postMessage(null);
+      else setTimeout(pump, urgent ? 8 : 40);
     };
+    if (port) port.port1.onmessage = pump;
     startPump = () => {
       if (pumping || typeof window === 'undefined') return;
       pumping = true;
@@ -1112,6 +1159,13 @@ const Simulator = (() => {
     seedAsync,
     /** True once a name's history exists — no seeding side effect */
     isSeeded: (sym: string): boolean => !!candleHistory[sym.toUpperCase()],
+    /** Called with the name the moment its history is whole (the boot pump's last slice, or a synchronous walk) */
+    onWhole: (fn: (sym: string) => void): (() => void) => {
+      wholeListeners.add(fn);
+      return () => {
+        wholeListeners.delete(fn);
+      };
+    },
     /** `lazy`: registered now, its history walked by the boot pump in slices — the tick emits nothing until it is
         whole. Without it the history is walked at once, as a click on a name needs. */
     setActiveTicker: (t: string, opts?: { lazy?: boolean }): string => {

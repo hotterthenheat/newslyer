@@ -30,7 +30,7 @@
 ==================================================
 */
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { EMBEDDED } from '../../embed';
@@ -44,6 +44,8 @@ interface LaunchCtxValue {
   /** Play the gate, then navigate (defaults to the terminal's front door). `replace`: the page the gate leaves is not
       kept in the history — signing in, whose form Back would otherwise reopen filled (the audit's OU-A9) */
   launch: (to?: string, opts?: { replace?: boolean }) => void;
+  /** True while the gate stands over the page — a box that settles into place (ui/Settle.ts) waits for it to lift */
+  gateUp: boolean;
 }
 
 const LaunchCtx = createContext<LaunchCtxValue | null>(null);
@@ -54,10 +56,42 @@ export const useLaunch = (): LaunchCtxValue => {
   return ctx;
 };
 
+/** True while the gate stands over the page; false where there is no gate at all (a pop-out, a test) */
+export const useGateUp = (): boolean => useContext(LaunchCtx)?.gateUp ?? false;
+
 /** Overlay fully visible while the bar fills… */
 const HOLD_MS = 1050;
 /** …then the destination mounts behind it before the fade-out starts. */
 const REVEAL_MS = 300;
+
+/* THE GATE'S CLOCK IS THE FRAME, NOT A TIMER (2026-10-14, the load-time pass): a timer set while the page is loading
+   is held back by the browser when the main thread is busy (measured: the boot's hold, set for 1.2s, fired at 2.2s
+   while the active name's history walked), so the gate stood a second past its time over a terminal already drawn.
+   Frames are never deferred; the gate lifts on the first frame past its deadline. The timer stays as the fallback
+   for a tab in the background, where frames stop. */
+const afterMs = (ms: number, fn: () => void): (() => void) => {
+  const deadline = performance.now() + ms;
+  let done = false;
+  let raf = 0;
+  const fire = () => {
+    if (done) return;
+    done = true;
+    window.clearTimeout(timer);
+    cancelAnimationFrame(raf);
+    fn();
+  };
+  const tick = () => {
+    if (performance.now() >= deadline) fire();
+    else raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+  const timer = window.setTimeout(fire, ms + 50);
+  return () => {
+    done = true;
+    window.clearTimeout(timer);
+    cancelAnimationFrame(raf);
+  };
+};
 
 const captionFor = (path: string) => (path === '/' ? 'Loading' : 'Entering terminal');
 
@@ -79,12 +113,39 @@ export const LaunchProvider = ({ children }: { children: ReactNode }) => {
   const bootRef = useRef(true);
   const navigate = useNavigate();
 
+  /* THE BOOT'S HOLD IS COUNTED FROM THE NAVIGATION, NOT FROM THIS MOUNT (2026-10-14, the load-time pass): the gate
+     used to stand its full 1.35s from the app's first render, which comes 600–700ms after the address was asked for
+     (the first script, the shell's chunks) — behind index.html's own wordmark the reader had already waited that
+     long, and the terminal was ready under the gate for half a second before it lifted. The hold now ends 1.35s
+     after the navigation began, and the bar below starts where the clock already is (bootLead), so it still fills
+     exactly as the gate lifts. A gate that would have under 400ms left keeps that much: never a flash. */
+  const bootLead = useRef(bootRef.current ? Math.min(Math.max(0, performance.now()), HOLD_MS + REVEAL_MS - 400) : 0);
+  /* THE PAGE KNOWS THE GATE IS UP (2026-10-14): the root carries data-gate-up while it stands, so what nobody can see
+     under it costs nothing — the skeletons' light (index.css .skeleton::after) is not drawn until the gate lifts */
+  useLayoutEffect(() => {
+    document.documentElement.toggleAttribute('data-gate-up', active);
+  }, [active]);
+
+  /* …AND LIFTS ONTO A FINISHED PAGE (2026-10-14): the gate is there to cover the terminal assembling, so past its
+     hold it waits, frame by frame, while a box of the page still stands in for itself (aria-busy — the route's
+     skeleton, a deferred box's) — for at most another second, so a slow page is never held behind it. The page the
+     gate reveals is then whole, and falls into place (ui/Settle.ts) on a quiet main thread. */
   useEffect(() => {
-    const t = window.setTimeout(() => {
+    const lift = () => {
       setActive(false);
       busyRef.current = false;
-    }, HOLD_MS + REVEAL_MS);
-    return () => window.clearTimeout(t);
+    };
+    let cancel = afterMs(HOLD_MS + REVEAL_MS - bootLead.current, () => {
+      const cap = performance.now() + 1000;
+      let raf = 0;
+      const look = () => {
+        if (!document.querySelector('[aria-busy="true"]') || performance.now() >= cap) lift();
+        else raf = requestAnimationFrame(look);
+      };
+      look();
+      cancel = () => cancelAnimationFrame(raf);
+    });
+    return () => cancel();
   }, []);
 
   const launch = useCallback(
@@ -96,19 +157,19 @@ export const LaunchProvider = ({ children }: { children: ReactNode }) => {
       bootRef.current = false;
       setCaption(captionFor(to));
       setActive(true);
-      window.setTimeout(() => {
+      afterMs(HOLD_MS, () => {
         navigate(to, { replace: !!opts?.replace });
-        window.setTimeout(() => {
+        afterMs(REVEAL_MS, () => {
           setActive(false);
           busyRef.current = false;
-        }, REVEAL_MS);
-      }, HOLD_MS);
+        });
+      });
     },
     [navigate]
   );
 
   return (
-    <LaunchCtx.Provider value={{ launch }}>
+    <LaunchCtx.Provider value={{ launch, gateUp: active }}>
       {children}
       <AnimatePresence>
         {active && (
@@ -127,7 +188,7 @@ export const LaunchProvider = ({ children }: { children: ReactNode }) => {
               {/* CSS transform fill (see .animate-gate-fill) — compositor-driven,
                   so it never stutters while the main thread loads chunks. On the light page the bar is the ink
                   (index.css — Noah, 2026-09-26: "esp the bar needs to be more apparent"). */}
-              <div className="h-full rounded-full holo-bar animate-gate-fill" />
+              <div className="h-full rounded-full holo-bar animate-gate-fill" style={bootLead.current ? { animationDelay: `-${Math.round(bootLead.current)}ms` } : undefined} />
             </div>
             <span className="sr-only">{caption}</span>
             <Signature rule={false} className="text-[11px] select-none" />
