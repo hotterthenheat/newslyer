@@ -47,7 +47,7 @@ import GuideFocus, { GuideDoor } from '../ui/GuideFocus';
 import { undoable } from '../ui/undo';
 import LedgerGuide, { guideTitle } from './LedgerGuide';
 import { attachScrollMore } from '../ui/scrollMore';
-import { FLAT_DOOR } from '../ui/flatDoor';
+import { FLAT_DOOR, FLAT_ON } from '../ui/flatDoor';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Crosshair, Maximize2, Minimize2, Plus, X } from 'lucide-react';
@@ -1168,11 +1168,11 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       disabled={fresh}
       title={fresh ? 'Not while the replay runs' : focusOn ? 'Back to the whole board (Esc)' : 'Keep only the biggest moves since the open sharp — the badged nodes'}
       aria-label="Biggest moves"
-      className={`hit inline-flex items-center gap-1.5 h-7 rounded-md border bg-chip transition-colors font-mono select-none disabled:opacity-50 ${doorCompact('focus') ? 'w-7 justify-center' : 'px-2.5'} ${focusOn ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
+      className={`${FLAT_DOOR} disabled:opacity-50 ${doorCompact('focus') ? 'w-7 justify-center px-0' : ''} ${focusOn ? FLAT_ON : ''}`}
       data-ledger-focus-door={focusOn ? 'on' : 'off'}
     >
-      <Crosshair className={`w-3 h-3 ${focusOn ? 'text-silver' : 'text-textMuted'}`} />
-      {!doorCompact('focus') && <span className={`text-[11px] ${focusOn ? 'text-textPrimary' : 'text-textMuted'}`}>Biggest moves</span>}
+      <Crosshair className="w-3 h-3" />
+      {!doorCompact('focus') && <span>Biggest moves</span>}
     </button>
   );
   const namesDoor = multi && (

@@ -106,7 +106,8 @@ const FIG_W = 50; /* "−$40.5M", seven mono characters at 11px — the longest 
 export const MATRIX_COL_W = FIG_W + 6 + LANE_MAX + 24 + 1;
 /* THE CARD (the owner, 2026-10-13: "the side panel thing is so damn big"): four rows, one line under them, and wide
    enough that "Open interest · 18,709 contracts" prints whole — the calendar's card is the same */
-export const CARD_W = 248;
+/* a bit smaller than it was (the owner, 2026-10-14) */
+export const CARD_W = 224;
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 /* the wall words on the strike at the house's 11px floor (the audit's H5, 2026-10-13 — they were 7.5px, the smallest type
    on the terminal); the column's reserve below prints the same words, so it grows with them */
@@ -313,19 +314,19 @@ const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, ring
     const verdictInk = empty ? 'rgb(var(--text-muted))' : l.net >= 0 ? AMPLIFY : ABSORB;
     const body = (
       <>
-        <CardRow k="Put" v={fmtUsd(l.put)} sub={`${pct(l.put, caps[lead].put)} of the heaviest`} ink={PUT_INK} />
-        <CardRow k="Call" v={fmtUsd(l.call)} sub={`${pct(l.call, caps[lead].call)} of the heaviest`} ink={CALL_INK} />
+        <CardRow k="Put" v={fmtUsd(l.put)} sub={pct(l.put, caps[lead].put)} ink={PUT_INK} />
+        <CardRow k="Call" v={fmtUsd(l.call)} sub={pct(l.call, caps[lead].call)} ink={CALL_INK} />
         <CardRow k={`Net · ${GREEK_LABEL[lead]}`} v={fmtUsd(l.net)} sub={empty ? 'nothing' : l.net >= 0 ? 'put-heavy' : 'call-heavy'} ink={empty ? 'rgb(var(--text-muted))' : ink} />
         {oi > 0 && <CardRow k="Open interest" v={Math.round(oi).toLocaleString()} sub="contracts" />}
       </>
     );
     const words = <span style={{ color: verdictInk }}>{verdict}</span>;
     return still ? (
-      <PointerCard x={start.x} y={start.y} still width={CARD_W} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside} foot={<>{words}<span className="block mt-0.5 text-[11px] uppercase tracking-widest text-textMuted">kept · {letGo}</span></>}>
+      <PointerCard x={start.x} y={start.y} still dense width={CARD_W} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside} foot={<>{words}<span className="block mt-0.5 text-[11px] uppercase tracking-wider text-textMuted">kept · {letGo}</span></>}>
         {body}
       </PointerCard>
     ) : (
-      <PointerFollowCard start={start} width={CARD_W} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside} foot={words}>
+      <PointerFollowCard start={start} dense width={CARD_W} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside} foot={words}>
         {body}
       </PointerFollowCard>
     );

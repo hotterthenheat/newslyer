@@ -54,6 +54,8 @@ interface PointerCardProps {
   still?: boolean;
   testId?: string;
   testValue?: string | number;
+  /** A bit smaller — tighter padding and rows (the Map's grids; the owner, 2026-10-14) */
+  dense?: boolean;
 }
 
 /** How a kept card is let go, in the hand's own words (the paying-user audit's M11): a tap on a phone, a click or Esc
@@ -71,7 +73,7 @@ export const CardRow = ({ k, v, sub, ink }: { k: string; v: ReactNode; sub?: Rea
   </>
 );
 
-const PointerCard = ({ x, y, width = 196, title, aside, children, foot, still = false, testId = 'data-pointer-card', testValue = '' }: PointerCardProps) => {
+const PointerCard = ({ x, y, width = 196, title, aside, children, foot, still = false, testId = 'data-pointer-card', testValue = '', dense = false }: PointerCardProps) => {
   const ref = useRef<HTMLDivElement>(null);
   const vw = typeof globalThis.innerWidth === 'number' ? globalThis.innerWidth : null;
   const onRight = vw === null || x + GAP + width < vw - EDGE;
@@ -98,7 +100,7 @@ const PointerCard = ({ x, y, width = 196, title, aside, children, foot, still = 
   return createPortal(
     <div
       ref={ref}
-      className={`fixed z-[90] rounded-lg border bg-card/85 backdrop-blur-md px-3 py-2.5 shadow-[0_12px_32px_rgba(0,0,0,0.55)] animate-soft-in pointer-events-none ${still ? 'border-silver/40' : 'border-borderMuted'}`}
+      className={`fixed z-[90] rounded-lg border bg-card/85 backdrop-blur-md ${dense ? 'px-2.5 py-2' : 'px-3 py-2.5'} shadow-[0_12px_32px_rgba(0,0,0,0.55)] animate-soft-in pointer-events-none ${still ? 'border-silver/40' : 'border-borderMuted'}`}
       style={{ width, left, top: Math.max(EDGE, y - LIFT - 160) }}
       data-card-kept={still ? '' : undefined}
       {...{ [testId]: testValue }}
@@ -109,8 +111,8 @@ const PointerCard = ({ x, y, width = 196, title, aside, children, foot, still = 
         </span>
         {aside != null && <span className="ml-auto text-[11px] text-textMuted whitespace-nowrap">{aside}</span>}
       </div>
-      <div className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">{children}</div>
-      {foot != null && <div className="mt-1.5 text-[11px] leading-snug">{foot}</div>}
+      <div className={`${dense ? 'mt-1 gap-y-0.5' : 'mt-1.5 gap-y-1'} grid grid-cols-[auto_1fr] gap-x-3 text-[11px]`}>{children}</div>
+      {foot != null && <div className={`${dense ? 'mt-1' : 'mt-1.5'} text-[11px] leading-snug`}>{foot}</div>}
     </div>,
     document.body
   );

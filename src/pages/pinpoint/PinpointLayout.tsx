@@ -83,7 +83,7 @@ const RULER_OPTIONS: DropdownOption<DistanceUnit>[] = [
    is its name in tracked capitals at the 11px floor and its figure beside it, the facts on one mono line with hairlines
    between — the stuck strip's grammar, the chart strip's. The price, the figure every terminal shows large, at 18px. */
 const Fact = ({ label, children, title, testId, hero = false, word = false }: { label: string; children: React.ReactNode; title?: string; testId?: string; hero?: boolean; /** a word for a figure (absorb, untested) — small capitals, not a number's face */ word?: boolean }) => (
-  <span className="inline-flex items-baseline gap-2 whitespace-nowrap font-mono sm:pr-4 sm:[&:not(:first-child)]:border-l sm:[&:not(:first-child)]:border-borderSubtle sm:[&:not(:first-child)]:pl-4" data-shell-fact={testId} title={title}>
+  <span className="inline-flex items-baseline gap-2 whitespace-nowrap font-mono sm:pr-2.5 2xl:pr-4 sm:[&:not(:first-child)]:border-l sm:[&:not(:first-child)]:border-borderSubtle sm:[&:not(:first-child)]:pl-2.5 2xl:[&:not(:first-child)]:pl-4" data-shell-fact={testId} title={title}>
     <span className="text-[11px] uppercase tracking-wider text-textMuted">{label}</span>
     <span className={`tnum text-textPrimary ${hero ? 'text-[18px] font-semibold leading-none' : word ? 'text-[11px] font-semibold uppercase tracking-wider' : 'text-[13px] font-semibold'}`}>{children}</span>
   </span>
@@ -188,7 +188,7 @@ const PinpointLayout = () => {
       {/* THE FRAME OWNS THE SUBJECT AND THE PAGES (direction B, 2026-09-05): the
           sidebar carries the ticker and the Map · Ahead · … choice, so this head
           no longer repeats them. It names the page and reads the market. */}
-      <header ref={headRef} className="flex items-center gap-x-5 gap-y-2 flex-wrap pb-2.5 border-b border-borderSubtle" data-shell>
+      <header ref={headRef} className="flex items-center gap-x-3 2xl:gap-x-5 gap-y-2 flex-wrap pb-2.5 border-b border-borderSubtle" data-shell>
         {/* THE PAGE'S NAME, AND NOTHING ELSE AROUND IT (the owner, 2026-10-14): the icon in a box and the one-liner under the
             name were the generic page head — the name alone, the line in its title; a kept strike and a replay stand beside it
             as flat marks */}
@@ -197,11 +197,11 @@ const PinpointLayout = () => {
             {page.label}
           </h1>
           {focused != null && (
-            <span data-focus-chip className="inline-flex items-center gap-2 h-7 rounded px-2 font-mono text-[11px] uppercase tracking-wider bg-silver/[0.1] text-silver">
+            <span data-focus-chip className="inline-flex items-center gap-1.5 2xl:gap-2 h-7 rounded px-1.5 2xl:px-2 font-mono text-[11px] uppercase tracking-wider bg-silver/[0.1] text-silver">
               <span className="font-bold">Kept</span>
               <span className="text-[12px] font-semibold tnum text-textPrimary">{fmtStrike(focused)}</span>
               {dist != null && keptLead && (
-                <span className="tnum text-textSecondary normal-case" data-kept-lead={unit}>
+                <span className="hidden 2xl:inline tnum text-textSecondary normal-case" data-kept-lead={unit}>
                   {keptLead}
                 </span>
               )}
@@ -282,8 +282,8 @@ const PinpointLayout = () => {
               its doors; the Map draws its band here when its words fit, and in its own strip under the head when not */}
           <div id="pinpoint-head-band" className="empty:hidden min-w-0 flex-1 [&>[data-ledger-toolbar]]:border-0 [&>[data-ledger-toolbar]]:bg-transparent [&>[data-ledger-toolbar]]:p-0" data-shell-band />
           <div className="ml-auto flex items-center gap-1" data-shell-cards>
-            <DropdownSelect label="Levels" icon={Layers} flat value={levelsScope} options={LEVELS_OPTIONS} onChange={setLevelsScope} title={LEVELS_TITLE} testId="levels-scope" align="end" />
-            <DropdownSelect label="Ruler" icon={Ruler} flat value={unit} options={RULER_OPTIONS} onChange={setDistanceUnit} title="The unit every distance on Pinpoint is read in" testId="ruler" align="end" />
+            <DropdownSelect label="Levels" icon={Layers} flat labelFrom="2xl" value={levelsScope} options={LEVELS_OPTIONS} onChange={setLevelsScope} title={LEVELS_TITLE} testId="levels-scope" align="end" />
+            <DropdownSelect label="Ruler" icon={Ruler} flat labelFrom="2xl" value={unit} options={RULER_OPTIONS} onChange={setDistanceUnit} title="The unit every distance on Pinpoint is read in" testId="ruler" align="end" />
           </div>
         </div>
       </header>

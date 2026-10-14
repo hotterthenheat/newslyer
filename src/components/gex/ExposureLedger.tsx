@@ -840,9 +840,8 @@ const ExposureLedger = ({ surface, liveSpot, live = true, open = null, focusOn =
   const cardBody = (
     <>
       {cardTags.length > 0 && <span className="col-span-2 -mt-0.5 mb-0.5 flex items-center gap-2 text-[11px] uppercase tracking-widest whitespace-nowrap">{cardTags}</span>}
-      {/* the percent says what it is of: the smaller leg against the bigger (2026-10-14) */}
-      <CardRow k="Put" v={fmtUsd(putV)} sub={empty ? '' : Math.abs(putV) >= Math.abs(callV) ? 'the bigger leg' : `${pct(putV)} of the calls`} ink={PUT_INK} />
-      <CardRow k="Call" v={fmtUsd(callV)} sub={empty ? '' : Math.abs(callV) > Math.abs(putV) ? 'the bigger leg' : `${pct(callV)} of the puts`} ink={CALL_INK} />
+      <CardRow k="Put" v={fmtUsd(putV)} sub={pct(putV)} ink={PUT_INK} />
+      <CardRow k="Call" v={fmtUsd(callV)} sub={pct(callV)} ink={CALL_INK} />
       <CardRow k={`Net · ${GREEK_LABEL[focus.greek]}`} v={fmtUsd(netV)} sub={empty ? 'nothing' : netV >= 0 ? 'put-heavy' : 'call-heavy'} ink={empty ? 'rgb(var(--text-muted))' : heatLaneColor(netV, surface.maxAbs[focus.greek], mode ?? HEAT_MODE, 0.35, paper)} />
       {oi > 0 && <CardRow k="Open interest" v={oi.toLocaleString('en-US')} sub="contracts" />}
       {sinceHere && <CardRow k="Since the open" v={sinceHere.figure ?? sinceHere.words} sub={sinceHere.figure ? sinceHere.words : undefined} ink={sinceInk(sinceHere.dir)} />}
@@ -852,7 +851,7 @@ const ExposureLedger = ({ surface, liveSpot, live = true, open = null, focusOn =
   const cardFoot = (
     <>
       <span style={{ color: verdictInk }}>{verdict}</span>
-      {pinned && <span className="block mt-0.5 text-[11px] uppercase tracking-widest text-textMuted">kept · {letGo}</span>}
+      {pinned && <span className="block mt-0.5 text-[11px] uppercase tracking-wider text-textMuted">kept · {letGo}</span>}
     </>
   );
   /* While a node is in focus the pointer stops washing rows and columns — two
@@ -1109,12 +1108,12 @@ const ExposureLedger = ({ surface, liveSpot, live = true, open = null, focusOn =
       </div>
       {/* THE CARD — following the pointer over the cells, and on the clicked node (see `keptPos`) until the next click */}
       {!pinned && hovered && hoverStart && (
-        <PointerFollowCard start={hoverStart} width={CARD_W} title={cardTitle} aside={cardAside} foot={cardFoot} testId="data-ledger-card" testValue={keyOf(focus)}>
+        <PointerFollowCard start={hoverStart} dense width={CARD_W} title={cardTitle} aside={cardAside} foot={cardFoot} testId="data-ledger-card" testValue={keyOf(focus)}>
           {cardBody}
         </PointerFollowCard>
       )}
       {pinned && keptPos && (
-        <PointerCard x={keptPos.x} y={keptPos.y} width={CARD_W} still title={cardTitle} aside={cardAside} foot={cardFoot} testId="data-ledger-card" testValue={keyOf(focus)}>
+        <PointerCard x={keptPos.x} y={keptPos.y} width={CARD_W} still dense title={cardTitle} aside={cardAside} foot={cardFoot} testId="data-ledger-card" testValue={keyOf(focus)}>
           {cardBody}
         </PointerCard>
       )}
