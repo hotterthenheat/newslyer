@@ -45,7 +45,7 @@ import TapeBox from '../../components/gex/TapeBox';
 import BookThroughDay from '../../components/gex/BookThroughDay';
 import DayBox from '../../components/gex/DayBox';
 import ReplayStrip from '../../components/gex/ReplayStrip';
-import { barsAt, replayDay, replayLabel, replayMinute, replayRange, snapPos, snapshotAt, type ReplayRange } from '../../data/replay';
+import { barsAt, replayDay, replayLabel, replayMinute, replayRange, replayStart, snapPos, snapshotAt, type ReplayRange } from '../../data/replay';
 import { readSessionClock } from '../../data/moc';
 import { setReplayLabel } from './replayState';
 import { readPosition, usePositions } from '../../data/positions';
@@ -148,7 +148,9 @@ const MapDesk = () => {
      book once per replayed minute; their surfaces are the page's heaviest. */
   const range = playing?.range ?? null;
   const framePos = playing && range ? snapPos(playing.pos, range.length) : 0;
-  const minutePos = Math.floor(framePos / 60) * 60;
+  /* the boxes follow the track a beat behind (the audit's H7: a drag step took 110–190ms to paint) — the track and its
+     moment stay on the pointer */
+  const minutePos = useDeferredValue(Math.floor(framePos / 60) * 60);
   const replaySnapMinute = useMemo(() => (range && scan ? snapshotAt(scan, range, minutePos) : null), [range, scan, minutePos]);
   const replayBars = useMemo(() => (range ? barsAt(range, minutePos) : undefined), [range, minutePos]);
   useEffect(() => {
@@ -183,21 +185,25 @@ const MapDesk = () => {
     const c = readSessionClock();
     return c.phase === 'OPEN' || c.phase === 'AUCTION';
   })();
-  /* Replay opens at the OPEN, paused — the strip's own scrubber takes it from there */
+  /* Replay opens at the session's first bar, PLAYING (the paying-user audit's H7: it opened paused and looked dead) */
   const startReplay = () => {
     if (!scan) return;
     const r = replayRange(scan.ticker);
     if (!r) return;
-    setReplay({ phase: 'play', range: r, pos: 0, playing: false, pace: 60 });
+    setReplay({ phase: 'play', range: r, pos: 0, playing: true, pace: 60 });
   };
-  /** The calendar's transport: the door to start, then the strip with the position */
-  const replayBar = replay ? (
+  /** THE TRANSPORT (the paying-user audit's C3 and H7, 2026-10-13): a bar of its own across the top of the book — in the band
+      it widened the band and the page under it jumped 34px, and its track was 180px for a whole session. Its clock is the
+      session's own (the first bar's minute), the one the head's tag and the trader's clock read. */
+  const replayTransport = replay ? (
     <ReplayStrip
       compact
+      wide
       phase={replay.phase}
       pos={playing?.pos ?? 0}
       length={playing?.range.length ?? 0}
       day={playing ? replayDay(playing.range) : undefined}
+      startMin={playing ? replayStart(playing.range) : undefined}
       playing={playing?.playing ?? false}
       onPlay={p => setReplay(r => (r ? { ...r, playing: p } : r))}
       pace={playing?.pace ?? 60}
@@ -205,16 +211,19 @@ const MapDesk = () => {
       onSeek={pos => setReplay(r => (r ? { ...r, pos } : r))}
       onExit={() => setReplay(null)}
     />
-  ) : (
+  ) : undefined;
+  /** The band's door: Replay, or — while one runs — the way back, pressed */
+  const replayBar = (
     <button
       type="button"
-      onClick={startReplay}
-      title={`Replay ${marketOpen ? "today's" : 'the last'} session from the open — every box on the page reads the book as it stood`}
+      onClick={replay ? () => setReplay(null) : startReplay}
+      aria-pressed={!!replay}
+      title={replay ? 'Back to live (Esc)' : `Replay ${marketOpen ? "today's" : 'the last'} session from its first bar — every box on the page reads the book as it stood`}
       /* sentence case, the cards' grammar since 2026-10-10 (the audit's M3) */
-      className="hit inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted font-mono text-[11px] text-textSecondary hover:text-textPrimary transition-colors"
+      className={`hit inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border bg-chip font-mono text-[11px] transition-colors ${replay ? 'border-silver/50 text-silver' : 'border-borderSubtle hover:border-borderMuted text-textSecondary hover:text-textPrimary'}`}
       data-map-replay
     >
-      <Play className="w-3 h-3" /> Replay
+      <Play className="w-3 h-3" /> {replay ? 'Replaying' : 'Replay'}
     </button>
   );
 
@@ -463,6 +472,7 @@ const MapDesk = () => {
             fullMode="move"
             fresh={replayOn && calTicker === ticker}
             after={calTicker === ticker ? replayBar : undefined}
+            above={calTicker === ticker ? replayTransport : undefined}
             selectedStrike={focusFor(calTicker)}
             marks={calTicker === ticker ? marks : undefined}
             onSelectStrike={price => toggleFocus(price, calTicker)}
@@ -486,7 +496,7 @@ const MapDesk = () => {
           gamma, the minute under the pointer marked on both — DayBox.tsx */}
       <div ref={tapeRef} id="map-session" className="flex-[1_1_640px] min-w-0 flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24" style={dayBeside ? { height: bookH } : undefined} data-session data-scope-ticker={tapeTicker} data-on-screen={tapeOn}>
         <DayBox scope={chipFor('tape', tapeTicker)}>
-          <TapeBox part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} at={playing && tapeTicker === ticker ? replayMinute(framePos) : undefined} />
+          <TapeBox part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} at={playing && tapeTicker === ticker ? replayMinute(framePos, range) : undefined} />
           <BookThroughDay part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} />
         </DayBox>
       </div>
@@ -504,7 +514,7 @@ const MapDesk = () => {
       <div className="contents min-[1880px]:grid min-[1880px]:grid-cols-[580px_minmax(0,1fr)] min-[1880px]:gap-4 min-[1880px]:items-stretch" data-map-wide-row>
       <div ref={dayRef} id="map-clock" className="flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24" data-day data-scope-ticker={dayTicker} data-on-screen={dayOn}>
         <Deferred index={1} frames={22} fallback={<DayInner />} className="flex-1 flex flex-col animate-fade-in">
-          <TraderClock snapshot={daySnap ?? scan} scope={chipFor('day', dayTicker)} at={playing && dayTicker === ticker ? replayMinute(framePos) : undefined} />
+          <TraderClock snapshot={daySnap ?? scan} scope={chipFor('day', dayTicker)} at={playing && dayTicker === ticker ? replayMinute(framePos, range) : undefined} />
         </Deferred>
       </div>
       {/* HOW THE LEVELS HELD TODAY — full width, in the approved grammar: the

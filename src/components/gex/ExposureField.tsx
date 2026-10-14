@@ -117,6 +117,9 @@ interface ExposureFieldProps {
   fresh?: boolean;
   /** What follows the strips on the band head — the Map's replay transport, so the calendar carries the position */
   after?: ReactNode;
+  /** A bar across the top of the book, under the band — the Map's replay transport (2026-10-13: in the band it widened the
+      band and the page under it jumped 34px) */
+  above?: ReactNode;
   /** THE FULLSCREEN'S SHAPE (Noah, 2026-09-10: "i really love the full screen
       transition on the two books on one ruler … make that the same for the
       heatmap and ladder"): 'move' = the ruler's own — THIS BOX glides to the
@@ -272,7 +275,7 @@ const SHOW_OPTIONS: DropdownOption<'now' | 'after'>[] = [
   { value: 'after', label: 'After the close', hint: "The same calendar once today's contracts have expired" },
 ];
 
-const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike, openRatio, onTicker, toolbar = 'desk', marks, lead, greeks: greeksProp, onGreeks, fresh = false, after, fullMode = 'portal', fullOpen, headFull = false, multi = false, selectedStrikeFor, onSelectStrikeFor, snapshotFor, onNaturalWidth, onBandNeed, headSlot, pack = false }: ExposureFieldProps) => {
+const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike, openRatio, onTicker, toolbar = 'desk', marks, lead, greeks: greeksProp, onGreeks, fresh = false, after, fullMode = 'portal', fullOpen, headFull = false, multi = false, selectedStrikeFor, onSelectStrikeFor, snapshotFor, onNaturalWidth, onBandNeed, headSlot, pack = false, above }: ExposureFieldProps) => {
   const [ownPick, setOwnPick] = useState<string[]>(['gex']);
   const pick = greeksProp ?? ownPick;
   /* the page's theme: on paper the island and everything drawn in it wear the light set and the paper ramps */
@@ -1199,7 +1202,12 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      transition was already a hundred milliseconds in when it first painted, and a pane stretched its old columns
      for a third of the glide before the new fit landed and the capsules snapped narrower. Now the columns commit,
      every pane lays itself out for the destination, and only then do the tracks begin to move. */
-  const targetTracks = Array.from({ length: TRACKS }, (_, i) => (i < allColumns.length && !allColumns[i].leaving ? '1fr' : '0fr')).join(' ');
+  /* NAMES SIDE BY SIDE ON A PHONE ARE A SWIPE (the paying-user audit's C4, 2026-10-13): three panes in 358px cut every
+     figure to "$1.4" with its M or B gone; under 640px each name takes the whole width and the island scrolls sideways
+     between them, a name at a time */
+  const islandRoomNow = islandRef.current?.parentElement?.clientWidth ?? 0;
+  const carousel = islandRoomNow > 0 && islandRoomNow < 640 && allColumns.filter(c => !c.leaving).length > 1;
+  const targetTracks = Array.from({ length: TRACKS }, (_, i) => (i < allColumns.length && !allColumns[i].leaving ? (carousel ? 'calc(100% - 8px)' : '1fr') : carousel ? '0px' : '0fr')).join(' ');
   const [tracks, setTracks] = useState(targetTracks);
   /* THE RE-SLOT IS A SNAP, NOT A GLIDE (2026-10-12, Noah's video: the middle name gone, "one of the collapsed
      calendars does a resize quickly which shows that black figure then goes back to normal"): when a column that
@@ -1223,7 +1231,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const islandMax = pack && !full ? naturalW : 0;
   const islandRoom = islandRef.current?.parentElement?.clientWidth ?? islandRef.current?.clientWidth ?? 0;
   const islandW = islandMax > 0 && islandRoom > 0 ? Math.min(islandMax, islandRoom) : islandRef.current?.clientWidth ?? 0;
-  const tileW = islandW > 0 && staying > 0 ? Math.floor((islandW - (many ? 8 : 0)) / staying) : 0;
+  const tileW = carousel ? Math.max(0, islandW - 16) : islandW > 0 && staying > 0 ? Math.floor((islandW - (many ? 8 : 0)) / staying) : 0;
   /* …and the glide is declared the moment the columns change, AFTER the commit (so the promise is already in the
      DOM when the panes read it), never before: `beginGlide` runs its starters at once */
   const columnsKey = allColumns.map(c => `${c.ticker}:${c.leaving ? 0 : 1}`).join(' ');
@@ -1270,6 +1278,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const body = (
     <div className="relative h-full min-h-0 flex flex-col">
       {headOut && headSlot ? createPortal(head, headSlot) : head}
+      {above && <div className="shrink-0 border-b border-borderSubtle/60 bg-panel" data-field-above>{above}</div>}
       {toolbar === 'band' && !noteSeen && (
         <div className="shrink-0 flex items-start gap-3 px-4 py-2 border-b border-borderSubtle/60 bg-silver/[0.04] text-[11px] text-textSecondary" data-map-note>
           <p className="min-w-0 flex-1 leading-relaxed">
@@ -1301,7 +1310,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
            the dark terminal keeps its black island to the digit */
         data-theme={paper ? 'light' : 'dark'}
         className={`relative flex-1 min-h-0 grid motion-reduce:transition-none ${many ? 'bg-canvas p-1' : paper ? 'bg-inset p-0' : 'bg-panel p-0'}`}
-        style={{ gridTemplateColumns: tracks, maxWidth: islandMax > 0 ? islandMax : undefined, transition: snap ? 'none' : `grid-template-columns ${LEAVE_MS}ms ${EASE}, padding ${LEAVE_MS}ms ${EASE}, background-color ${LEAVE_MS}ms ${EASE}` }}
+        style={{ gridTemplateColumns: tracks, maxWidth: islandMax > 0 ? islandMax : undefined, ...(carousel ? { overflowX: 'auto', scrollSnapType: 'x mandatory', overscrollBehaviorX: 'contain' } : null), transition: snap ? 'none' : `grid-template-columns ${LEAVE_MS}ms ${EASE}, padding ${LEAVE_MS}ms ${EASE}, background-color ${LEAVE_MS}ms ${EASE}` }}
         ref={islandRef}
         data-field-packed={islandMax > 0 ? islandMax : undefined}
         data-field-island
@@ -1342,7 +1351,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
               key={c.ticker}
               className="min-w-0 min-h-0 overflow-hidden flex flex-col motion-reduce:transition-none"
               /* a leaving column fades on a layer of its own — composited, not repainted a frame (2026-10-12) */
-              style={{ opacity: c.leaving ? 0 : 1, transition: `opacity ${LEAVE_MS}ms ${EASE}`, willChange: c.leaving ? 'opacity' : undefined }}
+              style={{ opacity: c.leaving ? 0 : 1, transition: `opacity ${LEAVE_MS}ms ${EASE}`, willChange: c.leaving ? 'opacity' : undefined, scrollSnapAlign: carousel ? 'start' : undefined }}
               aria-hidden={c.leaving || undefined}
               data-field-cell={c.ticker}
               data-field-leaving={c.leaving || undefined}

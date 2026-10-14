@@ -21,7 +21,9 @@ import { CLOSE_MIN, OPEN_MIN } from './ahead';
 export function dayAxisFrom(firstTime: number | null | undefined): number {
   if (firstTime == null || !Number.isFinite(firstTime) || firstTime <= 0) return OPEN_MIN;
   const first = nyMinutes(firstTime * 1000);
-  if (first <= OPEN_MIN + 30 || first >= CLOSE_MIN - 30) return OPEN_MIN;
+  /* near the open, the whole session; a first bar in the last minutes is still where the day starts (the audit's H4: a
+     first bar after 15:30 threw the axis back to 09:30, 93% of both charts empty) */
+  if (first <= OPEN_MIN + 30 || first >= CLOSE_MIN - 1) return OPEN_MIN;
   return Math.max(OPEN_MIN, first);
 }
 

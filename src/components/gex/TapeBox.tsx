@@ -273,21 +273,27 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
     return out;
   })();
   /* the tags in the right lane, pushed apart when two sit within each other's height, and kept inside the plot */
+  /* EACH TAG AT ITS OWN LINE (the paying-user audit's C2, 2026-10-13): a level off the plot was pulled in by moving EVERY
+     tag the same distance, so the flip's tag sat 111px under the flip's line. Now each tag is clamped into the plot on its
+     own — a level past the edge keeps its tag at that edge with an arrow — and only tags that would overprint are pushed
+     apart, down from the top and then back up from the foot. */
+  const plotTop = MT;
+  const plotBottom = MT + plotH;
+  const offOf = (p: number): 'up' | 'down' | null => (yOf(p) < plotTop ? 'up' : yOf(p) > plotBottom ? 'down' : null);
   const tagYs = (() => {
-    const sorted = [...groups].map(g => ({ g, y: yOf(g.price) })).sort((a, b) => a.y - b.y);
+    const sorted = [...groups].map(g => ({ g, y: Math.max(plotTop + g.h / 2, Math.min(plotBottom - g.h / 2, yOf(g.price))) })).sort((a, b) => a.y - b.y);
     const room = (a: { g: { h: number } }, b: { g: { h: number } }) => a.g.h / 2 + b.g.h / 2 + 2;
     for (let i = 1; i < sorted.length; i++) if (sorted[i].y - sorted[i - 1].y < room(sorted[i - 1], sorted[i])) sorted[i].y = sorted[i - 1].y + room(sorted[i - 1], sorted[i]);
-    for (let i = sorted.length - 2; i >= 0; i--) if (sorted[i + 1].y - sorted[i].y < room(sorted[i], sorted[i + 1])) sorted[i].y = sorted[i + 1].y - room(sorted[i], sorted[i + 1]);
-    if (sorted.length) {
-      /* …and above the hours' band at the foot (a phone's tags sit over the plot) */
-      const tail = sorted[sorted.length - 1];
-      const down = Math.max(0, tail.y + tail.g.h / 2 - (H - mb + 2));
-      for (const s of sorted) s.y -= down;
-      const up = Math.max(0, MT + sorted[0].g.h / 2 - sorted[0].y);
-      for (const s of sorted) s.y += up;
+    const last = sorted[sorted.length - 1];
+    if (last && last.y > plotBottom - last.g.h / 2) {
+      last.y = plotBottom - last.g.h / 2;
+      for (let i = sorted.length - 2; i >= 0; i--) if (sorted[i + 1].y - sorted[i].y < room(sorted[i], sorted[i + 1])) sorted[i].y = sorted[i + 1].y - room(sorted[i], sorted[i + 1]);
     }
     return new Map(sorted.map(s => [s.g.key, s.y]));
   })();
+  /* THE PRICE SCALE in the left margin the day box keeps for the book's figures under it (the audit's C2: "the tape has no
+     price axis"): the top, the middle and the foot of the plot, on the cent */
+  const priceTicks = part && plotH > 60 ? [hi - (hi - lo) * 0.04, (hi + lo) / 2, lo + (hi - lo) * 0.04] : [];
   /* "the put wall, the pin and the supreme" — a group's levels in one breath */
   const say = (ws: string[]) => (ws.length <= 1 ? ws[0] ?? '' : `${ws.slice(0, -1).join(', ')} and ${ws[ws.length - 1]}`);
 
@@ -367,6 +373,11 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
                     )}
                   </g>
                 ))}
+                {priceTicks.map((p, i) => (
+                  <text key={i} x={ml - 8} y={yOf(p)} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize={11} fill={INK_3} data-tape-price-tick>
+                    {p.toFixed(2)}
+                  </text>
+                ))}
                 {/* the flip's path through the day, under the levels */}
                 {flipPath && <path d={flipPath} fill="none" stroke={FLIP} strokeOpacity={0.7} strokeWidth={1} strokeDasharray="2 2" strokeLinejoin="round" data-tape-flip-path />}
                 {/* the cone ahead: one expected move to the close */}
@@ -411,6 +422,11 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
                       className={`hit inline-flex items-center gap-1.5 rounded px-1.5 font-mono text-[11px] font-bold tracking-wider transition-colors ${on ? 'bg-silver/[0.12]' : 'hover:bg-ink/[0.06]'}`}
                       style={{ height: g.h }}
                     >
+                      {offOf(g.price) && (
+                        <span className="text-textMuted" aria-label={offOf(g.price) === 'up' ? 'above the chart' : 'below the chart'} data-tape-tag-off={offOf(g.price)!}>
+                          {offOf(g.price) === 'up' ? '↑' : '↓'}
+                        </span>
+                      )}
                       <span className="flex flex-col leading-[12px]">
                         {g.levels.map(l => (
                           <span key={l.key} className={on ? 'text-textPrimary' : undefined} style={{ color: on ? undefined : l.ink }}>

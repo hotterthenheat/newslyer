@@ -129,6 +129,17 @@
   /* already sticky — only the paint order needs saying */
   z-index: 30;
 }
+/* …AND THE BIGGEST MOVES (the paying-user audit's C1, 2026-10-13): "Biggest moves" lays the same scrim, and its badged
+   nodes, their strikes and their dates are the ones kept sharp above it — the rule had only ever lifted a clicked node,
+   so every capsule blurred */
+[data-ledger-focus] [data-cell][data-kept],
+[data-ledger-focus] [data-strike][data-kept-row] {
+  position: relative;
+  z-index: 30;
+}
+[data-ledger-focus] [data-exp-head][data-kept-col] {
+  z-index: 30;
+}
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {

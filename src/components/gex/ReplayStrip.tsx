@@ -148,12 +148,15 @@ interface Props {
   minPos?: number;
   minTitle?: string;
   className?: string;
+  /** The compact line as a bar of its own across a box (the Map, 2026-10-13): the track takes the room, the moment under
+      the pointer is said beside it */
+  wide?: boolean;
 }
 
 const iconBtn = 'shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-textSecondary hover:text-textPrimary hover:bg-ink/[0.06] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-textSecondary transition-colors';
 const doorBtn = 'shrink-0 inline-flex items-center gap-1.5 h-6 rounded-md border border-borderSubtle hover:border-borderMuted font-mono text-[11px] text-textSecondary hover:text-textPrimary transition-colors';
 
-const ReplayStrip = ({ phase, pos, length, day, startMin, playing, onPlay, pace, onPace, onSeek, onExit, compact = false, words, marks, paceUnit = 'seconds', candleMin = 1, step = 60, counter, wordsAt, exitWords = 'Back to live', stateWord = 'replaying', minPos = 0, minTitle, className = '' }: Props) => {
+const ReplayStrip = ({ phase, pos, length, day, startMin, playing, onPlay, pace, onPace, onSeek, onExit, compact = false, words, marks, paceUnit = 'seconds', candleMin = 1, step = 60, counter, wordsAt, exitWords = 'Back to live', stateWord = 'replaying', minPos = 0, minTitle, className = '', wide = false }: Props) => {
   /* candles a real second at a pace: a chart's own bars ARE candles; a session clock's seconds are folded into the host's candle */
   const perSecond = (p: number) => (paceUnit === 'bars' ? p : p / (60 * Math.max(1 / 60, candleMin)));
   const paceOptions: DropdownOption<number>[] = (paceUnit === 'bars' ? BAR_PACES : CLOCK_PACES).map(o => ({ ...o, hint: o.value === 1 && paceUnit === 'seconds' ? `As it happened — ${candlePace(perSecond(1)).long.toLowerCase()}` : candlePace(perSecond(o.value)).long }));
@@ -205,8 +208,10 @@ const ReplayStrip = ({ phase, pos, length, day, startMin, playing, onPlay, pace,
   for (let m = Math.ceil(start / 60) * 60; m <= start + spanMin && m <= CLOSE_MIN; m += 60) hours.push(m);
   const ticks = marks ?? hours.map(m => ({ u: (m - start) / spanMin, label: hhmm(m) }));
   const at = (p: number) => hhmm(start + Math.floor(p / 60));
-  const when = words ?? `${day ? `${day} · ` : ''}${at(pos)}`;
   const sayAt = wordsAt ?? at;
+  const sayAtLater = sayAt;
+  /* the moment under the pointer, said where the moment is said (a bar across a box has no room above its track) */
+  const when = words ?? `${day ? `${day} · ` : ''}${wide && over != null ? sayAtLater(over * length) : at(pos)}`;
 
   /* A step is taken with the tape held: stepping under a running replay is a fight for the position */
   const stepTo = (next: number) => {
@@ -228,6 +233,23 @@ const ReplayStrip = ({ phase, pos, length, day, startMin, playing, onPlay, pace,
       onPointerUp={onUp}
       onPointerCancel={onUp}
       onPointerLeave={() => setOver(null)}
+      /* THE KEYS REACH IT (the paying-user audit's H7): a slider — the arrows a step, Shift a ten, Home and End the ends */
+      tabIndex={0}
+      role="slider"
+      aria-label="The replay's position"
+      aria-valuemin={0}
+      aria-valuemax={length}
+      aria-valuenow={Math.round(pos)}
+      aria-valuetext={at(pos)}
+      onKeyDown={e => {
+        const by = e.shiftKey ? step * 10 : step;
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') stepTo(pos - by);
+        else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') stepTo(pos + by);
+        else if (e.key === 'Home') stepTo(0);
+        else if (e.key === 'End') stepTo(length);
+        else return;
+        e.preventDefault();
+      }}
       data-replay-track
     >
       <div className={`relative w-full h-[3px] rounded-full bg-ink/[0.12] ${withMarks ? '-translate-y-[5px]' : ''}`}>
@@ -302,6 +324,19 @@ const ReplayStrip = ({ phase, pos, length, day, startMin, playing, onPlay, pace,
         <span className="inline-flex items-center gap-2 h-7 font-mono text-[11px]" style={{ color: SILVER }} data-replay-strip="pick">
           <Crosshair className="w-3 h-3" aria-hidden="true" /> Select a bar on the chart
         </span>
+      );
+    if (wide)
+      return (
+        <div className={`flex items-center gap-1.5 h-9 px-3 ${className}`} data-replay-strip="wide">
+          {stepBack}
+          {playButton('sm')}
+          {stepOn}
+          <span className="w-1" aria-hidden="true" />
+          {track('flex-1 min-w-[160px]', false)}
+          <span className="w-1" aria-hidden="true" />
+          {moment}
+          {exitDoor(true)}
+        </div>
       );
     return (
       <span className="inline-flex items-center gap-1.5 h-7" data-replay-strip="compact">
