@@ -14,38 +14,45 @@
 ==================================================
 */
 
+import { createContext, useContext } from 'react';
 import { fmtUsd } from '../../data/gex';
 import type { ExposureSurface, Greek } from '../../data/exposureSurface';
+import { heatCellStyle, type HeatMode } from './heatmap';
 
 const INK = 'rgb(var(--text-primary))';
 const INK_2 = 'rgb(var(--text-secondary))';
 const INK_3 = 'rgb(var(--text-muted))';
 const SILVER = 'rgb(var(--silver))'; /* the silver token — deep steel on the light terminal (2026-09-12) */
 const SUPREME = 'rgb(var(--supreme))';
+const PUT_WALL = 'rgb(var(--bear))';
+const CALL_WALL = 'rgb(var(--bull))';
 const GRID = 'rgb(var(--ink) / 0.07)'; /* the ink token: on paper the white hairline was none */
-const COOL_1 = '#ABD9E9';
-const COOL_2 = '#74ADD1';
-const COOL_3 = '#4575B4';
-const WARM_1 = '#FDAE61';
-const WARM_2 = '#F46D43';
-const WARM_3 = '#D73027';
-const PALE = '#FFFFBF';
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 const SANS = '"Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
-const Cell = ({ x, y, w, fill, text, ink = '#0a0a0a', ring }: { x: number; y: number; w: number; fill: string; text?: string; ink?: string; ring?: string }) => (
-  <g>
-    <rect x={x} y={y - 7} width={w} height={14} rx={7} fill={fill} />
-    {ring && <rect x={x - 1.5} y={y - 8.5} width={w + 3} height={17} rx={8.5} fill="none" stroke={ring} strokeWidth="1.25" />}
-    {text && (
-      <text x={x + w - 6} y={y + 0.5} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize="11" fontWeight="600" fill={ink}>
-        {text}
+/* THE DRAWINGS IN THE PALETTE ON THE SCREEN (the paying-user audit's H3, 2026-10-13): the figures were painted in the
+   thermal ramp's blue and red while the calendar beside them wore the house's ember and glacier — the picture that
+   teaches the colours taught the wrong ones. A cell is a signed figure in $M now, painted by the calendar's own
+   ramp (the side that pushes a move along is the positive one, the house's sign), its figure printed the calendar's
+   way. */
+const Paint = createContext<{ mode?: HeatMode; paper: boolean }>({ paper: false });
+const FIG_MAX = 256;
+
+const Cell = ({ x, y, w, v, ring }: { x: number; y: number; w: number; v: number; ring?: string }) => {
+  const { mode, paper } = useContext(Paint);
+  const st = heatCellStyle(v, FIG_MAX, mode, paper);
+  return (
+    <g>
+      <rect x={x} y={y - 7} width={w} height={14} rx={7} fill={String(st.backgroundColor)} />
+      {ring && <rect x={x - 1.5} y={y - 8.5} width={w + 3} height={17} rx={8.5} fill="none" stroke={ring} strokeWidth="1.25" />}
+      <text x={x + w - 6} y={y + 0.5} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize="11" fontWeight="600" fill={String(st.color)}>
+        {fmtUsd(v * 1e6)}
       </text>
-    )}
-  </g>
-);
+    </g>
+  );
+};
 
 /* THE DRAWINGS AT THEIR OWN SIZE (the re-audit's M1, 2026-10-13): drawn 368 wide and stretched to the card, their
    8–9.5px type never reached the page's 11px floor and the dates in them were a September that never moved. They are
@@ -67,12 +74,13 @@ const CELL_W = 80;
 
 /** FIGURE 1 — the grid: a strike per row, an expiry per column, the supreme starred */
 const GridFigure = () => {
+  /* 495 is the supreme (magenta wins over its call wall's green, the strike column's rule); 493 the put wall */
   const rows = [
-    { y: 46, k: '496', cells: [[COOL_1, '$94M'], [COOL_1, '$81M'], [PALE, '$40M'], [PALE, '$22M']] },
-    { y: 74, k: '495', wall: 'call', cells: [[COOL_3, '$256M', '#fff', true], [COOL_3, '$231M', '#fff'], [COOL_2, '$188M'], [COOL_2, '$150M']] },
-    { y: 102, k: '494', cells: [[WARM_1, '$61M'], [PALE, '$38M'], [PALE, '$19M'], [PALE, '$9M']] },
-    { y: 130, k: '493', wall: 'put', cells: [[WARM_3, '$131M', '#fff'], [WARM_2, '$104M'], [WARM_2, '$96M'], [WARM_1, '$70M']] },
-  ] as { y: number; k: string; wall?: string; cells: (string | boolean)[][] }[];
+    { y: 46, k: '496', ink: INK_2, cells: [-94, -81, -40, -22] },
+    { y: 74, k: '495', ink: SUPREME, cells: [-256, -231, -188, -150], ring: 0 },
+    { y: 102, k: '494', ink: INK_2, cells: [61, 38, 19, 9] },
+    { y: 134, k: '493', ink: PUT_WALL, cells: [131, 104, 96, 70] },
+  ] as { y: number; k: string; ink: string; cells: number[]; ring?: number }[];
   return (
     <svg viewBox={`0 0 ${FIG_W} 196`} width={FIG_W} height={196} role="img" aria-label="A grid of capsules: one strike per row, one expiry per column, the heaviest cell ringed in magenta with a star" data-guide-figure="grid">
       {/* Column heads — the dates, today first */}
@@ -84,11 +92,11 @@ const GridFigure = () => {
       <line x1={52} x2={FIG_W - 10} y1={29.5} y2={29.5} stroke={GRID} />
       {rows.map(r => (
         <g key={r.k}>
-          <Label x={44} y={r.y} anchor="end" fill={r.wall === 'put' ? SUPREME : r.wall === 'call' ? 'rgb(var(--bull))' : INK_2} mono>
+          <Label x={44} y={r.y} anchor="end" fill={r.ink} mono>
             {r.k}
           </Label>
-          {r.cells.map((c, i) => (
-            <Cell key={i} x={COLS[i].x} y={r.y} w={CELL_W} fill={c[0] as string} text={c[1] as string} ink={(c[2] as string) ?? '#0a0a0a'} ring={c[3] ? SUPREME : undefined} />
+          {r.cells.map((v, i) => (
+            <Cell key={i} x={COLS[i].x} y={r.y} w={CELL_W} v={v} ring={r.ring === i ? SUPREME : undefined} />
           ))}
         </g>
       ))}
@@ -97,10 +105,10 @@ const GridFigure = () => {
         ★
       </text>
       {/* Spot, between the rows it sits between — the chip at the line's end */}
-      <line x1={52} x2={338} y1={116} y2={116} stroke={INK} strokeOpacity="0.35" strokeDasharray="2 3" />
-      <rect x={342} y={110} width={48} height={12} rx={3} fill={INK} />
+      <line x1={52} x2={338} y1={118} y2={118} stroke={INK} strokeOpacity="0.35" strokeDasharray="2 3" />
+      <rect x={342} y={112} width={48} height={12} rx={3} fill={INK} />
       {/* the chip is the page's ink, so its figure is the page's ground: on paper the dark figure sat on a dark chip, unread */}
-      <text x={366} y={116.5} textAnchor="middle" dominantBaseline="middle" fontFamily={MONO} fontSize="11" className="fill-[#0a0a0a] [[data-theme='light']_&]:fill-canvas">
+      <text x={366} y={118.5} textAnchor="middle" dominantBaseline="middle" fontFamily={MONO} fontSize="11" className="fill-[#0a0a0a] [[data-theme='light']_&]:fill-canvas">
         493.60
       </text>
       <Label x={52} y={152} fill={INK_3}>
@@ -110,7 +118,10 @@ const GridFigure = () => {
         ★ heaviest cell
       </text>
       <text x={150} y={168} dominantBaseline="middle" fontFamily={SANS} fontSize="11" fill={SUPREME}>
-        magenta strike: the supreme
+        magenta: the supreme
+      </text>
+      <text x={292} y={168} dominantBaseline="middle" fontFamily={SANS} fontSize="11" fill={PUT_WALL}>
+        red: the put wall
       </text>
       <Label x={52} y={184} fill={INK_3}>
         dotted line: the market
@@ -129,11 +140,11 @@ const ReadFigure = () => (
     ))}
     <line x1={52} x2={FIG_W - 10} y1={29.5} y2={29.5} stroke={GRID} />
     {/* A wall that stays: heavy across the row */}
-    <Label x={44} y={50} anchor="end" fill="rgb(var(--bull))" mono>
-      495
+    <Label x={44} y={50} anchor="end" fill={CALL_WALL} mono>
+      497
     </Label>
     {COLS.map((c, i) => (
-      <Cell key={`a${i}`} x={c.x} y={50} w={CELL_W} fill={COOL_3} text={['$256M', '$231M', '$188M', '$150M'][i]} ink="#fff" />
+      <Cell key={`a${i}`} x={c.x} y={50} w={CELL_W} v={[-256, -231, -188, -150][i]} />
     ))}
     <path d={`M${COLS[3].x + CELL_W + 3} 43 h5 v14 h-5`} fill="none" stroke={SILVER} />
     {/* A one-day wall: heavy today, gone after */}
@@ -141,7 +152,7 @@ const ReadFigure = () => (
       492
     </Label>
     {COLS.map((c, i) => (
-      <Cell key={`b${i}`} x={c.x} y={80} w={CELL_W} fill={i === 0 ? WARM_3 : PALE} text={['$148M', '$6M', '$3M', '$1M'][i]} ink={i === 0 ? '#fff' : '#0a0a0a'} />
+      <Cell key={`b${i}`} x={c.x} y={80} w={CELL_W} v={[148, 6, 3, 1][i]} />
     ))}
     <Label x={52} y={108} fill={SILVER}>
       read across → heavy in every column, the level stays for weeks
@@ -157,12 +168,207 @@ const ReadFigure = () => (
   </svg>
 );
 
+/** FIGURE — the matrix: a strike per row, its figure beside a bar as long as the hedging there */
+const MatrixFigure = () => {
+  const { mode, paper } = useContext(Paint);
+  const rows = [
+    { y: 46, k: '496', ink: INK_2, v: -94 },
+    { y: 70, k: '495', ink: SUPREME, v: -256 },
+    { y: 94, k: '494', ink: INK_2, v: 61 },
+    { y: 130, k: '493', ink: PUT_WALL, v: 131 },
+  ];
+  const LANE = 236;
+  return (
+    <svg viewBox={`0 0 ${FIG_W} 196`} width={FIG_W} height={196} role="img" aria-label="Rows of strikes, each with its figure and a bar as long as its hedging; spot is a row of its own" data-guide-figure="matrix">
+      <Label x={44} y={18} anchor="end" fill={INK_3} mono>
+        Strike
+      </Label>
+      <Label x={110} y={18} fill={INK_3} mono>
+        GEX
+      </Label>
+      <line x1={8} x2={FIG_W - 10} y1={29.5} y2={29.5} stroke={GRID} />
+      {rows.map(r => {
+        const st = heatCellStyle(r.v, FIG_MAX, mode, paper);
+        return (
+          <g key={r.k}>
+            <Label x={44} y={r.y} anchor="end" fill={r.ink} mono>
+              {r.k}
+            </Label>
+            <text x={102} y={r.y + 0.5} textAnchor="end" dominantBaseline="middle" fontFamily={MONO} fontSize="11" fill={INK}>
+              {fmtUsd(r.v * 1e6)}
+            </text>
+            <rect x={110} y={r.y - 5} width={Math.max(4, (Math.abs(r.v) / FIG_MAX) * LANE)} height={10} rx={5} fill={String(st.backgroundColor)} />
+          </g>
+        );
+      })}
+      {/* spot, a row of its own between the strikes it sits between */}
+      <line x1={8} x2={FIG_W - 60} y1={112} y2={112} stroke={INK} strokeOpacity="0.35" strokeDasharray="2 3" />
+      <rect x={FIG_W - 56} y={106} width={48} height={12} rx={3} fill={INK} />
+      <text x={FIG_W - 32} y={112.5} textAnchor="middle" dominantBaseline="middle" fontFamily={MONO} fontSize="11" className="fill-[#0a0a0a] [[data-theme='light']_&]:fill-canvas">
+        493.60
+      </text>
+      <Label x={8} y={156} fill={INK_3}>
+        a strike per row · the bar is the hedging there, its figure beside it
+      </Label>
+      <text x={8} y={172} dominantBaseline="middle" fontFamily={SANS} fontSize="11" fill={SUPREME}>
+        magenta: the supreme
+      </text>
+      <text x={130} y={172} dominantBaseline="middle" fontFamily={SANS} fontSize="11" fill={PUT_WALL}>
+        red: the put wall
+      </text>
+      <text x={238} y={172} dominantBaseline="middle" fontFamily={SANS} fontSize="11" fill={CALL_WALL}>
+        green: the call wall
+      </text>
+      <Label x={8} y={188} fill={INK_3}>
+        dotted line: the market
+      </Label>
+    </svg>
+  );
+};
+
+/** FIGURE — the profile: the book's gamma if price stood at each level, the zero crossing marked */
+const ProfileFigure = () => {
+  const { mode, paper } = useContext(Paint);
+  const amp = String(heatCellStyle(200, FIG_MAX, mode, paper).backgroundColor);
+  const abs = String(heatCellStyle(-200, FIG_MAX, mode, paper).backgroundColor);
+  /* a curve from below zero (left) to above it (right), crossing at x=196 */
+  const pts = [
+    [20, 128],
+    [70, 132],
+    [120, 120],
+    [160, 104],
+    [196, 86],
+    [240, 64],
+    [290, 44],
+    [340, 38],
+    [384, 42],
+  ];
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0]} ${p[1]}`).join(' ');
+  return (
+    <svg viewBox={`0 0 ${FIG_W} 196`} width={FIG_W} height={196} role="img" aria-label="A curve of the book's gamma across prices, crossing zero at the zero-gamma line; above zero hedging amplifies a move, below it absorbs one" data-guide-figure="profile">
+      <rect x={20} y={20} width={364} height={66} fill={amp} fillOpacity={0.12} />
+      <rect x={20} y={86} width={364} height={66} fill={abs} fillOpacity={0.12} />
+      <line x1={20} x2={384} y1={86} y2={86} stroke={INK_3} strokeOpacity="0.6" />
+      <path d={d} fill="none" stroke={INK} strokeWidth="1.75" />
+      <line x1={196} x2={196} y1={20} y2={152} stroke={INK_2} strokeDasharray="3 3" />
+      <Label x={200} y={30} fill={INK_2} mono>
+        ZERO GAMMA
+      </Label>
+      <line x1={250} x2={250} y1={20} y2={152} stroke={INK} strokeOpacity="0.45" strokeDasharray="2 3" />
+      <Label x={254} y={146} fill={INK_2} mono>
+        spot
+      </Label>
+      <line x1={120} x2={120} y1={20} y2={152} stroke={PUT_WALL} strokeOpacity="0.8" />
+      <line x1={330} x2={330} y1={20} y2={152} stroke={CALL_WALL} strokeOpacity="0.8" />
+      <Label x={24} y={30} fill={INK_3}>
+        amplifies
+      </Label>
+      <Label x={24} y={146} fill={INK_3}>
+        absorbs
+      </Label>
+      <Label x={20} y={172} fill={INK_3}>
+        price runs left to right · the line is the book's gamma if price stood there
+      </Label>
+      <Label x={20} y={188} fill={INK_3}>
+        red rule: the put wall · green rule: the call wall
+      </Label>
+    </svg>
+  );
+};
+
 interface LedgerGuideProps {
   surface: ExposureSurface;
   greek: Greek;
+  /** The view on the screen — each has its own picture and words */
+  view?: 'matrix' | 'calendar' | 'profile';
+  /** The capsules' ramp, the figures painted in it */
+  mode?: HeatMode;
+  paper?: boolean;
 }
 
-const LedgerGuide = ({ surface, greek }: LedgerGuideProps) => {
+/** What the guide says for the view on the screen — the title its focus card wears */
+export const guideTitle = (view: 'matrix' | 'calendar' | 'profile' = 'calendar') => (view === 'matrix' ? 'How to read the matrix' : view === 'profile' ? 'How to read the profile' : 'How to read the calendar');
+
+const LedgerGuide = ({ surface, greek, view = 'calendar', mode, paper = false }: LedgerGuideProps) => (
+  <Paint.Provider value={{ mode, paper }}>
+    {view === 'matrix' ? <MatrixWords surface={surface} greek={greek} mode={mode} /> : view === 'profile' ? <ProfileWords surface={surface} mode={mode} /> : <CalendarWords surface={surface} greek={greek} mode={mode} />}
+  </Paint.Provider>
+);
+
+/** The two sides' colours in words, for the ramp on the screen */
+const sideWords = (mode?: HeatMode) => (mode === 'thermal-yellow' ? { absorb: 'Blue', amplify: 'red and orange' } : { absorb: 'Glacier blue', amplify: 'ember orange' });
+
+const InWords = ({ surface, greek }: { surface: ExposureSurface; greek: Greek }) => {
+  const label = greek.toUpperCase();
+  const supreme = surface.supreme[greek];
+  const supremeDate = surface.expiries[supreme.e]?.date ?? '';
+  return (
+    <li className="text-[11.5px] leading-relaxed text-textSecondary">
+      The supreme is <span className="font-mono tnum font-semibold" style={{ color: SUPREME }}>{fmtStrike(supreme.strike)}</span>: <span className="font-mono tnum text-textPrimary">{fmtUsd(Math.abs(supreme.total))}</span> of {label} hedging across the whole book, most of it on{' '}
+      <span className="text-textPrimary">{supremeDate}</span>. The chart wears it in magenta.
+    </li>
+  );
+};
+
+const MatrixWords = ({ surface, greek, mode }: { surface: ExposureSurface; greek: Greek; mode?: HeatMode }) => {
+  const w = sideWords(mode);
+  return (
+    <div className="px-3 py-3 flex flex-col gap-3" data-ledger-guide-card data-guide-view="matrix">
+      <div>
+        <p className="text-[12px] font-semibold text-textPrimary">The matrix · one strike per row, a column per greek</p>
+        <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
+          Each row is a strike, every expiry on the band added together. The figure is how much dealer hedging sits there, and the bar beside it is that figure drawn: the longer, the more. {w.absorb} pushes back against a move through the strike, {w.amplify} pushes it along. A strike's ink names its level: magenta the supreme, green the call wall, red the put wall; a dotted underline marks the gamma pin, a silver one a strike you own. Spot is a row of its own, where price stands.
+        </p>
+        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2 overflow-x-auto scroll-row">
+          <MatrixFigure />
+        </div>
+      </div>
+      <div>
+        <p className="text-[12px] font-semibold text-textPrimary">Legs · the net, one side, or both</p>
+        <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
+          Legs, up on the band, draws the net alone, the calls or the puts alone, or both side by side: the put's bar grows left from the seam and the call's right. The card under the pointer always carries both legs, the net and the open interest.
+        </p>
+      </div>
+      <div className="border-t border-borderSubtle/60 pt-2.5">
+        <p className="text-[11px] text-textMuted">Today's matrix, in words</p>
+        <ul className="mt-1 flex flex-col gap-1.5">
+          <InWords surface={surface} greek={greek} />
+        </ul>
+      </div>
+      <p className="text-[11px] text-textMuted">Hover a row for its card · click to keep the strike on every box of the page · click it again, or Esc, to let go · ↑ ↓ or J K walk the rows once the matrix is focused.</p>
+    </div>
+  );
+};
+
+const ProfileWords = ({ surface, mode }: { surface: ExposureSurface; mode?: HeatMode }) => {
+  void mode;
+  return (
+    <div className="px-3 py-3 flex flex-col gap-3" data-ledger-guide-card data-guide-view="profile">
+      <div>
+        <p className="text-[12px] font-semibold text-textPrimary">The profile · the book's gamma at every price</p>
+        <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
+          Price runs left to right. The line is the dealers' total gamma if price stood at that level, every drawn expiry added together; the quiet lines are the expiries one by one. Above the zero line their hedging amplifies a move; below it, it absorbs one. Where the line crosses zero is the zero-gamma level: the price where the book changes character. It is not the same number as the flip strike on the band, which is the strike where the net by strike changes sign.
+        </p>
+        <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2 overflow-x-auto scroll-row">
+          <ProfileFigure />
+        </div>
+      </div>
+      <div className="border-t border-borderSubtle/60 pt-2.5">
+        <p className="text-[11px] text-textMuted">Today's profile, in words</p>
+        <ul className="mt-1 flex flex-col gap-1.5">
+          <li className="text-[11.5px] leading-relaxed text-textSecondary">
+            The put wall is <span className="font-mono tnum" style={{ color: PUT_WALL }}>{fmtStrike(surface.levels.putWall)}</span> and the call wall <span className="font-mono tnum" style={{ color: CALL_WALL }}>{fmtStrike(surface.levels.callWall)}</span>; price is at{' '}
+            <span className="font-mono tnum text-textPrimary">{surface.spot.toFixed(2)}</span>.
+          </li>
+        </ul>
+      </div>
+      <p className="text-[11px] text-textMuted">Hover the plot for the figures at a price · click to keep the nearest strike · ← → walk the curve once the plot is focused.</p>
+    </div>
+  );
+};
+
+const CalendarWords = ({ surface, greek, mode }: { surface: ExposureSurface; greek: Greek; mode?: HeatMode }) => {
+  const w = sideWords(mode);
   const label = greek.toUpperCase();
   const net = surface.net[greek];
   const king = surface.king[greek];
@@ -187,11 +393,11 @@ const LedgerGuide = ({ surface, greek }: LedgerGuideProps) => {
   const stays = wallToday > 0 && wallFar >= wallToday * 0.5;
 
   return (
-    <div className="px-3 py-3 flex flex-col gap-3" data-ledger-guide-card>
+    <div className="px-3 py-3 flex flex-col gap-3" data-ledger-guide-card data-guide-view="calendar">
       <div>
         <p className="text-[12px] font-semibold text-textPrimary">The grid · one strike per row, one date per column</p>
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-textSecondary">
-          Each row is a strike, a price level. Each column is an expiry date, today first and later dates to the right. Each cell is a capsule: the figure inside is how much dealer hedging sits at that strike for that date. Brighter and longer means more. Blue pushes back against a move there, orange pushes it along. The strike printed in magenta is the supreme, the heaviest strike of the whole book and the one the chart wears in magenta; the cell with the star is the heaviest single cell. A strike's ink names its level: green the call wall, red the put wall, magenta the supreme; a dotted underline marks the gamma pin, a silver one a strike you own. Hover a strike for the words.
+          Each row is a strike, a price level. Each column is an expiry date, today first and later dates to the right. Each cell is a capsule: the figure inside is how much dealer hedging sits at that strike for that date. Brighter means more. {w.absorb} pushes back against a move there, {w.amplify} pushes it along. The strike printed in magenta is the supreme, the heaviest strike of the whole book and the one the chart wears in magenta; the cell with the star is the heaviest single cell. A strike's ink names its level: green the call wall, red the put wall, magenta the supreme; a dotted underline marks the gamma pin, a silver one a strike you own. Hover a strike for the words.
         </p>
         <div className="mt-2 rounded-md border border-borderSubtle/60 bg-panel px-2 py-2 overflow-x-auto scroll-row">
           <GridFigure />
@@ -230,7 +436,7 @@ const LedgerGuide = ({ surface, greek }: LedgerGuideProps) => {
           )}
         </ul>
       </div>
-      <p className="text-[11px] text-textMuted">Click a cell for its card · click it again, or anywhere off the grid, to let go · Biggest moves, up on the band, keeps only the badged cells sharp — the biggest moves since the open.</p>
+      <p className="text-[11px] text-textMuted">Hover a cell for its card · click to keep it · click it again, Esc, or anywhere off the grid to let go · the arrows or J K walk the cells once the calendar is focused · Biggest moves, up on the band, keeps only the badged cells sharp — the biggest moves since the open.</p>
     </div>
   );
 };

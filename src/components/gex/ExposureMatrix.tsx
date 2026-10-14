@@ -40,10 +40,12 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { HEAT_MODE, heatLadderColor, type HeatMode } from './heatmap';
 import SpotRule from '../ui/SpotRule';
-import PointerCard, { CardRow, PointerFollowCard } from '../ui/PointerCard';
+import PointerCard, { CardRow, PointerFollowCard, letGoWords } from '../ui/PointerCard';
+
+const letGo = letGoWords();
 import { fmtUsd } from '../../data/gex';
 import { GREEKS, GREEK_UNIT, type ExposureSurface, type Greek } from '../../data/exposureSurface';
-import { CALL_WALL, FLIP, PUT_WALL, SUPREME } from './paletteInk';
+import { CALL_WALL, EMBER, FLIP, GLACIER, PUT_WALL, SUPREME } from './paletteInk';
 import { strikeRole, underlineClass } from './strikeRole';
 import StrikeNum, { hasCents } from './StrikeNum';
 import { useResolvedTheme } from '../../theme/theme';
@@ -81,8 +83,11 @@ type Leg = 'put' | 'call' | 'net';
 const legsOf = (pick: 'net' | 'call' | 'put' | 'both'): Leg[] => (pick === 'both' ? ['put', 'call'] : [pick]);
 const GREEK_LABEL: Record<Greek, string> = { gex: 'GEX', dex: 'DEX', vex: 'VEX', vanna: 'VANNA', charm: 'CHARM' };
 const SILVER = 'rgb(var(--silver))';
-const PUT_INK = PUT_WALL;
-const CALL_INK = CALL_WALL;
+/* THE LEGS IN THE CAPSULES' OWN INKS (the paying-user audit's H8, 2026-10-13): the card said Put in the put wall's red
+   and Call in the call wall's green while the calendar's card said them in ember and glacier — one book, two codes. The
+   walls keep red and green (they are levels); a leg is the ramp's side */
+const PUT_INK = EMBER;
+const CALL_INK = GLACIER;
 const ROW_H = 27;
 /* THE ROWS SHARE THE BOX, the ledger's way, down to this floor (the owner, 2026-10-13: the first row half under the head
    and the last cut at the foot — forty 27px rows never fit an 870px box) — and with no ceiling ("i dont want any
@@ -207,8 +212,19 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
       if (t?.closest('[data-matrix-row],[data-ladder-row],[data-cell],[data-strike],[data-profile-panel],[data-dropdown],[data-dropdown-card],[role="menu"],[data-focus-chip],[data-guide-door],button,a,input,select,textarea')) return;
       if (keptRef.current != null) onSelectStrike?.(keptRef.current);
     };
+    /* Escape lets go too, first and alone (the paying-user audit's H6 — the calendar's rule) */
+    const k = (ev: globalThis.KeyboardEvent) => {
+      if (ev.key !== 'Escape' || ev.defaultPrevented || keptRef.current == null) return;
+      if ((ev.target as Element | null)?.closest?.('input,textarea,select,[role="menu"],[role="dialog"]')) return;
+      ev.preventDefault();
+      onSelectStrike?.(keptRef.current);
+    };
     document.addEventListener('click', h);
-    return () => document.removeEventListener('click', h);
+    document.addEventListener('keydown', k);
+    return () => {
+      document.removeEventListener('click', h);
+      document.removeEventListener('keydown', k);
+    };
   }, [pinned, onSelectStrike]);
 
   /* THE POINTER CARD — the ladder's, one mounted element per hover, tracking the pointer by itself */
@@ -283,7 +299,7 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
       </>
     );
     return still ? (
-      <PointerCard x={start.x} y={start.y} still width={CARD_W} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside} foot={<span className="text-[11px] uppercase tracking-widest text-textMuted">kept · click to let go</span>}>
+      <PointerCard x={start.x} y={start.y} still width={CARD_W} testId="data-matrix-card" testValue={r.strike} title={title} aside={aside} foot={<span className="text-[11px] uppercase tracking-widest text-textMuted">kept · {letGo}</span>}>
         {body}
       </PointerCard>
     ) : (
@@ -324,8 +340,8 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
     if (e.target !== e.currentTarget || e.altKey || e.ctrlKey || e.metaKey || !rows.length) return;
     const i = keyRow == null ? -1 : rows.findIndex(r => Math.abs(r.strike - keyRow) < 1e-9);
     let next: Row | undefined;
-    if (e.key === 'ArrowDown') next = rows[Math.min(rows.length - 1, i + 1)];
-    else if (e.key === 'ArrowUp') next = rows[Math.max(0, i - 1)];
+    if (e.key === 'ArrowDown' || e.key === 'j') next = rows[Math.min(rows.length - 1, i + 1)];
+    else if (e.key === 'ArrowUp' || e.key === 'k') next = rows[Math.max(0, i - 1)];
     else if (e.key === 'Home') next = rows[0];
     else if (e.key === 'End') next = rows[rows.length - 1];
     else if ((e.key === 'Enter' || e.key === ' ') && keyRow != null) {

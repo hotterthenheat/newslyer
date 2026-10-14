@@ -57,7 +57,9 @@ import { afterGlide, onGlide, promisedWidth } from '../../core/glide';
 import { netInk } from './ExposureReadout';
 import type { SurfaceCell } from './exposureView';
 import { sinceOpenRead } from '../../data/levelview';
-import PointerCard, { CardRow, PointerFollowCard } from '../ui/PointerCard';
+import PointerCard, { CardRow, PointerFollowCard, letGoWords } from '../ui/PointerCard';
+
+const letGo = letGoWords();
 import { CARD_W } from './ExposureMatrix';
 
 interface ExposureLedgerProps {
@@ -138,16 +140,20 @@ const SINCE_SHOWN = 10;
 /** …and no node whose move is under this share of the board's heaviest cell: a quiet board wears no badge */
 const SINCE_FLOOR = 0.05;
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
-/** The figure for a narrow cell — "272M" where "-$272.1M" would not fit (All at
-    forty columns): four glyphs at most, no sign — the capsule's colour IS the
-    sign on every ramp, and the read line carries the signed figure */
+/** The figure for a narrow cell — "−272M" where "-$272.1M" would not fit (All at
+    forty columns): the dollar sign goes, THE MINUS STAYS (the paying-user audit's
+    H2, 2026-10-13: on the ember-and-glacier ramp a pale capsule could be either
+    side, and a figure that hides its sign is a figure to hover) */
 const fmtShortUsd = (v: number) => {
   const a = Math.abs(v);
-  if (a >= 1e9) return `${(a / 1e9).toFixed(a >= 1e10 ? 0 : 1)}B`;
-  if (a >= 1e6) return `${Math.round(a / 1e6)}M`;
-  if (a >= 1e3) return `${Math.round(a / 1e3)}K`;
-  return a.toFixed(0);
+  const sign = v < 0 && a >= 0.5 ? '−' : '';
+  if (a >= 1e9) return `${sign}${(a / 1e9).toFixed(a >= 1e10 ? 0 : 1)}B`;
+  if (a >= 1e6) return `${sign}${Math.round(a / 1e6)}M`;
+  if (a >= 1e3) return `${sign}${Math.round(a / 1e3)}K`;
+  return `${sign}${a.toFixed(0)}`;
 };
+/** A mono figure's glyph at a size, bold — measured off "−$272.1M" at 13px (61px) */
+const GLYPH = 0.6;
 /** What a cell prints: the full figure, the short one, or the colour alone */
 type Figure = 'full' | 'short' | 'none';
 const GREEK_LABEL: Record<Greek, string> = { gex: 'GEX', dex: 'DEX', vex: 'VEX', vanna: 'VANNA', charm: 'CHARM' };
@@ -572,9 +578,11 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
         return;
       }
       const r = el.getBoundingClientRect();
-      /* AT THE CELL'S RIGHT EDGE, whichever way it was kept (the re-audit's L2): anchored on the click it sat over the
-         cell it described */
-      setKeptPos({ x: r.right, y: r.top + r.height / 2 });
+      /* WHERE THE HOVER CARD WAS (the paying-user audit's L8, 2026-10-13): the click's point on the cell, so keeping a
+         card never moves it — the card stands above that point (PointerCard), off the cell it describes; a pin the
+         host set has no click and anchors at the cell's right edge */
+      const at = keptAt && keptAt.key === key ? keptAt : null;
+      setKeptPos(at ? { x: r.left + at.dx, y: r.top + at.dy } : { x: r.right, y: r.top + r.height / 2 });
     };
     read();
     box?.addEventListener('scroll', read, { passive: true });
@@ -605,8 +613,20 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
       if (t?.closest('[data-cell],[data-strike],[data-profile-panel],[data-position-gutter],[data-dropdown],[data-dropdown-card],[role="menu"],[data-focus-chip],[data-guide-door],button,a,input,select,textarea')) return;
       pickRef.current(null);
     };
+    /* …AND ESCAPE (the paying-user audit's H6, 2026-10-13: the keys sheet said Esc lets go of what is kept, and on the
+       calendar it did not). It lets go first and stops there — the replay and fullscreen wait for the next press */
+    const k = (ev: globalThis.KeyboardEvent) => {
+      if (ev.key !== 'Escape' || ev.defaultPrevented) return;
+      if ((ev.target as Element | null)?.closest?.('input,textarea,select,[role="menu"],[role="dialog"]')) return;
+      ev.preventDefault();
+      pickRef.current(null);
+    };
     document.addEventListener('click', h);
-    return () => document.removeEventListener('click', h);
+    document.addEventListener('keydown', k);
+    return () => {
+      document.removeEventListener('click', h);
+      document.removeEventListener('keydown', k);
+    };
   }, [pinned]);
 
   /* THE KEYS REACH THE CELLS (the audit's H10, 2026-10-13): the grid is one tab stop; the arrows walk the cells — up and
@@ -641,8 +661,9 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
     const ci = Math.max(0, columnsList.findIndex(c => c.g === cur.greek && c.e === cur.e));
     const col = (i: number) => columnsList[Math.max(0, Math.min(columnsList.length - 1, i))];
     let next: Focus | null = null;
-    if (e.key === 'ArrowDown') next = { ...cur, strike: strikes[Math.min(strikes.length - 1, si + 1)] };
-    else if (e.key === 'ArrowUp') next = { ...cur, strike: strikes[Math.max(0, si - 1)] };
+    /* j and k walk the strikes too, the way every list in a terminal walks (the paying-user audit's H6) */
+    if (e.key === 'ArrowDown' || e.key === 'j') next = { ...cur, strike: strikes[Math.min(strikes.length - 1, si + 1)] };
+    else if (e.key === 'ArrowUp' || e.key === 'k') next = { ...cur, strike: strikes[Math.max(0, si - 1)] };
     else if (e.key === 'ArrowRight') next = { ...cur, greek: col(ci + 1).g, e: col(ci + 1).e };
     else if (e.key === 'ArrowLeft') next = { ...cur, greek: col(ci - 1).g, e: col(ci - 1).e };
     else if (e.key === 'Home') next = { ...cur, greek: col(0).g, e: col(0).e };
@@ -769,6 +790,14 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
   const laneFor = (text: string | null): 'figure' | 'dot' | 'none' => (text && cellW >= 60 + text.length * 6.8 + 8 + 24 ? 'figure' : figure !== 'none' ? 'dot' : 'none');
   /* the dot beside the figure from 56px — under that the short figure fills the capsule and the dot rides the edge */
   const dotBeside = cellW >= 56;
+  /* THE FULL FIGURE ONLY WHERE IT FITS BESIDE WHAT THE CELL ALSO WEARS (the paying-user audit's H1, 2026-10-13): one
+     width rule for every cell printed "−$10.…" wherever a since-dot, the star or a chip took a slice of the capsule —
+     the cell now prints the short figure when the full one and its company do not fit, never a cut one */
+  const figureFor = (v: number, star: boolean, lane: 'figure' | 'dot' | 'none', chip: string | null): Figure => {
+    if (figure !== 'full') return figure;
+    const company = (star ? fontSize * 0.9 + 4 : 0) + (lane === 'dot' && dotBeside ? 8 : 0) + (lane === 'figure' && chip ? chip.length * 6.8 + 12 : 0);
+    return fmtUsd(v).length * fontSize * GLYPH + company + 16 + 6 <= cellW ? 'full' : 'short';
+  };
   /* THE CARD'S WORDS — the kept cell's; nothing at rest or under a mere hover */
   const cardAside = `${ex?.date ?? ''} · ${focus.e === todayIdx ? 'today' : (ex?.short ?? '')} · ${distPct >= 0 ? '+' : '−'}${Math.abs(distPct).toFixed(2)}%`;
   const legMax = Math.max(1, Math.abs(putV), Math.abs(callV));
@@ -798,7 +827,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
   const cardFoot = (
     <>
       <span style={{ color: verdictInk }}>{verdict}</span>
-      {pinned && <span className="block mt-0.5 text-[11px] uppercase tracking-widest text-textMuted">kept · click to let go</span>}
+      {pinned && <span className="block mt-0.5 text-[11px] uppercase tracking-widest text-textMuted">kept · {letGo}</span>}
     </>
   );
   /* While a node is in focus the pointer stops washing rows and columns — two
@@ -1015,13 +1044,14 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
                   const colWash = !pinned && hovered && hovered.greek === g && hovered.e === e && !isHoverRow ? 'bg-silver/[0.05]' : '';
                   const ring = isHover || isPinned ? SILVER : isSupremeCell ? SUPREME : undefined;
                   const sc = exceptional.has(`${g}|${e}|${strike}`) ? sinceCell(g, e, strike) : null;
+                  const v = q3(surface[leg][g][e][s]);
                   return (
                     <LedgerCell
                       key={`c-${g}-${exp.dte}-${strike}`}
                       strike={strike}
                       e={e}
                       g={g}
-                      v={q3(surface[leg][g][e][s])}
+                      v={v}
                       maxAbs={maxAbs}
                       date={exp.date}
                       first={ci === 0}
@@ -1036,7 +1066,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
                       dotBeside={dotBeside}
                       kept={focusOn && exceptional.has(`${g}|${e}|${strike}`)}
                       fontSize={fontSize}
-                      figure={figure}
+                      figure={figureFor(v, isKing && showStar, sc ? laneFor(sc.text) : 'none', sc?.text ?? null)}
                       mode={mode}
                       paper={paper}
                       pinned={isPinned}

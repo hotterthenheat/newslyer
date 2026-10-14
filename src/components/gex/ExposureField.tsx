@@ -44,7 +44,7 @@ import ExpiryRangeCard, { type ExpiryDay, type ExpiryShortcut } from '../ui/Expi
 import { expiryFor } from '../../core/calendar';
 import DropdownMulti from '../ui/DropdownMulti';
 import GuideFocus, { GuideDoor } from '../ui/GuideFocus';
-import LedgerGuide from './LedgerGuide';
+import LedgerGuide, { guideTitle } from './LedgerGuide';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, CalendarClock, Crosshair, Maximize2, Minimize2, Plus, X } from 'lucide-react';
@@ -979,7 +979,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       </span>
     </button>
   );
-  const guideButton = <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the grid means" testId="ledger-guide" compact={doorsTight} size={toolbar === 'band' ? 'md' : 'sm'} />;
+  const guideButton = <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title={view === 'profile' ? 'What the curve means' : view === 'matrix' ? 'What the matrix means' : 'What the calendar means'} testId="ledger-guide" compact={doorsTight} size={toolbar === 'band' ? 'md' : 'sm'} />;
   const dataDoor = <DataDoor ticker={surface.ticker} open={dataOpen} onClick={() => setDataOpen(v => !v)} compact={doorsTight} />;
   const exportDoor = toolbar === 'band' ? <ExportDoor surface={scoped(surface, snapshot)} greeks={greeks} expiries={shownIdx} compact={doorsTight} /> : null;
   /* THE READ's door — beside the guide's; lit while the card is up. The band's opens the host's read */
@@ -1054,8 +1054,8 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       type="button"
       onClick={() => setFocusOn(v => !v)}
       aria-pressed={focusOn}
-      disabled={fresh || view !== 'calendar'}
-      title={view !== 'calendar' ? 'On the calendar only' : fresh ? 'Not while the replay runs' : focusOn ? 'Back to the whole board (Esc)' : 'Keep only the biggest moves since the open sharp — the badged nodes'}
+      disabled={fresh}
+      title={fresh ? 'Not while the replay runs' : focusOn ? 'Back to the whole board (Esc)' : 'Keep only the biggest moves since the open sharp — the badged nodes'}
       className={`hit inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border bg-chip transition-colors font-mono select-none disabled:opacity-50 ${focusOn ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
       data-ledger-focus-door={focusOn ? 'on' : 'off'}
     >
@@ -1108,7 +1108,9 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
     <>
       {dataDoor}
       {namesDoor}
-      {focusDoor}
+      {/* only where it works (the paying-user audit's L7): a greyed door on the matrix and the profile was a control that
+          said no every time it was tried */}
+      {view === 'calendar' && focusDoor}
       {after}
       {exportDoor}
       <Fold open={!many} gap={8} className="ml-auto" testId="data-band-supreme">
@@ -1282,7 +1284,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       {toolbar === 'band' && !noteSeen && (
         <div className="shrink-0 flex items-start gap-3 px-4 py-2 border-b border-borderSubtle/60 bg-silver/[0.04] text-[11px] text-textSecondary" data-map-note>
           <p className="min-w-0 flex-1 leading-relaxed">
-            <span className="font-semibold text-textPrimary">First time here?</span> Rows are strikes; columns are the greeks, or the dates on the calendar. Click a row to keep its strike on every box of the page. The magenta strike is the supreme, the heaviest of the book; the green and red words are the call wall and the put wall. "How to read" on the right says the rest.
+            <span className="font-semibold text-textPrimary">First time here?</span> Rows are strikes; columns are the greeks, or the dates on the calendar. Click a row to keep its strike on every box of the page. The magenta strike is the supreme, the heaviest of the book; the green and red strikes are the call wall and the put wall. "How to read" on the right says the rest.
           </p>
           <button type="button" onClick={dismissNote} className="hit shrink-0 h-6 px-2 rounded-md border border-borderSubtle bg-chip font-mono text-[11px] text-textPrimary hover:border-borderMuted transition-colors" data-map-note-close>
             Got it
@@ -1524,8 +1526,8 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
         })}
       </div>
       {/* THE GUIDE IN FOCUS — over the whole calendar, the grid blurred behind it */}
-      <GuideFocus open={guideOpen} onClose={() => setGuideOpen(false)} title="How to read the calendar" testId="ledger-guide">
-        <LedgerGuide surface={surface} greek={supremeGreek} />
+      <GuideFocus open={guideOpen} onClose={() => setGuideOpen(false)} title={guideTitle(view)} testId="ledger-guide">
+        <LedgerGuide surface={surface} greek={supremeGreek} view={view} mode={palette === 'thermal' ? 'thermal-yellow' : undefined} paper={paper} />
       </GuideFocus>
       {/* WHERE THIS BOOK COMES FROM — the source, the freshness, the formula, the sign, the levels (BookProvenance.tsx) */}
       <GuideFocus open={dataOpen} onClose={() => setDataOpen(false)} title="Where this book comes from" testId="ledger-data" width={480}>

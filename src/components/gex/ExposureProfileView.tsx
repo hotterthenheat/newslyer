@@ -73,7 +73,7 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
   if (inBand(levels.putWall)) rules.push({ key: 'pw', x: levels.putWall, ink: PUT_WALL, word: `PUT WALL ${fmtStrike(levels.putWall)}` });
   if (inBand(levels.callWall)) rules.push({ key: 'cw', x: levels.callWall, ink: CALL_WALL, word: `CALL WALL ${fmtStrike(levels.callWall)}` });
   if (inBand(levels.supreme)) rules.push({ key: 'sup', x: levels.supreme, ink: SUPREME, word: `SUPREME ${fmtStrike(levels.supreme)}` });
-  if (curve.flip != null && inBand(curve.flip)) rules.push({ key: 'flip', x: curve.flip, ink: FLIP, word: `FLIP ${curve.flip.toFixed(2)}`, dash: true });
+  if (curve.flip != null && inBand(curve.flip)) rules.push({ key: 'flip', x: curve.flip, ink: FLIP, word: `ZERO GAMMA ${curve.flip.toFixed(2)}`, dash: true }); /* not "FLIP": the band's flip is a strike, this is the curve's zero (the paying-user audit's M5) */
   if (inBand(spot)) rules.push({ key: 'spot', x: spot, ink: SILVER, word: `SPOT ${spot.toFixed(2)}` });
   if (selectedStrike != null && inBand(selectedStrike)) rules.push({ key: 'kept', x: selectedStrike, ink: SILVER, word: `KEPT ${fmtStrike(selectedStrike)}`, dash: true });
   rules.sort((a, b) => a.x - b.x);
@@ -171,7 +171,7 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
       data-profile-flip={curve.flip != null ? curve.flip.toFixed(2) : undefined}
     >
       {W > 0 && H > 0 && points.length > 1 && (
-        <svg width={W} height={H} className="block" role="img" aria-label={`Dealer gamma across spot for ${surface.ticker}: ${fmtUsd(curve.atSpot)} at ${spot.toFixed(2)}${curve.flip != null ? `, the flip at ${curve.flip.toFixed(2)}` : ''}`}>
+        <svg width={W} height={H} className="block" role="img" aria-label={`Dealer gamma across spot for ${surface.ticker}: ${fmtUsd(curve.atSpot)} at ${spot.toFixed(2)}${curve.flip != null ? `, zero gamma at ${curve.flip.toFixed(2)}` : ''}`}>
           {/* the ground: amplifies above zero, absorbs below */}
           <path d={area(1)} fill={alpha(SHORT_GAMMA, paper ? 0.1 : 0.14)} />
           <path d={area(-1)} fill={alpha(LONG_GAMMA, paper ? 0.1 : 0.14)} />
@@ -248,8 +248,10 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
         </div>
       )}
       {/* what this is, in one line */}
+      {/* SHORT ENOUGH TO STAND WHOLE (the paying-user audit's M5): the long sentence was cut mid-word on any pane under
+          1100px; the method lives in the Data door and the guide */}
       <p className="pointer-events-none absolute inset-x-0 bottom-0 truncate px-3 pb-1.5 text-[11px] text-textMuted">
-        Dealer gamma re-priced across spot, GEX alone — each cell moved with Black-Scholes at its date's vol · above zero hedging amplifies a move, below it absorbs · the flip is where the total crosses zero
+        {W >= 760 ? 'Dealer gamma re-priced across spot · above zero hedging amplifies a move, below it absorbs · zero gamma is where it crosses' : W >= 420 ? 'Gamma across spot · above zero amplifies, below absorbs' : 'Gamma across spot'}
       </p>
     </div>
   );

@@ -39,7 +39,7 @@ const LIFT = 12;
 const EDGE = 8;
 
 interface PointerCardProps {
-  /** The pointer's client position — the card sits 14px to its right (or left, at the edge), 12px above it */
+  /** The pointer's client position — the card sits 14px to its right (or left, at the edge), its foot 12px above it */
   x: number;
   y: number;
   width?: number;
@@ -55,6 +55,10 @@ interface PointerCardProps {
   testId?: string;
   testValue?: string | number;
 }
+
+/** How a kept card is let go, in the hand's own words (the paying-user audit's M11): a tap on a phone, a click or Esc
+    at a desk */
+export const letGoWords = (): string => (typeof globalThis.matchMedia === 'function' && globalThis.matchMedia('(hover: none)').matches ? 'tap to let go' : 'click or Esc to let go');
 
 /** One line of the card: the label muted, the value right-aligned in its ink, a small sub after it */
 export const CardRow = ({ k, v, sub, ink }: { k: string; v: ReactNode; sub?: ReactNode; ink?: string }) => (
@@ -79,16 +83,23 @@ const PointerCard = ({ x, y, width = 196, title, aside, children, foot, still = 
   /* The card's own height decides where it stops at the bottom edge — measured
      before paint on every placement, so the card follows the pointer as far
      down as it can and never jumps to a guess */
+  /* ABOVE THE POINTER, NEVER ON WHAT IT DESCRIBES (the paying-user audit's H5, 2026-10-13): the card hung from 12px
+     over the pointer, so it lay on the rest of the row it was reading and the rows under it. Its foot now stands 12px
+     over the pointer — the row, the cell and the column under the pointer stay in sight — and only where the head of
+     the screen has no room does it drop to the same distance under it. */
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el || typeof globalThis.innerHeight !== 'number') return;
-    el.style.top = `${Math.max(EDGE, Math.min(y - LIFT, globalThis.innerHeight - EDGE - el.offsetHeight))}px`;
+    const h = el.offsetHeight;
+    const above = y - LIFT - h;
+    const top = above >= EDGE ? above : Math.min(y + LIFT + 6, globalThis.innerHeight - EDGE - h);
+    el.style.top = `${Math.max(EDGE, top)}px`;
   });
   return createPortal(
     <div
       ref={ref}
       className={`fixed z-[90] rounded-lg border bg-card/85 backdrop-blur-md px-3 py-2.5 shadow-[0_12px_32px_rgba(0,0,0,0.55)] animate-soft-in pointer-events-none ${still ? 'border-silver/40' : 'border-borderMuted'}`}
-      style={{ width, left, top: Math.max(EDGE, y - LIFT) }}
+      style={{ width, left, top: Math.max(EDGE, y - LIFT - 160) }}
       data-card-kept={still ? '' : undefined}
       {...{ [testId]: testValue }}
     >

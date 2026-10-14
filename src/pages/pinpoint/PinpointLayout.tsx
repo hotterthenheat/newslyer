@@ -14,7 +14,8 @@ import { REGIME_WORDS, buildFlipGauge } from '../../data/flipGauge';
 import { fmtDistance, impliedDaySigma, sessionAtr, type DistanceScales, type DistanceUnit } from '../../data/atr';
 import { setDistanceUnit, useDistanceUnit } from '../../data/distanceUnits';
 import { readSessionClock } from '../../data/moc';
-import { FLIP, LONG_GAMMA, SHORT_GAMMA } from '../../components/gex/paletteInk';
+import { CALL_WALL, FLIP, LONG_GAMMA, PUT_WALL, SHORT_GAMMA, SUPREME } from '../../components/gex/paletteInk';
+import { buildExposureProfile } from '../../data/exposure';
 import { GEX_SUBPAGES } from './subnav';
 import { useReplayLabel } from './replayState';
 import { useRoomScan } from './useRoomScan';
@@ -115,6 +116,16 @@ const PinpointLayout = () => {
      desk's own ruler. Rebuilt per tick: it is a proximity read and the build
      is under a millisecond. */
   const gauge = useMemo(() => (scan ? buildFlipGauge(scan) : null), [scan]);
+  /* THE WALLS FOR THE STUCK STRIP (the paying-user audit's H4, 2026-10-13): the strip was a name, a price and a flip on a
+     1,600px bar — the levels a trader scrolls back up for were not on it. Read off the scope the Levels card names. */
+  const walls = useMemo(() => {
+    if (!scan) return null;
+    try {
+      return buildExposureProfile(scan, levelsScope === 'ALL' ? 'ALL' : '0DTE', 30).levels;
+    } catch {
+      return null;
+    }
+  }, [scan, levelsScope]);
   const unit = useDistanceUnit();
   const scales = useMemo<DistanceScales>(() => {
     if (!marketData) return { atr: null, sigma: null };
@@ -269,9 +280,12 @@ const PinpointLayout = () => {
           and the clock stay in a 36px strip at the top of the page column. A sticky box of no height, the strip laid
           over the page from it — nothing below moves when it comes or goes. Under the phone strip on a phone. */}
       {/* top-0 on a phone too: the column's own top padding (the phone strip's 48px) insets the sticky edge already */}
-      <div className="sticky top-0 z-30 h-0" data-shell-stuck={stuck ? '' : undefined}>
+      {/* -mt-4: a box of no height is still a child of the column, and the column's 16px gap fell on both sides of it —
+          32px between the head and the page (the paying-user audit's M1). Not on a phone: the jump links stick there,
+          and two stuck rows ate a fifth of the screen (M7). Opaque: the capsules showed through the 95% ground. */}
+      <div className="hidden sm:block sticky top-0 z-30 h-0 -mt-4" data-shell-stuck={stuck ? '' : undefined}>
         <div
-          className={`absolute inset-x-0 top-0 h-9 flex items-center gap-x-5 overflow-hidden whitespace-nowrap border-b border-borderSubtle bg-panel/95 backdrop-blur-md px-3 font-mono text-[11px] transition-opacity duration-200 ${stuck ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          className={`absolute inset-x-0 top-0 h-9 flex items-center gap-x-5 overflow-hidden whitespace-nowrap border-b border-borderSubtle bg-panel px-3 font-mono text-[11px] transition-opacity duration-200 ${stuck ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           aria-hidden={!stuck}
           data-shell-strip
         >
@@ -281,7 +295,19 @@ const PinpointLayout = () => {
           {gauge?.flip != null && (
             <span className="text-textSecondary">
               flip <span className="font-semibold tnum" style={{ color: FLIP }}>{fmt(gauge.flip)}</span>
-              {flipLead && ` · ${flipLead} ${gauge.distAbs! > 0 ? 'above' : 'below'}`}
+              {flipLead && ` · ${flipLead} ${gauge.distAbs! > 0 ? 'above' : 'below'} spot`}
+              {gauge.crossings != null && gauge.crossings > 0 && ` · crossed ${gauge.crossings}×`}
+            </span>
+          )}
+          {walls && (
+            <span className="text-textSecondary" data-strip-walls>
+              put wall <span className="font-semibold tnum" style={{ color: PUT_WALL }}>{fmtStrike(walls.putWall)}</span>
+              {' · '}call wall <span className="font-semibold tnum" style={{ color: CALL_WALL }}>{fmtStrike(walls.callWall)}</span>
+              {Number.isFinite(walls.supreme) && walls.supreme > 0 && (
+                <>
+                  {' · '}supreme <span className="font-semibold tnum" style={{ color: SUPREME }}>{fmtStrike(walls.supreme)}</span>
+                </>
+              )}
             </span>
           )}
           <span className="text-textSecondary">{open ? `${untilBell(clock.secondsToClose)} to the close` : clock.label.toLowerCase()}</span>

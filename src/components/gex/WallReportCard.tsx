@@ -84,7 +84,7 @@ const TONE: Record<Row['grade']['tone'], string> = {
 // ---- the strip ----------------------------------------------------------------
 
 const SW = 600;
-const SH = 28;
+const SH = 40; /* tall enough for price's path around the level (the paying-user audit's H4) — the row is ~80px anyway */
 
 const SessionStrip = ({ row, bars }: { row: Row; bars: readonly Candle[] }) => {
   const ref = useRef<SVGSVGElement>(null);
@@ -99,14 +99,27 @@ const SessionStrip = ({ row, bars }: { row: Row; bars: readonly Candle[] }) => {
     const near = row.ticks.reduce((b, t) => (Math.abs(x(t.i) - u) < Math.abs(x(b.i) - u) ? t : b), row.ticks[0]);
     setHover(Math.abs(x(near.i) - u) < 14 ? near : null);
   };
+  /* price above the level rides above the line, below it under — scaled to the farthest it went either way */
+  const path = useMemo(() => {
+    if (bars.length < 2) return '';
+    let far = 0;
+    for (const b of bars) far = Math.max(far, Math.abs(b.close - row.price));
+    if (far <= 0) return '';
+    const half = SH / 2 - 2;
+    return bars.map((b, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${(SH / 2 - ((b.close - row.price) / far) * half).toFixed(1)}`).join(' ');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bars, row.price]);
   const cardLeft = hover ? (x(hover.i) / SW) * 100 : 0;
   const onRight = hover ? x(hover.i) < SW * 0.6 : true;
   return (
     <div className="relative" onPointerLeave={() => setHover(null)}>
       <svg ref={ref} viewBox={`0 0 ${SW} ${SH}`} width="100%" height={SH} preserveAspectRatio="none" data-session-strip onPointerMove={onMove} style={{ display: 'block', cursor: row.ticks.length ? 'crosshair' : 'default' }} role="img" aria-label={`${row.label}: ${row.tests} tests along the session`}>
-        {/* the session, as a hairline from the first bar to the newest */}
+        {/* the session, as a hairline from the first bar to the newest — THE LEVEL, with price's path around it (the
+            paying-user audit's H4, 2026-10-13: a bare hairline with three ticks said nothing between the tests; the path
+            says how close price came and from which side) */}
         {/* the ink token, not white: on paper a white hairline was no hairline (the audit's H1) */}
-        <line x1={8} x2={SW - 8} y1={SH / 2} y2={SH / 2} stroke="rgb(var(--ink))" strokeOpacity={0.1} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        <line x1={8} x2={SW - 8} y1={SH / 2} y2={SH / 2} stroke="rgb(var(--ink))" strokeOpacity={0.18} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        {path && <path d={path} fill="none" stroke={SILVER} strokeOpacity={0.4} strokeWidth={1} vectorEffect="non-scaling-stroke" data-strip-path />}
         {/* one tick per test */}
         {row.ticks.map(t => (
           <line

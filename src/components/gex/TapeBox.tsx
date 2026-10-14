@@ -34,7 +34,7 @@ import { pickFlip } from '../../core/walls';
 import { readSessionClock } from '../../data/moc';
 import { YEAR_MINUTES } from '../../data/measure';
 import { CLOSE_MIN, hhmm } from '../../data/ahead';
-import { dayAxisFrom, dayHours } from '../../data/dayAxis';
+import { dayAxisFrom, dayAxisTo, dayHours } from '../../data/dayAxis';
 import { nyMinutes } from '../../core/nyTime';
 import { armLevel, removeAlert, useAlerts, type LevelName } from './alertStore';
 import { useLevelsScope } from '../../data/levelsScope';
@@ -156,7 +156,8 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
   const inSession = at != null ? true : clock.phase === 'OPEN' || clock.phase === 'AUCTION';
   /* the clock starts where the day's bars do (data/dayAxis.ts) — the book under it reads the same bars, so the same minute */
   const FROM = dayAxisFrom(bars[0]?.time);
-  const nowMin = at != null ? Math.max(FROM, Math.min(CLOSE_MIN, at)) : inSession ? Math.max(FROM, liveMin) : CLOSE_MIN;
+  const TO = dayAxisTo(bars[bars.length - 1]?.time);
+  const nowMin = at != null ? Math.max(FROM, Math.min(TO, at)) : inSession ? Math.max(FROM, liveMin) : TO;
   const spot = bars.length ? bars[bars.length - 1].close : snapshot.spot;
   /* one expected move to the close, on the name's vol */
   const iv = bookMarket().cfg(snapshot.ticker)?.iv ?? 0.2;
@@ -170,7 +171,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
   const MR = over ? MR_OVER : MR_WIDE;
   const plotW = Math.max(10, W - ml - MR);
   const plotH = Math.max(10, H - MT - mb);
-  const xOfMin = (min: number) => ml + ((min - FROM) / (CLOSE_MIN - FROM)) * plotW;
+  const xOfMin = (min: number) => ml + ((min - FROM) / Math.max(1, TO - FROM)) * plotW;
   const minOf = (b: Candle) => nyMinutes(b.time * 1000);
   const { lo, hi } = useMemo(() => {
     let lo = Infinity;
@@ -203,7 +204,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
   const nearest = (clientX: number) => {
     const r = hostRef.current?.getBoundingClientRect();
     if (!r || !bars.length) return null;
-    const min = FROM + ((clientX - r.left - ml) / plotW) * (CLOSE_MIN - FROM);
+    const min = FROM + ((clientX - r.left - ml) / plotW) * (TO - FROM);
     let best = 0;
     for (let i = 1; i < bars.length; i++) if (Math.abs(minOf(bars[i]) - min) < Math.abs(minOf(bars[best]) - min)) best = i;
     return best;
@@ -253,10 +254,10 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
     return d;
   })();
   const xNow = xOfMin(nowMin);
-  const xClose = xOfMin(CLOSE_MIN);
+  const xClose = xOfMin(Math.max(FROM, Math.min(TO, CLOSE_MIN)));
   const cone = minLeft > 0 && bars.length ? `M${xNow.toFixed(1)} ${yOf(spot).toFixed(1)} L${xClose.toFixed(1)} ${yOf(spot + w1).toFixed(1)} L${xClose.toFixed(1)} ${yOf(spot - w1).toFixed(1)} Z` : '';
   /* a narrow plot (a phone) holds four hours, not eight — the labels overprinted at 390px */
-  const hours = dayHours(FROM, plotW < 480);
+  const hours = dayHours(FROM, plotW < 480, TO);
   /* ONE TAG WHERE LEVELS COINCIDE (the re-audit's M4): the report prints one row for levels on one strike; the tape
      printed three tags. Levels that share a price share a tag, their words stacked in their own inks; its bell arms
      every level in it that an alert can watch. */
@@ -367,7 +368,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
                   <g key={t}>
                     <line x1={xOfMin(t)} x2={xOfMin(t)} y1={MT} y2={MT + plotH} stroke={RULE} />
                     {!part && (
-                      <text x={xOfMin(t)} y={H - 7} textAnchor={t === FROM ? 'start' : t === CLOSE_MIN ? 'end' : 'middle'} fontFamily={MONO} fontSize={11} fill={INK_3}>
+                      <text x={xOfMin(t)} y={H - 7} textAnchor={t === FROM ? 'start' : t === TO ? 'end' : 'middle'} fontFamily={MONO} fontSize={11} fill={INK_3}>
                         {hhmm(t)}
                       </text>
                     )}
