@@ -48,7 +48,7 @@ import { undoable } from '../ui/undo';
 import LedgerGuide, { guideTitle } from './LedgerGuide';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, CalendarClock, Crosshair, Maximize2, Minimize2, Plus, X } from 'lucide-react';
+import { ArrowLeft, Crosshair, Maximize2, Minimize2, Plus, X } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import TickerLookup from '../ui/TickerLookup';
 import useFocusTrap from '../ui/useFocusTrap';
@@ -65,7 +65,7 @@ import { STRIKE_WINDOWS, type StrikeWindow } from '../../data/exposure';
 import { useLevelsScope } from '../../data/levelsScope';
 import { roomLevels } from '../../data/roomLevels';
 import { useLedgerPalette } from '../../data/ledgerPalette';
-import ExportDoor from './ExportDoor';
+import MoreDoor from './MoreDoor';
 import { buildExposureSurface, CALENDAR_DTES, GREEKS, type ExposureSurface, type Greek } from '../../data/exposureSurface';
 import { snapshotAtOpen } from '../../data/levelview';
 import { beginGlide } from '../../core/glide';
@@ -73,7 +73,8 @@ import { HEAT_MODE, heatCellStyle, heatRampColorFor } from './heatmap';
 import type { MarketSnapshot } from '../../types/market';
 import { VIEWS_FOR, readLedgerView, writeLedgerView, type LedgerView } from './ledgerView';
 import ExposureMatrix from './ExposureMatrix';
-import { DataCard, DataDoor } from './BookProvenance';
+import { DataCard } from './BookProvenance';
+import { ABSORB, AMPLIFY, THERMAL_COOL, THERMAL_WARM } from './paletteInk';
 import ExposureProfileView from './ExposureProfileView';
 
 /* THE LEGS (the competitive audit, 2026-10-13 — a net-only grid was the category's toy-grade marker): the net, one leg
@@ -238,13 +239,12 @@ const BAND_SCROLL_PX = 700;
     the bare picks' row cannot hold there either, leads their row — two rows on a 1024 desk, not four */
 const BAND_DOORS_WORDS_PX = 960;
 /** The band's doors whose words can go, the least read first — each to its icon, its words in its tooltip */
-type DoorKey = 'guide' | 'focus' | 'export' | 'data' | 'read' | 'supreme';
-const DOOR_ORDER: DoorKey[] = ['guide', 'focus', 'export', 'data', 'read', 'supreme'];
+type DoorKey = 'guide' | 'focus' | 'more' | 'read' | 'supreme';
+const DOOR_ORDER: DoorKey[] = ['guide', 'focus', 'more', 'read', 'supreme'];
 const DOOR_SEL: Record<DoorKey, string> = {
   guide: '[data-guide-door="ledger-guide"]',
   focus: '[data-ledger-focus-door]',
-  export: '[data-ledger-export]',
-  data: '[data-ledger-data-door]',
+  more: '[data-ledger-more]',
   read: '[data-ledger-read]',
   supreme: '[data-ledger-supreme] [data-door-words]',
 };
@@ -1030,8 +1030,14 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      that was read off the named two-row layout, and it would never leave it */
   const doorCompact = (k: DoorKey) => doorsTight || (bandMode === 'doors' && compactDoors.has(k));
   namedNow.current = toolbar === 'band' && !stripsBare && !doorsTight && !bandScroll && bandMode !== 'doors';
+  /* THE BAND IN GROUPS (the owner, 2026-10-14: "15 equally weighted pills with no grouping or separators"): the name ·
+     what you are looking at (View, Greek, Legs) · which data (Expiries, Strikes, Show) · what you can do (Names, Biggest
+     moves, Replay · More) · the name's own (Supreme, The read, the guide, fullscreen). A hairline between the groups; none
+     on a phone's scrolling rows, where it would be one more thing to scroll past. */
+  const divider = toolbar === 'band' && !bandScroll ? <span aria-hidden className="h-5 w-px shrink-0 bg-borderSubtle" data-band-divider /> : null;
   const strips = (
     <>
+      {divider}
       <DropdownSelect label="View" value={view} options={VIEWS_FOR[viewHost].map(v => VIEW_OPTION[v])} onChange={pickView} title="The matrix, the calendar or the profile" testId="ledger-view" bare={stripsBare} />
       {/* with names side by side the greek steps down to each column's head; the profile draws GEX alone (its foot says
           so), so the card steps aside there rather than read "All five" over a chart it does not govern (the re-audit's M2) */}
@@ -1042,6 +1048,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       )}
       {/* the profile draws the net alone — the card steps aside there */}
       {view !== 'profile' && <DropdownSelect label="Legs" value={legs} options={legsOptions(view === 'calendar')} onChange={setLegs} title="Which legs the cells carry" testId="ledger-legs" bare={stripsBare} />}
+      {divider}
       {/* the trigger says the window DRAWN when the fit cuts the one chosen — "Today → Oct 16 · 4 of 7" (the audit's H4) */}
       <ExpiryRangeCard label="Expiries" days={expiryDays} from={range.from} through={range.through} onChange={(from, through) => setRange({ from, through })} ceiling={ceiling} ceilingWhy={ceilingWhy} shortcuts={shortcuts} title="Which expiries the book reads" testId="ledger-expiries" note={fitNote} bare={stripsBare} cut={{ through: shownIdx[shownIdx.length - 1] ?? range.through, shown: shownIdx.length, wanted }} />
       <DropdownSelect
@@ -1065,7 +1072,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
         bare={stripsBare}
       />
       {/* a face of its own, so "Now" alone on a bare band still says which card it is (the audit's L2) */}
-      <DropdownSelect label="Show" value={afterBell ? 'after' : 'now'} options={SHOW_OPTIONS} onChange={v => setAfterBell(v === 'after')} title="The book as it stands now, or as it will stand after today's expiries" testId="ledger-show" bare={stripsBare} icon={CalendarClock} />
+      <DropdownSelect label="Show" value={afterBell ? 'after' : 'now'} options={SHOW_OPTIONS} onChange={v => setAfterBell(v === 'after')} title="The book as it stands now, or as it will stand after today's expiries" testId="ledger-show" bare={stripsBare} />
       {/* the colours switch left the band for Settings › Appearance (idea 10, 2026-10-13): a preference made once, not a
           read, and 150px of every row */}
     </>
@@ -1075,10 +1082,14 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       onClick={() => onSelectStrike?.(supreme.strike)}
       title={`The heaviest strike of the whole book by ${GREEK_LABEL[supremeGreek]} — the one the chart wears in magenta — most of it on ${supremeEx?.date ?? ''} · click to keep the strike`}
       /* the cards' 28px (it stood 32 on a 28px row), sentence case like them, and a button's hover edge (the audit's M2, M3, L10) */
-      className="hit ml-auto inline-flex items-center gap-2.5 h-7 px-2.5 rounded-md border border-supreme/40 bg-supreme/[0.06] hover:bg-supreme/[0.12] hover:border-supreme/70 font-mono transition-colors"
+      /* A QUIET CHIP WITH A MAGENTA MARK (the owner, 2026-10-14: "the loudest thing on the screen is the magenta Supreme
+         pill, which is a secondary fact"): the chip is the band's, the dot is the supreme's — the one place magenta stands
+         here, as it stands on the strike itself */
+      className="hit ml-auto inline-flex items-center gap-2 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted font-mono transition-colors"
       data-ledger-supreme={doorCompact('supreme') ? 'compact' : 'full'}
     >
-      <span className="text-[11px] font-bold text-supreme">Supreme</span>
+      <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-supreme" />
+      <span className="text-[11px] text-textMuted">Supreme</span>
       <span className="text-[12px] font-semibold tnum text-textPrimary whitespace-nowrap">
         {fmtStrike(supreme.strike)}
         {/* tight: the strike alone — the date and the amount stay in the title */}
@@ -1094,9 +1105,10 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       </span>
     </button>
   );
-  const guideButton = <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title={view === 'profile' ? 'What the curve means' : view === 'matrix' ? 'What the matrix means' : 'What the calendar means'} testId="ledger-guide" compact={doorCompact('guide')} size={toolbar === 'band' ? 'md' : 'sm'} />;
-  const dataDoor = <DataDoor ticker={surface.ticker} open={dataOpen} onClick={() => setDataOpen(v => !v)} compact={doorCompact('data')} />;
-  const exportDoor = toolbar === 'band' ? <ExportDoor surface={scoped(surface, snapshot)} greeks={greeks} expiries={shownIdx} compact={doorCompact('export')} /> : null;
+  /* on the band every door wears the same edge — the guide and fullscreen had none (the owner, 2026-10-14) */
+  const guideButton = <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title={view === 'profile' ? 'What the curve means' : view === 'matrix' ? 'What the matrix means' : 'What the calendar means'} testId="ledger-guide" compact={doorCompact('guide')} size={toolbar === 'band' ? 'md' : 'sm'} className={toolbar === 'band' ? 'border border-borderSubtle bg-chip hover:border-borderMuted' : ''} />;
+  /* where the book comes from and the two exports, behind one door (MoreDoor.tsx) */
+  const moreDoor = toolbar === 'band' ? <MoreDoor surface={scoped(surface, snapshot)} greeks={greeks} expiries={shownIdx} onData={() => setDataOpen(true)} compact={doorCompact('more')} /> : null;
   /* THE READ's door — beside the guide's; lit while the card is up. The band's opens the host's read */
   const readDoor = <ReadDoor open={readOf(surface.ticker) === 'open'} onClick={() => toggleRead(surface.ticker)} compact={doorCompact('read')} />;
   const fullButton =
@@ -1104,9 +1116,9 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       <button
         onClick={() => (full ? close() : setFull(true))}
         title={full ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
-        className="hit shrink-0 p-1.5 rounded text-textMuted hover:text-textPrimary hover:bg-ink/[0.05] transition-colors"
+        className={`hit shrink-0 inline-flex items-center justify-center rounded-md text-textMuted hover:text-textPrimary transition-colors ${toolbar === 'band' ? 'w-7 h-7 border border-borderSubtle bg-chip hover:border-borderMuted' : 'p-1.5 hover:bg-ink/[0.05]'}`}
       >
-        {full ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        {full ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
       </button>
     );
   const backButton = full ? (
@@ -1222,13 +1234,14 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   /* the supreme and the read are one name's — they step down into the columns' heads with the chip */
   const doors = (
     <>
-      {dataDoor}
+      {bandRows === 'one' && divider}
       {namesDoor}
       {/* only where it works (the paying-user audit's L7): a greyed door on the matrix and the profile was a control that
           said no every time it was tried */}
       {view === 'calendar' && focusDoor}
       {after}
-      {exportDoor}
+      {divider}
+      {moreDoor}
       <Fold open={!many} gap={8} className="ml-auto" testId="data-band-supreme">
         {supremeDoor}
       </Fold>
@@ -1401,7 +1414,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       {toolbar === 'band' && !noteSeen && (
         <div className="shrink-0 flex items-start gap-3 px-4 py-2 border-b border-borderSubtle/60 bg-silver/[0.04] text-[11px] text-textSecondary" data-map-note>
           <p className="min-w-0 flex-1 leading-relaxed">
-            <span className="font-semibold text-textPrimary">First time here?</span> Rows are strikes; columns are the greeks, or the dates on the calendar. Click a row to keep its strike on every box of the page. The magenta strike is the supreme, the heaviest of the book; the green and red strikes are the call wall and the put wall. "How to read" on the right says the rest.
+            <span className="font-semibold text-textPrimary">First time here?</span> Each row is a strike. Ember means dealer hedging pushes a move along there, glacier means it holds one back. A strike in magenta is the supreme, green the call wall, red the put wall. Click a row to keep it on every box.
           </p>
           <button type="button" onClick={dismissNote} className="hit shrink-0 h-6 px-2 rounded-md border border-borderSubtle bg-chip font-mono text-[11px] text-textPrimary hover:border-borderMuted transition-colors" data-map-note-close>
             Got it
@@ -1573,10 +1586,11 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                     type="button"
                     onClick={() => keep?.(sup.strike)}
                     title={`${c.ticker}'s heaviest strike of the whole book by ${GREEK_LABEL[colGreeks[0] ?? 'gex']} — most of it on ${supEx?.date ?? ''} · click to keep the strike`}
-                    className="shrink-0 inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-supreme/40 bg-supreme/[0.06] hover:bg-supreme/[0.12] font-mono transition-colors"
+                    className="shrink-0 inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted font-mono transition-colors"
                     data-column-supreme={sup.strike}
                   >
-                    <span className="text-[11px] font-bold text-supreme">Supreme</span>
+                    <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-supreme" />
+                    <span className="text-[11px] text-textMuted">Supreme</span>
                     <span className="text-[11px] font-semibold tnum text-textPrimary whitespace-nowrap">
                       {fmtStrike(sup.strike)}
                       {!tight && (
@@ -1654,6 +1668,36 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
           );
         })}
       </div>
+      {/* THE LEGEND (the owner, 2026-10-14: "the colours aren't explained"): one line under the grid saying what the two
+          sides and the three strike inks mean — the capsules' own ramp, so the swatches match the board */}
+      {toolbar === 'band' && view !== 'profile' && (
+        <div className="shrink-0 flex flex-wrap items-center gap-x-4 gap-y-0.5 px-3 py-1 border-t border-borderSubtle/60 bg-panel font-mono text-[11px] text-textMuted" data-ledger-legend>
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="h-[3px] w-4 rounded-full" style={{ background: palette === 'thermal' ? THERMAL_WARM : AMPLIFY }} />
+            pushes a move along
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="h-[3px] w-4 rounded-full" style={{ background: palette === 'thermal' ? THERMAL_COOL : ABSORB }} />
+            holds one back
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-supreme" />
+            supreme
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-bull" />
+            call wall
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-bear" />
+            put wall
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="h-[3px] w-4 rounded-full bg-silver" />
+            kept
+          </span>
+        </div>
+      )}
       {/* THE GUIDE IN FOCUS — over the whole calendar, the grid blurred behind it */}
       <GuideFocus open={guideOpen} onClose={() => setGuideOpen(false)} title={guideTitle(view)} testId="ledger-guide">
         <LedgerGuide surface={surface} greek={supremeGreek} view={view} mode={palette === 'thermal' ? 'thermal-yellow' : undefined} paper={paper} />

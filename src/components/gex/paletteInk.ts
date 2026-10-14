@@ -39,6 +39,12 @@ export const THERMAL_COOL = 'rgb(var(--thermal-cool))';
 /* The clock's pressure pair */
 export const EMBER = 'rgb(var(--ember))';
 export const GLACIER = 'rgb(var(--glacier))';
+/* ONE PAIR FOR HEDGING'S TWO SIDES ACROSS THE MAP (the owner, 2026-10-14: "one colour code across all views"): the
+   capsules and the bars said amplify in ember and absorb in glacier while the profile, the book through the day and the
+   head's "Dealers" fact said the same two things in red and green — the inks of the walls and of direction. The Map's
+   boxes read these; SHORT_GAMMA and LONG_GAMMA stay for the rooms that always wore them. */
+export const AMPLIFY = EMBER;
+export const ABSORB = GLACIER;
 
 /** An ink at an alpha. The hex trick (`${ink}55`) breaks on a token — the
     string becomes `rgb(var(--x))55`, the whole declaration is dropped and the

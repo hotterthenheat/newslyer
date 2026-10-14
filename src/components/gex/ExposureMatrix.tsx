@@ -139,7 +139,8 @@ const Cell = ({ value, leg, cap, mode, paper, gi, first, last, mirror, tight = f
         >
           {fmtUsd(value)}
         </span>
-        <span className={`${stacked ? `${tight ? 'mt-px' : 'mt-0.5'} w-full` : 'flex-1 min-w-0'} flex h-[3px] rounded-full bg-ink/[0.06] ${mirror === 'left' ? 'justify-end' : ''}`}>
+        {/* no track under the bar (2026-10-14): two hundred faint full-width lines said nothing the bar's length did not */}
+        <span className={`${stacked ? `${tight ? 'mt-px' : 'mt-0.5'} w-full` : 'flex-1 min-w-0'} flex h-[3px] rounded-full ${mirror === 'left' ? 'justify-end' : ''}`}>
           {/* the width glides with the data, the ink with the Colours switch — the ladder's two clocks */}
           <span className="block h-full shrink-0 rounded-full transition-[width,background-color] [transition-duration:700ms,450ms]" style={{ width: `${pct}%`, background: value === 0 ? 'transparent' : heatLadderColor(value, cap, mode, paper) }} />
         </span>
@@ -472,7 +473,8 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
         {/* THE STRIKE AT THE FAR LEFT, ITS TAGS AFTER IT, THE COLUMN NO WIDER THAN ITS WIDEST ROW (Noah, 2026-10-12:
             "the strikes should be furthest left" and no empty band — the table sizes the column to its content, the
             cells take the rest) */}
-        <td className={`pl-2 pr-1.5 ${rowH < 20 ? 'py-0' : 'py-0.5'} leading-tight bg-inset text-right font-mono text-[11px] font-semibold tnum text-textSecondary whitespace-nowrap`}>
+        {/* the strike in the first ink (the owner, 2026-10-14: "strike numbers — what the row IS — are dim grey") */}
+        <td className={`pl-2 pr-1.5 ${rowH < 20 ? 'py-0' : 'py-0.5'} leading-tight bg-inset text-right font-mono text-[11px] font-semibold tnum text-textPrimary whitespace-nowrap`}>
           {/* THE LEVEL IN THE STRIKE'S INK (strikeRole.ts, 2026-10-13): the words after it made the column as wide as its
               widest label, and every plain strike carried the gap */}
           <span

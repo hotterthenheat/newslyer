@@ -42,7 +42,7 @@ export const GEX_SUBPAGES: GexSubpage[] = [
   {
     path: '/pinpoint/map',
     label: 'Map',
-    subtitle: 'The book by strike and expiry, the day’s tape and book, then the schedule and how the levels held',
+    subtitle: 'Where dealer hedging sits, and how it moved today',
     icon: Map,
   },
   {

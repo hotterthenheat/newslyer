@@ -113,7 +113,10 @@ const MapDesk = () => {
      pinpoint map page should be the 5 box setup always") — the ladder with a
      pane a greek, the net bar in each; the pick is the page's for the visit,
      never stored, so every visit opens the same way. */
-  const [greekPick, setGreekPick] = useState<string[]>(['all']);
+  /* GEX ALONE BY REST (the owner, 2026-10-14, after a walk through the page as a retail user: five greeks by forty
+     strikes was two hundred figures before the price chart, a thousand pixels down). One greek, so the book packs to
+     its one column and the day stands beside it on a desk; the band's Greek card opens the rest. */
+  const [greekPick, setGreekPick] = useState<string[]>(['gex']);
 
   /* REPLAY (2026-09-08): one position on today's session — seconds from the
      open — and every box reads the book as it stood then (data/replay.ts).
@@ -497,7 +500,7 @@ const MapDesk = () => {
       <div ref={tapeRef} id="map-session" className="flex-[1_1_640px] min-w-0 flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12" style={dayBeside ? { height: bookH } : undefined} data-session data-scope-ticker={tapeTicker} data-on-screen={tapeOn}>
         <DayBox scope={chipFor('tape', tapeTicker)}>
           <TapeBox part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} at={playing && tapeTicker === ticker ? replayMinute(framePos, range) : undefined} />
-          <BookThroughDay part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} />
+          <BookThroughDay part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} at={playing && tapeTicker === ticker ? replayMinute(framePos, range) : undefined} />
         </DayBox>
       </div>
       </div>

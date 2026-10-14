@@ -20,7 +20,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { buildExposureCurve } from '../../data/exposureCurve';
 import { fmtUsd } from '../../data/gex';
 import type { ExposureSurface } from '../../data/exposureSurface';
-import { CALL_WALL, FLIP, LONG_GAMMA, PUT_WALL, SHORT_GAMMA, SUPREME, alpha } from './paletteInk';
+import { ABSORB, AMPLIFY, CALL_WALL, FLIP, PUT_WALL, SUPREME, alpha } from './paletteInk';
 
 const SILVER = 'rgb(var(--silver))';
 const INK = 'rgb(var(--text-primary))';
@@ -173,8 +173,8 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
       {W > 0 && H > 0 && points.length > 1 && (
         <svg width={W} height={H} className="block" role="img" aria-label={`Dealer gamma across spot for ${surface.ticker}: ${fmtUsd(curve.atSpot)} at ${spot.toFixed(2)}${curve.flip != null ? `, zero gamma at ${curve.flip.toFixed(2)}` : ''}`}>
           {/* the ground: amplifies above zero, absorbs below */}
-          <path d={area(1)} fill={alpha(SHORT_GAMMA, paper ? 0.1 : 0.14)} />
-          <path d={area(-1)} fill={alpha(LONG_GAMMA, paper ? 0.1 : 0.14)} />
+          <path d={area(1)} fill={alpha(AMPLIFY, paper ? 0.1 : 0.14)} />
+          <path d={area(-1)} fill={alpha(ABSORB, paper ? 0.1 : 0.14)} />
           {/* the y rules and their figures */}
           {yTicks.map(v => (
             <g key={v}>
@@ -184,8 +184,8 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
               </text>
             </g>
           ))}
-          <text x={ML - 8} y={mt - 10} textAnchor="end" fontFamily={MONO} fontSize={11} fill={SHORT_GAMMA}>amplifies</text>
-          <text x={ML - 8} y={H - MB + 16} textAnchor="end" fontFamily={MONO} fontSize={11} fill={LONG_GAMMA}>absorbs</text>
+          <text x={ML - 8} y={mt - 10} textAnchor="end" fontFamily={MONO} fontSize={11} fill={AMPLIFY}>amplifies</text>
+          <text x={ML - 8} y={H - MB + 16} textAnchor="end" fontFamily={MONO} fontSize={11} fill={ABSORB}>absorbs</text>
           {/* the x figures */}
           {xTicks.map(s => (
             <text key={s} x={xOf(s)} y={H - MB + 16} textAnchor="middle" fontFamily={MONO} fontSize={11} fill={INK_3}>
@@ -234,7 +234,7 @@ const ExposureProfileView = ({ surface, expiries, liveSpot, selectedStrike, onSe
           </div>
           <div className="mt-1 flex items-baseline justify-between gap-2">
             <span className="text-textSecondary">Total</span>
-            <span className="font-semibold tnum" style={{ color: hp.total >= 0 ? SHORT_GAMMA : LONG_GAMMA }}>
+            <span className="font-semibold tnum" style={{ color: hp.total >= 0 ? AMPLIFY : ABSORB }}>
               {fmtUsd(hp.total)} · {hp.total >= 0 ? 'amplifies' : 'absorbs'}
             </span>
           </div>

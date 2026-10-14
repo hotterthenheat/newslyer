@@ -537,10 +537,18 @@ const SideNav = ({ onOpenPalette }: SideNavProps) => {
             >
               {/* EACH PRODUCT WEARS ITS GLYPH (Slayer Logo System, 2026-09-30): silver with ONE part in its desk's ink — the
                   brand's answer to "thirteen inks at once was too much color" (Noah, 2026-09-09), which was thirteen
-                  whole icons in colour. Settings, a door and not a product, keeps its line icon: muted at rest, its ink on
-                  hover and while you are in it. */}
+                  whole icons in colour. GREY AT REST since 2026-10-14 (the owner, after a walk through the Map: the rail's
+                  colours beside a page of grey line icons): the coloured part is grey too until the pointer is on the
+                  row, and the desk's ink while you are in it — Settings' line icon's own rule. */}
               {item.glyph ? (
-                <ProductGlyph name={item.glyph} size={17} bare className="shrink-0" />
+                <ProductGlyph
+                  name={item.glyph}
+                  size={17}
+                  bare
+                  ink="var(--glyph-ink)"
+                  className={`shrink-0 transition-colors duration-200 ${inside ? '[--glyph-ink:var(--desk-ink)]' : '[--glyph-ink:rgb(var(--text-muted))] group-hover:[--glyph-ink:var(--desk-ink)]'}`}
+                  style={{ '--desk-ink': item.ink } as CSSProperties}
+                />
               ) : (
                 <item.icon
                   className={`w-4 h-4 shrink-0 transition-colors duration-200 ${inside ? 'text-[color:var(--ink)]' : 'text-textMuted group-hover:text-[color:var(--ink)]'}`}

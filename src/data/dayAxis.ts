@@ -28,10 +28,19 @@ export function dayAxisFrom(firstTime: number | null | undefined): number {
 }
 
 /** The axis' last minute: the close — or the last bar's, when the tape runs past it (the house book after hours; the
-    paying-user audit, 2026-10-13: its 16:11–22:40 bars were drawn in the last 9% of a 09:30–16:00 axis) */
-export function dayAxisTo(lastTime: number | null | undefined): number {
+    paying-user audit, 2026-10-13: its 16:11–22:40 bars were drawn in the last 9% of a 09:30–16:00 axis).
+    LIVE, THE SESSION SO FAR (the owner, 2026-10-14, as a retail user at 10:47: four fifths of both charts were blank
+    future): while the session runs the axis ends half an hour past the newest bar, on the next half hour, and never
+    under two hours of day — so the morning's charts are full of the morning, and the axis grows with the day to the
+    close. A replay and a closed session keep the whole day. */
+export function dayAxisTo(lastTime: number | null | undefined, live = false): number {
   if (lastTime == null || !Number.isFinite(lastTime) || lastTime <= 0) return CLOSE_MIN;
-  return Math.max(CLOSE_MIN, nyMinutes(lastTime * 1000) + 1);
+  const last = nyMinutes(lastTime * 1000);
+  if (live && last < CLOSE_MIN) {
+    const ahead = Math.max(last + 30, OPEN_MIN + 120);
+    return Math.min(CLOSE_MIN, Math.ceil(ahead / 30) * 30);
+  }
+  return Math.max(CLOSE_MIN, last + 1);
 }
 
 /** The marks under the axis: its start, the whole hours after it (the even ones on a narrow plot), its end — none

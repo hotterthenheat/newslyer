@@ -104,6 +104,10 @@ const RAMPS: Record<
      side; arc-length-even stops in OKLab (spread 1.11x/1.10x, regenerated
      by scripts/ramp-ember-glacier.mjs if the anchors ever change). */
   'ember-glacier': {
+    /* THE CURVE (the owner, 2026-10-14, "a softer calendar colour range"): on the house curve of 0.4 a cell at a tenth
+       of the board's heaviest already wore deep red or navy, so thirty columns were a wall of saturated capsules; at
+       0.6 the middling cells sit darker and only the heavy ones reach the ember and the ice */
+    gamma: 0.6,
     // positive = put-dominant = dealers short gamma = AMPLIFY (ember)
     pos: [
       [0, [42, 42, 42]], //     #2A2A2A

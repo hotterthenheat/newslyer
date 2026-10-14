@@ -4,7 +4,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { PlanGate } from './PlanWall';
 import SideNav from './SideNav';
 import CommandPalette from './CommandPalette';
-import SiteFooter from './SiteFooter';
 import RouteSkeleton from '../ui/RouteSkeleton';
 import EditorDockGate from '../scripts/EditorDockGate';
 import AlertsDrawer from '../alerts/AlertsDrawer';
@@ -300,11 +299,10 @@ const AppShell = () => {
                 </Suspense>
               </RouteBoundary>
             </div>
-            {/* The landing's footer ends every main page (Noah, 2026-08-23). Trace (2026-08-30) and Terrain (2026-09-13) went
-                without one so their tape and their chart ran to the floor; since 2026-10-03 (the owner: "make sure the art
-                footer is on every page") they have it too — the tape and the chart still run to the floor of the first
-                screen, and the footer, the page's own picture (footer/scenes.ts), is one scroll past it. */}
-            <SiteFooter />
+            {/* NO FOOTER UNDER A WORKING PAGE (the owner, 2026-10-14, after a walk through the Map as a user: the landing's
+                footer — "Trade what you can see", the product links, the art — sat under the terminal's own boxes and
+                "looks odd for a paying user"). It had ended every main page since 2026-08-23 and every page since
+                2026-10-03; the landing, the product pages and the legal pages keep it, where it is the site's. */}
           </motion.div>
         </AnimatePresence>
       </main>

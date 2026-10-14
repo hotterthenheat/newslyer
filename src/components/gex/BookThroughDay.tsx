@@ -40,7 +40,8 @@ import { hhmm } from '../../data/ahead';
 import { dayAxisFrom, dayAxisTo } from '../../data/dayAxis';
 import { besideDot } from './besideDot';
 import { nyMinutes } from '../../core/nyTime';
-import { LONG_GAMMA, SHORT_GAMMA, alpha, resolveInk } from './paletteInk';
+import { ABSORB, AMPLIFY, alpha, resolveInk } from './paletteInk';
+import { readSessionClock } from '../../data/moc';
 import { readToken, useResolvedTheme } from '../../theme/theme';
 import { setDayHover, useDayHover } from '../../data/dayHover';
 import { CLOCK_SCALE, dayChartOptions, dayClock, daySurface, dayStartOf, feedSeries } from './dayChart';
@@ -53,6 +54,8 @@ interface Props {
   scope?: ReactNode;
   /** A part of the day box (DayBox.tsx): no head of its own, the facts in a row, the clock shared with the tape above */
   part?: boolean;
+  /** Minutes from midnight ET the replay stands at — given, the axis is the whole session, as the tape's */
+  at?: number | null;
 }
 
 interface Minute {
@@ -62,7 +65,7 @@ interface Minute {
   spot: number | null;
 }
 
-const BookThroughDay = ({ snapshot, bars: barsProp, scope, part = false }: Props) => {
+const BookThroughDay = ({ snapshot, bars: barsProp, scope, part = false, at }: Props) => {
   const paper = useResolvedTheme() === 'light';
   const ticker = snapshot.ticker;
   const bars = useMemo(() => barsProp ?? sessionBars(ticker) ?? [], [ticker, barsProp]);
@@ -89,9 +92,11 @@ const BookThroughDay = ({ snapshot, bars: barsProp, scope, part = false }: Props
     });
   }, [ticker, bars, first, until]);
 
-  /* the tape's clock, off the same bars (data/dayAxis.ts) */
+  /* the tape's clock, off the same bars (data/dayAxis.ts): live, the session so far */
+  const phase = readSessionClock().phase;
+  const live = at == null && (phase === 'OPEN' || phase === 'AUCTION');
   const FROM = dayAxisFrom(bars[0]?.time);
-  const TO = dayAxisTo(bars[bars.length - 1]?.time);
+  const TO = dayAxisTo(bars[bars.length - 1]?.time, live);
   const dayStart = bars.length ? dayStartOf(bars[0].time, nyMinutes(bars[0].time * 1000)) : 0;
 
   /* ---- the chart ---- */
@@ -118,10 +123,10 @@ const BookThroughDay = ({ snapshot, bars: barsProp, scope, part = false }: Props
     if (!host) return;
     const s = daySurface(host, paper);
     const chart = createChart(host, dayChartOptions(s, { clock: true, logo: true }));
-    const amp = resolveInk(SHORT_GAMMA, host);
-    const abs = resolveInk(LONG_GAMMA, host);
-    /* THE NET AS A BASELINE AT ZERO — the library's own two-sided line, Compare's gap band: red and its ground above,
-       green and its ground below */
+    const amp = resolveInk(AMPLIFY, host);
+    const abs = resolveInk(ABSORB, host);
+    /* THE NET AS A BASELINE AT ZERO — the library's own two-sided line, Compare's gap band: ember and its ground above
+       (hedging amplifies), glacier and its ground below (it absorbs) — the capsules' own pair */
     const net = chart.addSeries(BaselineSeries, {
       baseValue: { type: 'price', price: 0 },
       topLineColor: amp,
@@ -261,27 +266,27 @@ const BookThroughDay = ({ snapshot, bars: barsProp, scope, part = false }: Props
                 The book
               </span>
             ) : (
-              <h3 className="text-[15px] font-semibold leading-tight text-textPrimary">The book through the day</h3>
+              <h3 className="text-[16px] font-semibold leading-tight text-textPrimary">The book through the day</h3>
             )}
             {!part && scope}
           </div>
-          {!part && <p className="mt-0.5 text-[11px] text-textMuted">The whole book’s net gamma through the session — above zero dealer hedging amplified moves, below it absorbed them · spot drawn faint beside it</p>}
+          {!part && <p className="mt-0.5 text-[11px] text-textMuted">The book’s net gamma through the session, spot faint beside it</p>}
         </div>
         {last && (
           <dl className={part ? 'flex flex-wrap gap-x-6 gap-y-1' : 'grid grid-cols-3 gap-x-6'}>
             <div>
               <dt className="text-[11px] text-textMuted">Net now</dt>
-              <dd className="mt-0.5 font-mono text-[12px] tnum whitespace-nowrap" style={{ color: last.net >= 0 ? SHORT_GAMMA : LONG_GAMMA }} data-through-net={Math.round(last.net)}>
+              <dd className="mt-0.5 font-mono text-[14px] tnum whitespace-nowrap" style={{ color: last.net >= 0 ? AMPLIFY : ABSORB }} data-through-net={Math.round(last.net)}>
                 {fmtUsd(last.net)} · {last.net >= 0 ? 'amplifies' : 'absorbs'}
               </dd>
             </div>
             <div>
               <dt className="text-[11px] text-textMuted">Net changed sign</dt>
-              <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap">{flips === 0 ? 'not yet' : `${flips} ${flips === 1 ? 'time' : 'times'}`}</dd>
+              <dd className="mt-0.5 font-mono text-[14px] tnum text-textPrimary whitespace-nowrap">{flips === 0 ? 'not yet' : `${flips} ${flips === 1 ? 'time' : 'times'}`}</dd>
             </div>
             <div>
               <dt className="text-[11px] text-textMuted">Books kept</dt>
-              <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap">{minutes.length} {minutes.length === 1 ? 'minute' : 'minutes'}</dd>
+              <dd className="mt-0.5 font-mono text-[14px] tnum text-textPrimary whitespace-nowrap">{minutes.length} {minutes.length === 1 ? 'minute' : 'minutes'}</dd>
             </div>
           </dl>
         )}
@@ -306,7 +311,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, scope, part = false }: Props
               data-through-card={hhmm(hm.min)}
             >
               <span className="font-bold tnum text-textPrimary">{hhmm(hm.min)}</span>
-              <span className="ml-2 tnum" style={{ color: hm.net >= 0 ? SHORT_GAMMA : LONG_GAMMA }}>
+              <span className="ml-2 tnum" style={{ color: hm.net >= 0 ? AMPLIFY : ABSORB }}>
                 {fmtUsd(hm.net)} · {hm.net >= 0 ? 'amplifies' : 'absorbs'}
               </span>
               {hm.spot != null && <span className="ml-2 tnum text-textMuted">spot {hm.spot.toFixed(2)}</span>}

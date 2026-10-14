@@ -178,7 +178,8 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
   const inSession = at != null ? true : clock.phase === 'OPEN' || clock.phase === 'AUCTION';
   /* the clock starts where the day's bars do (data/dayAxis.ts) — the book under it reads the same bars, so the same minute */
   const FROM = dayAxisFrom(bars[0]?.time);
-  const TO = dayAxisTo(bars[bars.length - 1]?.time);
+  /* live, the axis is the session so far (dayAxis.ts); a replay and a closed day keep the whole session */
+  const TO = dayAxisTo(bars[bars.length - 1]?.time, at == null && inSession);
   const nowMin = at != null ? Math.max(FROM, Math.min(TO, at)) : inSession ? Math.max(FROM, liveMin) : TO;
   const spot = bars.length ? bars[bars.length - 1].close : snapshot.spot;
   /* one expected move to the close, on the name's vol */
@@ -199,8 +200,10 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
   const fedPrice = useRef<readonly LineData<Time>[] | null>(null);
   const fedFlip = useRef<readonly (LineData<Time> | WhitespaceData<Time>)[] | null>(null);
   /* what the scale must hold beyond the bars: the levels within reach and the cone (read by the autoscale at draw time) */
+  /* the cone as drawn: to the close, or cut at the axis' end while the session runs (the same share the series takes) */
+  const coneShare = Math.max(0, Math.min(1, (Math.min(CLOSE_MIN, TO) - nowMin) / Math.max(1, CLOSE_MIN - nowMin)));
   const reachRef = useRef<{ levels: number[]; cone: [number, number] | null; spot: number }>({ levels: [], cone: null, spot });
-  reachRef.current = { levels: [...levels.map(l => l.price), ...(focus != null ? [focus] : [])], cone: minLeft > 0 && bars.length ? [spot - w1, spot + w1] : null, spot };
+  reachRef.current = { levels: [...levels.map(l => l.price), ...(focus != null ? [focus] : [])], cone: minLeft > 0 && bars.length && coneShare > 0 ? [spot - w1 * coneShare, spot + w1 * coneShare] : null, spot };
   const barsRef = useRef(bars);
   barsRef.current = bars;
   const indexOf = useMemo(() => new Map(bars.map((b, i) => [b.time, i] as const)), [bars]);
@@ -312,17 +315,19 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
     if (!up || !dn) return;
     if (minLeft > 0 && bars.length) {
       const t0 = bars[bars.length - 1].time as UTCTimestamp;
-      const t1 = (dayStart + CLOSE_MIN * 60) as UTCTimestamp;
-      if (t1 > t0) {
-        up.setData([{ time: t0, value: spot }, { time: t1, value: spot + w1 }]);
-        dn.setData([{ time: t0, value: spot }, { time: t1, value: spot - w1 }]);
+      /* to the close — or to the axis' end while the session runs, the same line cut there (a point past the end would
+         pull the axis out to the close again) */
+      const t1 = (dayStart + Math.min(CLOSE_MIN, TO) * 60) as UTCTimestamp;
+      if (t1 > t0 && coneShare > 0) {
+        up.setData([{ time: t0, value: spot }, { time: t1, value: spot + w1 * coneShare }]);
+        dn.setData([{ time: t0, value: spot }, { time: t1, value: spot - w1 * coneShare }]);
         return;
       }
     }
     up.setData([]);
     dn.setData([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minLeft > 0, bars.length, spot, w1.toFixed(3), dayStart, paper, part, open]);
+  }, [minLeft > 0, bars.length, spot, w1.toFixed(3), dayStart, TO, coneShare.toFixed(3), paper, part, open]);
 
   /* the levels as price lines — named on the line, priced on the scale — and the kept strike in silver */
   useEffect(() => {
@@ -462,7 +467,7 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
         ) : (
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3 flex-wrap">
-              <h3 className="text-[15px] font-semibold leading-tight text-textPrimary">The tape</h3>
+              <h3 className="text-[16px] font-semibold leading-tight text-textPrimary">The tape</h3>
               {scope}
               <button
                 type="button"
@@ -476,24 +481,24 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
                 {open ? 'Fold' : 'Unfold'}
               </button>
             </div>
-            <p className="mt-0.5 text-[11px] text-textMuted">Today's price with the book's levels on it and the flip's path as it moved · a chip keeps the strike, its bell sets an alert on the level · the dotted lines ahead are one expected move to the close</p>
+            <p className="mt-0.5 text-[11px] text-textMuted">Today's price with the book's levels on it</p>
           </div>
         )}
         {bars.length > 0 && session && (
           <dl className={part ? 'flex flex-wrap gap-x-6 gap-y-1' : 'grid grid-cols-3 gap-x-6'}>
             <div>
               <dt className="text-[11px] text-textMuted">Last</dt>
-              <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap">{spot.toFixed(2)}</dd>
+              <dd className="mt-0.5 font-mono text-[14px] tnum text-textPrimary whitespace-nowrap">{spot.toFixed(2)}</dd>
             </div>
             <div>
               <dt className="text-[11px] text-textMuted">Session</dt>
-              <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap">
+              <dd className="mt-0.5 font-mono text-[14px] tnum text-textPrimary whitespace-nowrap">
                 {session.lo.toFixed(2)} – {session.hi.toFixed(2)}
               </dd>
             </div>
             <div>
               <dt className="text-[11px] text-textMuted">One move to the close</dt>
-              <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap" data-tape-move={w1.toFixed(2)}>
+              <dd className="mt-0.5 font-mono text-[14px] tnum text-textPrimary whitespace-nowrap" data-tape-move={w1.toFixed(2)}>
                 {minLeft > 0 ? `±${w1.toFixed(2)} · ${minLeft} ${minLeft === 1 ? 'minute' : 'minutes'} left` : 'closed'}
               </dd>
             </div>

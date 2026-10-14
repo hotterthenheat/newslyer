@@ -14,7 +14,7 @@ import { REGIME_WORDS, buildFlipGauge } from '../../data/flipGauge';
 import { fmtDistance, impliedDaySigma, sessionAtr, type DistanceScales, type DistanceUnit } from '../../data/atr';
 import { setDistanceUnit, useDistanceUnit } from '../../data/distanceUnits';
 import { readSessionClock } from '../../data/moc';
-import { CALL_WALL, FLIP, LONG_GAMMA, PUT_WALL, SHORT_GAMMA, SUPREME } from '../../components/gex/paletteInk';
+import { ABSORB, AMPLIFY, CALL_WALL, FLIP, PUT_WALL, SUPREME } from '../../components/gex/paletteInk';
 import { buildExposureProfile } from '../../data/exposure';
 import { GEX_SUBPAGES } from './subnav';
 import { useReplayLabel } from './replayState';
@@ -79,10 +79,13 @@ const RULER_OPTIONS: DropdownOption<DistanceUnit>[] = [
   { value: 'σ', label: 'σ', hint: 'Expected one-day moves — how many the options price in' },
 ];
 
-const Fact = ({ label, children, title, testId }: { label: string; children: React.ReactNode; title?: string; testId?: string }) => (
+/* A SCALE (the owner, 2026-10-14, after a walk through the page: "almost everything is the same size … the numbers a
+   trader came for are no bigger than their labels"): a fact's figure at 15px over its 11px name; the price, the one
+   figure every terminal shows big, at 22px (`hero`). */
+const Fact = ({ label, children, title, testId, hero = false }: { label: string; children: React.ReactNode; title?: string; testId?: string; hero?: boolean }) => (
   <div className="min-w-0" data-shell-fact={testId}>
     <dt className="text-[11px] text-textMuted whitespace-nowrap">{label}</dt>
-    <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap" title={title}>
+    <dd className={`font-mono tnum text-textPrimary whitespace-nowrap ${hero ? 'mt-px text-[22px] font-semibold leading-none' : 'mt-0.5 text-[15px] font-semibold leading-tight'}`} title={title}>
       {children}
     </dd>
   </div>
@@ -110,6 +113,7 @@ const PinpointLayout = () => {
   const focused = focus && focus.ticker === activeTicker ? focus.price : null;
   /* on the feed the distance is from the price the vendor figured the book at — never the house's price */
   const spot = roomSrc === 'feed' ? scan?.spot : marketData?.spot;
+  const change = (roomSrc === 'feed' ? scan?.changePercent : marketData?.changePercent) ?? null;
   const dist = focused != null && spot ? ((focused - spot) / spot) * 100 : null;
 
   /* WHICH SIDE OF THE FLIP the market is on and how far the flip is, in the
@@ -185,13 +189,13 @@ const PinpointLayout = () => {
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-borderSubtle text-textSecondary shrink-0" aria-hidden="true">
               <PageIcon className="w-3.5 h-3.5" />
             </span>
-            <h1 className="text-[15px] font-semibold leading-tight text-textPrimary">{page.label}</h1>
+            <h1 className="text-[18px] font-semibold leading-tight text-textPrimary">{page.label}</h1>
             {focused != null && (
               <span data-focus-chip className="inline-flex items-center gap-2 rounded-md border border-silver/40 bg-silver/[0.06] pl-2.5 pr-1 py-0.5 font-mono">
                 <span className="text-[11px] font-bold uppercase tracking-widest text-silver">Kept</span>
                 <span className="text-[12px] font-semibold tnum text-textPrimary">{fmtStrike(focused)}</span>
                 {dist != null && keptLead && (
-                  <span className={`text-[11px] tnum ${dist > 0 ? 'text-bull' : dist < 0 ? 'text-bear' : 'text-textMuted'}`} data-kept-lead={unit}>
+                  <span className="text-[11px] tnum text-textSecondary" data-kept-lead={unit}>
                     {keptLead}
                   </span>
                 )}
@@ -216,7 +220,7 @@ const PinpointLayout = () => {
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-[11px] text-textMuted">{page.subtitle}</p>
+          <p className="mt-1 text-[12px] text-textMuted">{page.subtitle}</p>
         </div>
 
         {/* THE CARDS DROP FIRST (the re-audit's M1): this side shares the line with the title and wraps inside itself, so
@@ -230,10 +234,23 @@ const PinpointLayout = () => {
                   <span className="inline-flex h-5 items-center rounded-full border border-borderSubtle px-2 text-[11px] text-textMuted">live</span>
                 </div>
               )}
+              {/* THE PRICE FIRST, AND BIG: the thing every terminal shows large, and the figure the levels are read against */}
+              {spot != null && (
+                <Fact label={activeTicker} testId="price" hero>
+                  {spot.toFixed(2)}
+                  {change != null && (
+                    <span className={`ml-2 align-middle text-[12px] font-medium ${change > 0 ? 'text-bull' : change < 0 ? 'text-bear' : 'text-textMuted'}`} data-shell-change>
+                      {change > 0 ? '+' : ''}
+                      {change.toFixed(2)}%
+                    </span>
+                  )}
+                </Fact>
+              )}
               {words && gauge.regime ? (
                 <>
                   <Fact label="Dealers" title={words.blurb} testId="dealers">
-                    <span style={{ color: gauge.regime === 'SHORT' ? SHORT_GAMMA : LONG_GAMMA }}>{DEALER_WORDS[gauge.regime]}</span>
+                    {/* the capsules' own pair — ember amplifies, glacier absorbs (paletteInk AMPLIFY/ABSORB) */}
+                    <span style={{ color: gauge.regime === 'SHORT' ? AMPLIFY : ABSORB }}>{DEALER_WORDS[gauge.regime]}</span>
                   </Fact>
                   <Fact label="Flip" testId="flip">
                     <Term k="Gamma flip">
@@ -241,14 +258,11 @@ const PinpointLayout = () => {
                         {fmt(gauge.flip!)}
                       </span>
                     </Term>
+                    {/* the distance in the quiet ink, not red or green: those are the walls' and direction's (2026-10-14) */}
                     {flipLead && (
-                      <span className="text-textSecondary">
+                      <span className="text-[12px] font-normal text-textSecondary">
                         {' '}
-                        · {flipAtSpot ? 'at spot' : (
-                          <>
-                            <span className={gauge.distAbs! > 0 ? 'text-bull' : 'text-bear'}>{flipLead}</span> {gauge.distAbs! > 0 ? 'above' : 'below'} spot
-                          </>
-                        )}
+                        · {flipAtSpot ? 'at spot' : `${flipLead} ${gauge.distAbs! > 0 ? 'above' : 'below'} spot`}
                       </span>
                     )}
                   </Fact>
@@ -297,7 +311,7 @@ const PinpointLayout = () => {
         >
           <span className="font-semibold text-textPrimary">{activeTicker}</span>
           {spot != null && <span className="tnum text-textPrimary">{spot.toFixed(2)}</span>}
-          {gauge?.regime && <span style={{ color: gauge.regime === 'SHORT' ? SHORT_GAMMA : LONG_GAMMA }}>{DEALER_WORDS[gauge.regime]}</span>}
+          {gauge?.regime && <span style={{ color: gauge.regime === 'SHORT' ? AMPLIFY : ABSORB }}>{DEALER_WORDS[gauge.regime]}</span>}
           {gauge?.flip != null && (
             <span className="text-textSecondary">
               flip <span className="font-semibold tnum" style={{ color: FLIP }}>{fmt(gauge.flip)}</span>

@@ -221,13 +221,14 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
       </GuideFocus>
       <div className="px-5 pt-4 pb-3">
         <div className="flex items-center gap-3 flex-wrap">
-          <h3 className="text-[15px] font-semibold leading-tight text-textPrimary">How the levels held today</h3>
+          <h3 className="text-[16px] font-semibold leading-tight text-textPrimary">How the levels held today</h3>
           {scope}
           <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the rows, the strips and the ticks mean" testId="report-guide" />
           <FoldDoor open={open} onToggle={toggleOpen} what="the report" testId="report" />
         </div>
+        {/* one line (the owner, 2026-10-14: "too much small grey text"); what a test and a break are is the guide's */}
         <p className="mt-0.5 text-[11px] text-textMuted">
-          {levelCount} levels{rows.length < levelCount ? `, ${rows.length} rows,` : ''} off {levelsScope === 'ALL' ? 'every listed date' : "today's contracts"} · {bars.length} one-minute {bars.length === 1 ? 'bar' : 'bars'}{first != null && last != null ? ` from ${hhmm(first)} to ${hhmm(last)}` : ''} · a test is a bar whose range reaches the level, a break is a close beyond it after a test
+          Every test of today's levels{levelsScope === 'ALL' ? ', off every listed date' : ''}{first != null && last != null ? ` · ${hhmm(first)} to ${hhmm(last)}` : ''}
         </p>
         {/* THE BASE RATES AS THE BOX'S OWN FACTS (the re-audit's M8): a labelled figure each, not a sentence that said
             "held its first test" four times over two lines */}
@@ -236,7 +237,7 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
             {/* the lead says what the figures are, once; the facts carry the figures (the re-audit's M6: "held its first
                 test" four times over was the sentence's fault, and it had come back as four labels) */}
             <p className="text-[11px] text-textMuted">
-              The {rates.sessions} {rates.sessions === 1 ? 'session' : 'sessions'} before today, each level as it stood at the open · how often its first test held
+              Before today · how often a level's first test held, over {rates.sessions} {rates.sessions === 1 ? 'session' : 'sessions'}
             </p>
             <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 max-lg:grid max-lg:grid-cols-2 max-lg:gap-x-4">
               {RECORD_LEVELS.filter(k => rates.levels[k].tested > 0).map(k => (
@@ -284,7 +285,7 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
                       </span>
                     ))}
                   </span>
-                  <span className={`block max-lg:inline-block font-mono text-[15px] font-semibold tnum leading-tight ${isFocus ? 'text-silver' : 'text-textPrimary group-hover:text-silver'} transition-colors`}>{fmtStrike(r.price)}</span>
+                  <span className={`block max-lg:inline-block font-mono text-[18px] font-semibold tnum leading-tight ${isFocus ? 'text-silver' : 'text-textPrimary group-hover:text-silver'} transition-colors`}>{fmtStrike(r.price)}</span>
                   <span className={`mt-1 max-lg:mt-0 inline-flex items-center h-5 px-2 rounded-full border text-[11px] font-medium ${TONE[r.grade.tone]}`} data-grade>
                     {r.grade.words}
                   </span>

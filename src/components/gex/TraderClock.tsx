@@ -330,19 +330,19 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
       <div className="px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap">
         <div className="min-w-[min(100%,300px)] flex-1">
           <div className="flex items-center gap-3 flex-wrap">
-            <h3 className="text-[15px] font-semibold leading-tight text-textPrimary">The trader's clock</h3>
+            <h3 className="text-[16px] font-semibold leading-tight text-textPrimary">The trader's clock</h3>
             {scope}
             <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the strip and the phases mean" testId="clock-guide" />
             <FoldDoor open={open} onToggle={toggleOpen} what="the clock" testId="clock" />
           </div>
-          <p className="mt-0.5 text-[11px] text-textMuted">New York · 09:30 to 16:00 · the phases are a rule of thumb, the figures are today's numbers</p>
+          <p className="mt-0.5 text-[11px] text-textMuted">New York · 09:30 to 16:00</p>
         </div>
         <dl className="grid grid-cols-3 gap-x-6">
           {lookingAt ? (
             <div className="col-span-2">
               <dt className="text-[11px] text-textMuted">Looking at</dt>
               <dd className="mt-0.5 flex items-baseline gap-3 whitespace-nowrap" data-clock-looking>
-                <span className="font-mono text-[12px] tnum" style={{ color: SILVER }}>
+                <span className="font-mono text-[14px] tnum" style={{ color: SILVER }}>
                   {lookingAt}
                 </span>
                 <button onClick={() => setPin(null)} className="text-[11px] font-medium text-textMuted hover:text-textPrimary transition-colors" data-back-to-now>
@@ -354,19 +354,20 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
             <>
               <div>
                 <dt className="text-[11px] text-textMuted">Now</dt>
-                <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap" data-clock-now>
+                <dd className="mt-0.5 font-mono text-[14px] tnum text-textPrimary whitespace-nowrap" data-clock-now>
                   {inSession && current ? `${hhmm(nowMin)} · ${current.name.toLowerCase()}` : clock.label}
                 </dd>
               </div>
               <div>
                 <dt className="text-[11px] text-textMuted">Next</dt>
-                <dd className="mt-0.5 font-mono text-[12px] tnum text-textPrimary whitespace-nowrap">{next ? `${next.name.toLowerCase()} in ${next.from - nowMin}m` : inSession ? 'the close' : `${PHASES[0].name.toLowerCase()} at 09:30`}</dd>
+                <dd className="mt-0.5 font-mono text-[14px] tnum text-textPrimary whitespace-nowrap">{next ? `${next.name.toLowerCase()} in ${next.from - nowMin}m` : inSession ? 'the close' : `${PHASES[0].name.toLowerCase()} at 09:30`}</dd>
               </div>
             </>
           )}
           <div>
             <dt className="text-[11px] text-textMuted">Expires at the close</dt>
-            <dd className="mt-0.5 font-mono text-[12px] tnum whitespace-nowrap" style={{ color: SUPREME }} data-clock-bell>
+            {/* in the page's ink, not magenta — magenta is the supreme's marker alone (2026-10-14) */}
+            <dd className="mt-0.5 font-mono text-[14px] tnum text-textPrimary whitespace-nowrap" data-clock-bell>
               {facts.bellShare != null ? `${facts.bellShare}% of today's gamma` : '—'}
             </dd>
           </div>
