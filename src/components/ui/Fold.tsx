@@ -25,7 +25,8 @@
 
 import type { ReactNode } from 'react';
 
-export const FOLD_MS = 220;
+/* zero since 2026-10-14 (the owner: "remove all the motion designs"): a door folds away at once */
+export const FOLD_MS = 0;
 const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
 interface FoldProps {

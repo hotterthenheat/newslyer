@@ -95,7 +95,7 @@ interface DropdownSelectProps<T extends string | number> {
 }
 
 /** The card every dropdown on the terminal opens — one surface, one shadow, one radius */
-export const CARD = 'z-[90] rounded-lg border border-borderSubtle bg-chip shadow-[0_16px_48px_rgba(0,0,0,0.65)] animate-soft-in';
+export const CARD = 'z-[90] rounded-lg border border-borderSubtle bg-chip shadow-[0_16px_48px_rgba(0,0,0,0.65)]';
 
 const LABEL_FROM: Record<NonNullable<DropdownSelectProps<string>['labelFrom']>, string> = { sm: 'hidden sm:inline', md: 'hidden md:inline', lg: 'hidden lg:inline', xl: 'hidden xl:inline', '2xl': 'hidden 2xl:inline' };
 

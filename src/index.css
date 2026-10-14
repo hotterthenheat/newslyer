@@ -2136,8 +2136,9 @@ html[data-landing-scale] {
 
   /* THE UNDO CHIP (ui/undo.tsx): it comes in as the alert chips do, and a hairline of the silver runs out under it with
      its time — held while a pointer is over it or focus is in it (the play state is set by the chip) */
+  /* no entrance since 2026-10-14 (the owner: "remove all the motion designs"): the chip is simply there */
   .undo-toast {
-    animation: undo-in 180ms ease-out;
+    animation: none;
   }
   .undo-count {
     animation-name: undo-count;

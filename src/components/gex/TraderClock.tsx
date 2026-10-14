@@ -464,7 +464,7 @@ const TraderClock = ({ snapshot, scope, grip, at }: { snapshot: MarketSnapshot; 
                   onFocus={() => setHover(i)}
                   onPointerEnter={() => setHover(i)}
                   onClick={() => onBlockClick(i)}
-                  className={`flex-1 min-w-0 rounded-[2px] transition-[opacity,background-color,filter] duration-200 ${boundary ? 'ml-[3px]' : ''}`}
+                  className={`flex-1 min-w-0 rounded-[2px] ${boundary ? 'ml-[3px]' : ''}`}
                   style={{
                     /* the ink's wash — light on the dark terminal, near-black on paper (the white washes were "so bright") */
                     background: isNow ? LIVE : `rgb(var(--text-primary) / ${alpha})`,
@@ -495,7 +495,7 @@ const TraderClock = ({ snapshot, scope, grip, at }: { snapshot: MarketSnapshot; 
             <div
               data-clock-card
               data-kept={keptBlock === shownBlock ? 'true' : 'false'}
-              className={`absolute z-10 pointer-events-none rounded-lg border border-borderMuted bg-card/95 backdrop-blur-sm shadow-[0_8px_24px_rgba(0,0,0,0.5)] px-3 py-2 animate-soft-in ${narrow ? 'left-0 right-0' : 'w-[300px]'}`}
+              className={`absolute z-10 pointer-events-none rounded-lg border border-borderMuted bg-card/95 backdrop-blur-sm shadow-[0_8px_24px_rgba(0,0,0,0.5)] px-3 py-2 ${narrow ? 'left-0 right-0' : 'w-[300px]'}`}
               /* UNDER THE STRIP, over the sentence that says the same (the audit's M7, 2026-10-13): risen above the strip, a card
                  for a block in the right half covered the box's own facts (Now · Next · Expires). On a narrow strip it is the
                  strip's own width — beside the block it ran off a phone's edge (the re-audit). */

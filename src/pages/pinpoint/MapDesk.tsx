@@ -438,7 +438,7 @@ const MapDesk = () => {
       {strikeAsk && (
         <div className="fixed inset-x-0 top-16 z-[95] flex justify-center pointer-events-none" data-strike-ask>
           <form
-            className="pointer-events-auto flex items-center gap-3 rounded-md border border-silver/40 bg-card/95 backdrop-blur-md px-3 py-2 shadow-[0_12px_32px_rgba(0,0,0,0.55)] animate-soft-in"
+            className="pointer-events-auto flex items-center gap-3 rounded-md border border-silver/40 bg-card/95 backdrop-blur-md px-3 py-2 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
             onSubmit={e => {
               e.preventDefault();
               keepTyped(strikeInput.current?.value ?? '');
@@ -509,7 +509,7 @@ const MapDesk = () => {
       <div ref={setBandSlot} {...settle(1)} className={`empty:hidden border border-borderSubtle rounded-md bg-panel overflow-hidden [&>[data-ledger-toolbar]]:border-b-0 ${settle(1).className}`} data-map-band-slot />
       <div ref={setTopRow} className="flex flex-wrap items-stretch gap-4" data-map-top-row data-day-beside={dayBeside || undefined} data-band-need={bandNeed || undefined} data-head-room={headRoom || undefined} data-band-up={bandUp || undefined}>
       <div ref={calRef} {...settle(2)} {...dropOn('book')} className={`shrink-0 grow-0 max-w-full border border-borderSubtle rounded-md overflow-hidden flex flex-col ${settle(2).className}`} style={{ ...settle(2).style, width: dayBeside ? bookW : '100%', height: bookH, order: ord.book % 10 }} data-book-w={bookW || undefined} data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
-        <Deferred index={0} frames={0} fallback={<CalendarInner />} className="h-full min-h-0 flex flex-col animate-fade-in">
+        <Deferred index={0} frames={0} fallback={<CalendarInner />} className="h-full min-h-0 flex flex-col">
           <ExposureField
             snapshot={calSnap ?? scan}
             toolbar="band"
@@ -561,14 +561,14 @@ const MapDesk = () => {
           above still lays them out one under the other. */}
       <div className={`contents min-[1880px]:grid ${boxes.bottom[0] === 'clock' ? 'min-[1880px]:grid-cols-[580px_minmax(0,1fr)]' : 'min-[1880px]:grid-cols-[minmax(0,1fr)_580px]'} min-[1880px]:gap-4 min-[1880px]:items-stretch`} style={{ order: boxes.rows === 'book-first' ? 10 : 0 }} data-map-wide-row>
       <div ref={dayRef} id="map-clock" {...settle(4)} {...dropOn('clock')} style={{ ...settle(4).style, order: ord.clock }} className={`flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12 ${settle(4).className}`} data-day data-scope-ticker={dayTicker} data-on-screen={dayOn}>
-        <Deferred index={1} frames={22} fallback={<DayInner />} className="flex-1 flex flex-col animate-fade-in">
+        <Deferred index={1} frames={22} fallback={<DayInner />} className="flex-1 flex flex-col">
           <TraderClock snapshot={daySnap ?? scan} scope={chipFor('day', dayTicker)} grip={gripFor('clock')} at={playing && dayTicker === ticker ? replayMinute(framePos, range) : undefined} />
         </Deferred>
       </div>
       {/* HOW THE LEVELS HELD TODAY — full width, in the approved grammar: the
           page grows rather than cramming (Noah, 2026-09-05) */}
       <div ref={reportRef} id="map-report" {...settle(5)} {...dropOn('report')} style={{ ...settle(5).style, order: ord.report }} className={`border border-borderSubtle rounded-md overflow-hidden bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12 ${settle(5).className}`} data-report data-scope-ticker={reportTicker} data-on-screen={reportOn}>
-        <Deferred index={2} frames={26} fallback={<ReportInner />} className="animate-fade-in">
+        <Deferred index={2} frames={26} fallback={<ReportInner />}>
           <WallReportCard snapshot={reportSnap ?? scan} focus={focusFor(reportTicker)} onPick={price => toggleFocus(price, reportTicker)} scope={chipFor('report', reportTicker)} grip={gripFor('report')} bars={playing && reportTicker === ticker ? reportBars : undefined} />
         </Deferred>
       </div>

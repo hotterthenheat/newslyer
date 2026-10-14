@@ -100,7 +100,7 @@ const PointerCard = ({ x, y, width = 196, title, aside, children, foot, still = 
   return createPortal(
     <div
       ref={ref}
-      className={`fixed z-[90] rounded-lg border bg-card/85 backdrop-blur-md ${dense ? 'px-2.5 py-2' : 'px-3 py-2.5'} shadow-[0_12px_32px_rgba(0,0,0,0.55)] animate-soft-in pointer-events-none ${still ? 'border-silver/40' : 'border-borderMuted'}`}
+      className={`fixed z-[90] rounded-lg border bg-card/85 backdrop-blur-md ${dense ? 'px-2.5 py-2' : 'px-3 py-2.5'} shadow-[0_12px_32px_rgba(0,0,0,0.55)] pointer-events-none ${still ? 'border-silver/40' : 'border-borderMuted'}`}
       style={{ width, left, top: Math.max(EDGE, y - LIFT - 160) }}
       data-card-kept={still ? '' : undefined}
       {...{ [testId]: testValue }}

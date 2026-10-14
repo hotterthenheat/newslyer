@@ -146,7 +146,7 @@ const Cell = ({ value, leg, cap, mode, paper, gi, first, last, mirror, tight = f
         {/* no track under the bar (2026-10-14): two hundred faint full-width lines said nothing the bar's length did not */}
         <span className={`${stacked ? `${tight ? 'mt-px' : 'mt-0.5'} w-full` : 'flex-1 min-w-0'} flex h-[3px] rounded-full ${mirror === 'left' ? 'justify-end' : ''}`}>
           {/* the width glides with the data, the ink with the Colours switch — the ladder's two clocks */}
-          <span className="block h-full shrink-0 rounded-full transition-[width,background-color] [transition-duration:700ms,450ms]" style={{ width: `${pct}%`, background: value === 0 ? 'transparent' : heatLadderColor(value, cap, mode, paper) }} />
+          <span className="block h-full shrink-0 rounded-full" style={{ width: `${pct}%`, background: value === 0 ? 'transparent' : heatLadderColor(value, cap, mode, paper) }} />
         </span>
       </div>
     </td>

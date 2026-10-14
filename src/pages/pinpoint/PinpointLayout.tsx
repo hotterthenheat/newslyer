@@ -299,7 +299,7 @@ const PinpointLayout = () => {
           and two stuck rows ate a fifth of the screen (M7). Opaque: the capsules showed through the 95% ground. */}
       <div className="hidden sm:block sticky top-0 z-30 h-0 -mt-4" data-shell-stuck={stuck ? '' : undefined}>
         <div
-          className={`absolute inset-x-0 top-0 h-9 flex items-center gap-x-5 overflow-hidden whitespace-nowrap border-b border-borderSubtle bg-panel px-3 font-mono text-[11px] transition-opacity duration-200 ${stuck ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          className={`absolute inset-x-0 top-0 h-9 flex items-center gap-x-5 overflow-hidden whitespace-nowrap border-b border-borderSubtle bg-panel px-3 font-mono text-[11px] ${stuck ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           aria-hidden={!stuck}
           data-shell-strip
         >

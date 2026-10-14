@@ -965,7 +965,7 @@ const ExposureLedger = ({ surface, liveSpot, live = true, open = null, focusOn =
              keying on the fit remounted every cell of every pane as a name left (~66ms, the last of the exit's jank) */
           key={`${greeks.join(',')}-${expiries.join('|')}-${rings}-${afterBell ? 'after' : 'now'}-${leg}`}
           data-ledger-focus={focusOn ? '' : undefined}
-          className="grid min-h-full pr-1 animate-fade-in"
+          className="grid min-h-full pr-1"
           /* THE STRIKE COLUMN IS AS WIDE AS ITS WIDEST ROW and the cells take the rest (Noah, 2026-10-12: "let the
              container fit that empty space … the nodes should get longer equally"); its width is measured off the
              head below for the figures' sizing */

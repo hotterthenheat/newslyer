@@ -100,7 +100,7 @@ const GuideFocus = ({ open, onClose, title, children, testId, width = 460, viewp
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0 }}
           className={`${viewport ? 'fixed inset-0 z-[90]' : 'absolute inset-0 z-[70] rounded-[inherit]'} flex items-center justify-center bg-black/45 backdrop-blur-[3px]`}
           data-guide-layer={testId}
           data-guide-viewport={viewport || undefined}
@@ -112,7 +112,7 @@ const GuideFocus = ({ open, onClose, title, children, testId, width = 460, viewp
             initial={{ opacity: 0, y: 8, scale: 0.985 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.985 }}
-            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0 }}
             className={`${CARD} max-w-[calc(100%-48px)] ${viewport ? 'max-h-[calc(100vh-48px)]' : 'max-h-[calc(100%-32px)]'} overflow-y-auto overscroll-contain flex flex-col outline-none`}
             style={{ width }}
             role="dialog"

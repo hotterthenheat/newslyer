@@ -186,7 +186,9 @@ const readNames = (): string[] => {
     track gliding between 0fr and 1fr, never a grid re-laid at once */
 const TRACKS = 1 + EXTRA_MAX;
 /** A column leaving glides shut over this, then goes */
-const LEAVE_MS = 280;
+/* NO GLIDE (the owner, 2026-10-14: "remove all the motion designs"): a name taken off goes at once and the columns
+   beside it take their slots at once; the timers and the transitions that carried the glide run at zero */
+const LEAVE_MS = 0;
 /** The read fades over this before it goes (the house's close rule: a timer, never an animation's end) */
 const READ_CLOSE_MS = 200;
 /** With this many names side by side a column's head has no room for quotes or the supreme's total, and a read takes the whole column */
@@ -221,7 +223,7 @@ interface DrawnShape {
   legs: LegsPick;
 }
 /** The old shape's fade-out; the new one's fade-in is index.css's view-in (320ms) */
-const SWAP_OUT_MS = 160;
+const SWAP_OUT_MS = 0;
 /** THE BAND'S ROOM (measured 2026-09-22 with the cards at rest, all five greeks, seven expiries): the picks need
     989px with their names and ~700 bare; the doors 644 with their words and ~390 compact (the supreme as its strike,
     the read and the guide as their icons). ONE ROW, as long as it can be one row (Noah, on the landing still's second
@@ -1202,7 +1204,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                 role="dialog"
                 aria-label="Show another name beside this one"
                 style={{ position: 'fixed', ...addPlaced.box }}
-                className="z-[120] w-72 border border-borderMuted bg-panel/80 backdrop-blur-xl backdrop-saturate-150 rounded-md shadow-2xl shadow-black/60 overflow-x-hidden overflow-y-auto overscroll-contain animate-slide-in"
+                className="z-[120] w-72 border border-borderMuted bg-panel/80 backdrop-blur-xl backdrop-saturate-150 rounded-md shadow-2xl shadow-black/60 overflow-x-hidden overflow-y-auto overscroll-contain"
                 data-ledger-add-menu
               >
                 <div className="px-2.5 py-1.5 border-b border-borderSubtle text-[11px] text-textMuted">Show another name beside this one — up to four side by side, on the same choices</div>
@@ -1483,7 +1485,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
               data-tile-width={!c.leaving && tileW > 0 ? tileW : undefined}
             >
               <div
-                className={`relative flex-1 min-h-0 flex flex-col ${paper ? 'bg-inset' : 'bg-panel'} rounded-md border overflow-hidden motion-reduce:transition-none ${many ? 'mx-1 border-borderSubtle' : 'mx-0 border-transparent'} ${c.host ? '' : 'animate-fade-in'}`}
+                className={`relative flex-1 min-h-0 flex flex-col ${paper ? 'bg-inset' : 'bg-panel'} rounded-md border overflow-hidden motion-reduce:transition-none ${many ? 'mx-1 border-borderSubtle' : 'mx-0 border-transparent'}`}
                 style={{ transition: `margin ${LEAVE_MS}ms ${EASE}, border-color ${LEAVE_MS}ms ${EASE}` }}
                 data-field-column={c.ticker}
                 data-field-host={c.host || undefined}
@@ -1655,7 +1657,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                 {/* the shape on screen: out on the old, in on the new (the soft swap above) */}
                 <div
                   key={drawn.key}
-                  className={`h-full min-h-0 flex flex-col ${swapped ? 'animate-view-in' : ''}`}
+                  className="h-full min-h-0 flex flex-col"
                   /* THE READ MAKES ROOM (the paying-user audit's M10, 2026-10-13): laid over the right of the book it hid two
                      greeks of a five-greek calendar; the book now steps left of it and re-fits — the read's own width, 460 or
                      62% of the pane, the panel's own rule (BookRead) */
@@ -1755,7 +1757,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
     return (
       <motion.div
         layout
-        transition={{ layout: { duration: 0.32, ease: [0.16, 1, 0.3, 1] } }}
+        transition={{ layout: { duration: 0 } }}
         /* THE GROUND IS THE PAGE'S when full (Noah, 2026-09-10: "the background
            becomes more ashy/gray when we full screen the ladder") — the box's
            panel grey over a whole screen read as a wash; the canvas black is

@@ -162,7 +162,7 @@ const ScopeChip = ({ ticker, linked, onToggleLink, onPick, quote, open: openProp
         role="dialog"
         aria-label={`Change symbol — currently ${ticker}`}
         style={{ position: 'fixed', ...placed.box }}
-        className="z-[120] w-72 border border-borderMuted bg-panel/80 backdrop-blur-xl backdrop-saturate-150 rounded-md shadow-2xl shadow-black/60 overflow-x-hidden overflow-y-auto overscroll-contain animate-slide-in"
+        className="z-[120] w-72 border border-borderMuted bg-panel/80 backdrop-blur-xl backdrop-saturate-150 rounded-md shadow-2xl shadow-black/60 overflow-x-hidden overflow-y-auto overscroll-contain"
       >
         {hasLink && (
           <div className="px-2.5 py-1.5 border-b border-borderSubtle text-[11px] text-textMuted">
