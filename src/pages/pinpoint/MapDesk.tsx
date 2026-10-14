@@ -497,7 +497,7 @@ const MapDesk = () => {
       <div ref={tapeRef} id="map-session" className="flex-[1_1_640px] min-w-0 flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12" style={dayBeside ? { height: bookH } : undefined} data-session data-scope-ticker={tapeTicker} data-on-screen={tapeOn}>
         <DayBox scope={chipFor('tape', tapeTicker)}>
           <TapeBox part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} at={playing && tapeTicker === ticker ? replayMinute(framePos, range) : undefined} />
-          <BookThroughDay part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} />
+          <BookThroughDay part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} />
         </DayBox>
       </div>
       </div>
