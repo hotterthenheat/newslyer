@@ -17,7 +17,7 @@ import { useBoxFold } from '../../data/boxFold';
 const DayBox = ({ scope, children }: { scope?: ReactNode; children: ReactNode }) => {
   const [open, toggle] = useBoxFold('day');
   return (
-    <section className="relative flex flex-col min-w-0" data-day-box data-day-open={open || undefined}>
+    <section className="relative flex-1 flex flex-col min-w-0" data-day-box data-day-open={open || undefined}>
       <div className="px-5 pt-4 pb-1">
         <div className="flex items-center gap-3 flex-wrap">
           <h3 className="text-[15px] font-semibold leading-tight text-textPrimary">The day</h3>

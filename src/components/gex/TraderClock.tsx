@@ -321,7 +321,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
   const lookingAt = keptBlock != null ? `${hhmm(OPEN_MIN + keptBlock * blockMin)} · ${phaseAt(OPEN_MIN + keptBlock * blockMin).name}` : keptPhase ? `${keptPhase.name} · ${hhmm(keptPhase.from)}–${hhmm(keptPhase.to)}` : null;
 
   return (
-    <section className="relative flex flex-col min-w-0" data-trader-clock>
+    <section className="relative h-full flex flex-col min-w-0" data-trader-clock>
       <GuideFocus open={guideOpen} onClose={() => setGuideOpen(false)} title="How to read the clock" testId="clock-guide" viewport>
         <ClockGuide nowBlock={guideNow} line={line} bellShare={facts.bellShare} pin={facts.pin} supreme={facts.supreme} charmStrike={facts.charmStrike} />
       </GuideFocus>
@@ -374,7 +374,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
       </div>
 
       {open && (
-      <div className="px-5 pb-4" ref={stripRef}>
+      <div className="px-5 pb-4 flex-1 flex flex-col" ref={stripRef}>
         {/* THE PHASES — named above the strip on ONE row. Each name sits at its
             phase's start, except the last two: the turn is twenty minutes wide
             and the close ten, so the turn's name ends at 15:50 and the close's
@@ -410,11 +410,13 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
         </div>
 
         {/* THE STRIP — 78 five-minute blocks; shade = the phase's weight, silver = now */}
-        <div className="relative" onPointerLeave={() => setHover(null)}>
+        {/* BESIDE THE REPORT (from 1,880px) the box is as tall as the report, and the strip takes the height the box has
+            over its words (2026-10-13, "i dont want any deadspace") — 22px when the box is its own height */}
+        <div className="relative flex-1 flex flex-col" onPointerLeave={() => setHover(null)}>
           {/* a narrow strip is the thumb's height (44px) — the blocks are the targets, and 10px wide is all the width a quarter
               hour gets on a phone; the height is ours to give */}
           <div
-            className={`flex gap-[2px] ${narrow ? 'h-11' : 'h-[22px]'}`}
+            className={`flex-1 flex gap-[2px] ${narrow ? 'min-h-11' : 'min-h-[22px]'}`}
             data-clock-strip
             data-block-minutes={blockMin}
             role="group"

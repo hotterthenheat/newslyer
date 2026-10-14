@@ -30,7 +30,7 @@
 ==================================================
 */
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Play } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
@@ -243,6 +243,36 @@ const MapDesk = () => {
      screen, a box keeps the moment it last showed; scrolled into view, it
      catches up on its next render. What it reads arrives DEFERRED. */
   const [calRef, calOn] = useOnScreen<HTMLDivElement>();
+  /* THE BOOK AT ITS NATURAL WIDTH WHEN THE DAY STANDS BESIDE IT (2026-10-13, the owner: "compact and tight grouped",
+     then "i dont want any deadspace"): the field says how wide its panes are at their natural widths; where the day box
+     fits beside that (640 or more), the book is that wide and the day takes the rest; where it does not, the book takes
+     the whole row, its panes fill it, and the day goes under — 0 = unmeasured, or the profile */
+  const [bookW, setBookW] = useState(0);
+  /* THE BAND'S OWN STRIP (2026-10-13): the field draws its band here, above the book and the day, so the book box is only
+     as wide as its panes; its height is taken off the book box's, so the two together keep the first screen's height */
+  const [bandSlot, setBandSlot] = useState<HTMLDivElement | null>(null);
+  const [bandSlotH, setBandSlotH] = useState(0);
+  /* the top row's width, to know whether the day box stands beside the book (the same rule the row's wrap follows: the
+     book at its width, 16px, and 640 for the day) — beside, it takes the book box's height exactly and its two charts
+     share it; under the book it keeps its own */
+  const [topRow, setTopRow] = useState<HTMLDivElement | null>(null);
+  const [topRowW, setTopRowW] = useState(0);
+  useLayoutEffect(() => {
+    if (!topRow) return;
+    const read = () => setTopRowW(prev => (prev === topRow.clientWidth ? prev : topRow.clientWidth));
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(topRow);
+    return () => ro.disconnect();
+  }, [topRow]);
+  useLayoutEffect(() => {
+    if (!bandSlot) return;
+    const read = () => setBandSlotH(prev => (prev === bandSlot.offsetHeight ? prev : bandSlot.offsetHeight));
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(bandSlot);
+    return () => ro.disconnect();
+  }, [bandSlot]);
   const [tapeRef, tapeOn] = useOnScreen<HTMLDivElement>();
   const [dayRef, dayOn] = useOnScreen<HTMLDivElement>();
   const [reportRef, reportOn] = useOnScreen<HTMLDivElement>();
@@ -317,6 +347,9 @@ const MapDesk = () => {
     focusOn(best, ticker);
   };
 
+  const bookH = `calc(clamp(640px, 100dvh - 190px, 1000px) - ${bandSlotH > 0 ? bandSlotH + 8 : 0}px)`;
+  const dayBeside = bookW > 0 && topRowW > 0 && topRowW - Math.min(topRowW, bookW) - 16 >= 640;
+
   return (
     <>
       {strikeAsk && (
@@ -385,7 +418,14 @@ const MapDesk = () => {
           and the matrix inside it scrolled in a box that was itself cut — two scroll regions nested. The box is the
           first screen's (the shell's chrome above it is ~174px, 16 of air under), never under 640 — and 1000 at most
           since 2026-10-13 (the owner's tall screen: forty rows of the matrix at 20px need ~900 to stand unscrolled). */}
-      <div ref={calRef} id="map-book" className="border border-borderSubtle rounded-md overflow-hidden h-[clamp(640px,calc(100dvh-190px),1000px)] flex flex-col max-sm:scroll-mt-24" data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
+      {/* THE BOOK AND THE DAY SIDE BY SIDE WHERE THEY FIT (2026-10-13, the dead-space scan: three packed matrix panes on a
+          3,000px screen left 1,300px of the box empty): the book box at its natural width, the day box taking the rest
+          from 640px up and stretched to the book's height, its two charts sharing the extra; where the day box would
+          be under 640 it wraps under the book at the page's full width, as before. */}
+      <div id="map-book" className="flex flex-col gap-2 max-sm:scroll-mt-24" data-map-book-wrap>
+      <div ref={setBandSlot} className="empty:hidden border border-borderSubtle rounded-md bg-panel overflow-hidden [&>[data-ledger-toolbar]]:border-b-0" data-map-band-slot />
+      <div ref={setTopRow} className="flex flex-wrap items-stretch gap-4" data-map-top-row data-day-beside={dayBeside || undefined}>
+      <div ref={calRef} className="shrink-0 grow-0 max-w-full border border-borderSubtle rounded-md overflow-hidden flex flex-col" style={{ width: dayBeside ? bookW : '100%', height: bookH }} data-book-w={bookW || undefined} data-calendar data-scope-ticker={calTicker} data-on-screen={calOn}>
         <Deferred index={0} frames={0} fallback={<CalendarInner />} className="h-full min-h-0 flex flex-col animate-fade-in">
           <ExposureField
             snapshot={calSnap ?? scan}
@@ -405,6 +445,9 @@ const MapDesk = () => {
             selectedStrikeFor={focusFor}
             onSelectStrikeFor={(t, price) => toggleFocus(price, t)}
             snapshotFor={columnSnap}
+            onNaturalWidth={setBookW}
+            headSlot={bandSlot}
+            pack={dayBeside}
           />
         </Deferred>
       </div>
@@ -413,11 +456,13 @@ const MapDesk = () => {
           foldable, remembered. The replay rewinds it with the report's bars. */}
       {/* …AND THE BOOK THROUGH THE DAY UNDER IT ON THE SAME CLOCK (idea 1, 2026-10-13): one box, the tape over the net
           gamma, the minute under the pointer marked on both — DayBox.tsx */}
-      <div ref={tapeRef} id="map-session" className="border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24" data-session data-scope-ticker={tapeTicker} data-on-screen={tapeOn}>
+      <div ref={tapeRef} id="map-session" className="flex-[1_1_640px] min-w-0 flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24" style={dayBeside ? { height: bookH } : undefined} data-session data-scope-ticker={tapeTicker} data-on-screen={tapeOn}>
         <DayBox scope={chipFor('tape', tapeTicker)}>
           <TapeBox part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} at={playing && tapeTicker === ticker ? replayMinute(framePos) : undefined} />
           <BookThroughDay part snapshot={tapeSnap ?? scan} bars={playing && tapeTicker === ticker ? reportBars : undefined} focus={focusFor(tapeTicker)} onPick={price => toggleFocus(price, tapeTicker)} />
         </DayBox>
+      </div>
+      </div>
       </div>
       {/* THE DAY — the two tools nobody ships (roadmap step 5, 2026-09-05):
           the Trader's Clock, today's hedging schedule with the book's figures
@@ -428,9 +473,9 @@ const MapDesk = () => {
       {/* THE CLOCK BESIDE THE REPORT from 1,880px (idea 4, 2026-10-13): both ran the full width for a 178px strip and
           370px of rows; side by side a big monitor's page is a screen shorter. `contents` below that, so the flex column
           above still lays them out one under the other. */}
-      <div className="contents min-[1880px]:grid min-[1880px]:grid-cols-[580px_minmax(0,1fr)] min-[1880px]:gap-4 min-[1880px]:items-start" data-map-wide-row>
-      <div ref={dayRef} id="map-clock" className="border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24" data-day data-scope-ticker={dayTicker} data-on-screen={dayOn}>
-        <Deferred index={1} frames={22} fallback={<DayInner />} className="animate-fade-in">
+      <div className="contents min-[1880px]:grid min-[1880px]:grid-cols-[580px_minmax(0,1fr)] min-[1880px]:gap-4 min-[1880px]:items-stretch" data-map-wide-row>
+      <div ref={dayRef} id="map-clock" className="flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24" data-day data-scope-ticker={dayTicker} data-on-screen={dayOn}>
+        <Deferred index={1} frames={22} fallback={<DayInner />} className="flex-1 flex flex-col animate-fade-in">
           <TraderClock snapshot={daySnap ?? scan} scope={chipFor('day', dayTicker)} at={playing && dayTicker === ticker ? replayMinute(framePos) : undefined} />
         </Deferred>
       </div>

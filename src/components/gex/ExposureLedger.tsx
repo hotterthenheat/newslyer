@@ -81,6 +81,12 @@ interface ExposureLedgerProps {
   hoverStrike?: number | null;
   /** The capsules' ramp: the house ember/glacier, or the thermal try (cool absorbs · yellow balanced · warm amplifies) */
   palette?: 'house' | 'thermal';
+  /** The columns the host WANTS drawn (its window, before the fit) — the pane's natural width is read off them, so a
+      narrow pane's fit never shrinks the width it asks for (2026-10-13) */
+  wantCols?: number;
+  /** The grid's width at its widest — the strike column and the wanted columns at CELL_MAX — told to the host, which
+      packs the names' panes to it (2026-10-13) */
+  onNatural?: (px: number) => void;
   /** BOOK AFTER THE BELL (band 3, 2026-09-05): today's column taken out — the book as it stands at the next open */
   afterBell?: boolean;
   selectedStrike?: number | null;
@@ -119,9 +125,12 @@ const ROW_MIN = 18;
     pill touched the capsules (Noah, 2026-10-12: "top and bottom spacing is off notice how close they are") */
 const SPOT_H = 28;
 const HEAD_H = 44;
-/* A CELL HAS A CEILING (the owner, 2026-10-13: "its so wide" — one date on a 3000px screen was a 570px capsule a row):
-   the cells share the width up to this, and past it the grid sits at the left with the panel's air after it */
-const CELL_MAX = 220;
+/* A CELL'S NATURAL WIDTH (the owner, 2026-10-13: "its so wide" — one date on a 3000px screen was a 570px capsule a
+   row — then "compact and tight grouped" and "i dont want any deadspace"): 120 is where the full figure (71), the star
+   (96) and a four-character since-open chip (119) all still print. The pane's natural width is read off it; where the
+   Map stands the day box beside the book the panes pack to it, and elsewhere the cells share the pane, never leaving
+   air after the last one. */
+export const CELL_MAX = 120;
 /** How many nodes a board badges with their move since the open — the biggest ones (Noah, 2026-10-12) */
 const SINCE_SHOWN = 10;
 /** …and no node whose move is under this share of the board's heaviest cell: a quiet board wears no badge */
@@ -251,7 +260,7 @@ const LedgerCell = memo(({ strike, e, g, v, maxAbs, date, first, wash, isKing, r
   </div>
 ));
 
-const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greeks, leg = 'net', expiries, rings, hoverStrike, palette = 'house', afterBell = false, selectedStrike, marks, onPointer, onSelectStrike, fitKey, onFit, paper = false }: ExposureLedgerProps) => {
+const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greeks, leg = 'net', expiries, rings, hoverStrike, palette = 'house', afterBell = false, selectedStrike, marks, onPointer, onSelectStrike, fitKey, onFit, paper = false, wantCols, onNatural }: ExposureLedgerProps) => {
   const mode = palette === 'thermal' ? ('thermal-yellow' as const) : undefined;
   /* one leg alone is painted against its own heaviest cell — the net's scale would read a call leg against puts it
      never had */
@@ -424,7 +433,13 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
     ro.observe(strikeHead);
     return () => ro.disconnect();
   }, [strikeHead]);
-  const cellW = Math.min(CELL_MAX, (box.w - strikeW) / Math.max(1, cols));
+  const cellW = (box.w - strikeW) / Math.max(1, cols);
+  /* THE PANE'S NATURAL WIDTH, told to the host (2026-10-13): the strike column as measured, the wanted columns at
+     CELL_MAX, the grid's 4px of right padding */
+  const natural = strikeW > 0 ? strikeW + Math.max(cols, wantCols ?? 0) * CELL_MAX + 4 : 0;
+  useEffect(() => {
+    if (natural > 0) onNatural?.(natural);
+  }, [natural, onNatural]);
   /* the floor is 10px, not 9 (the partner, 2026-09-14: the figures "difficult to see") — a 20px
      row held 9px type; a short figure at 10px bold is 32px in a 42px cell, the full one 65 in 71 */
   /* …AND 11 SINCE 2026-10-13 (the audit's M10): the terminal's floor, which every other word on the page keeps — the
@@ -897,7 +912,7 @@ const ExposureLedger = ({ surface, liveSpot, open = null, focusOn = false, greek
           /* …AND PAINTED ONCE: `will-change: transform` through the glide gives the pinned grid a layer of its own, so
              the frames in between only composite it as the pane clips it — a trace of a name leaving put PAINT first
              (135ms in 700ms: four panes of shadowed capsules repainted every frame), style recalc second, layout third */
-          style={{ gridTemplateColumns: `max-content repeat(${cols}, minmax(0, ${CELL_MAX}px))`, gridTemplateRows: rowsTemplate, ...(gliding && box.w > 0 ? { width: box.w, willChange: 'transform' } : null) }}
+          style={{ gridTemplateColumns: `max-content repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: rowsTemplate, ...(gliding && box.w > 0 ? { width: box.w, willChange: 'transform' } : null) }}
         >
           {/* HEAD — sticky under scroll */}
           <div ref={setStrikeHead} className={`sticky top-0 z-10 ${ground} px-2 flex flex-col items-start justify-end pb-1 font-mono text-[11px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle`} style={{ gridRow: 'span 2' }}>

@@ -66,6 +66,9 @@ interface ExposureMatrixProps {
   lead?: Greek;
   /** Which legs the cells carry (the band's Legs card, 2026-10-13): the net, one leg, or both side by side */
   legs?: 'net' | 'call' | 'put' | 'both';
+  /** The table's width at its widest — the strike column and every leg's column at MATRIX_COL_W — told to the host,
+      which packs the names' panes to it (2026-10-13) */
+  onNatural?: (px: number) => void;
 }
 
 type Leg = 'put' | 'call' | 'net';
@@ -83,9 +86,14 @@ const ROW_H = 27;
    (the owner, 2026-10-13: the first row half under the head and the last cut at the foot — forty 27px rows never fit
    an 870px box) */
 const ROW_MIN = 17;
-/* THE LANE HAS A CEILING (the owner, 2026-10-13: "its so wide"): a leg's cell — bar and figure — grows with the box up
-   to this; past it the table sits at the left and the air is the panel's, not the bar's */
-const LANE_MAX = 560;
+/* THE PANE'S NATURAL WIDTH (the owner, 2026-10-13: "its so wide", "compact and tight grouped", then "i dont want any
+   deadspace"): a lane of 240 beside its figure — nine mono characters at 11px. Where the Map stands the day box beside
+   the book, the panes pack to this; where nothing stands beside them (the day box under the book, fullscreen) the
+   table fills its pane and the lanes take the room, so there is never an empty band on either side. */
+const LANE_MAX = 240;
+const FIG_W = 64;
+/** A leg's column at its widest: the figure, the gap, the lane, the cell's padding and the group's rule */
+export const MATRIX_COL_W = FIG_W + 6 + LANE_MAX + 24 + 1;
 /* THE CARD (the owner, 2026-10-13: "the side panel thing is so damn big"): four rows, one line under them, and wide
    enough that "Open interest · 18,709 contracts" prints whole — the calendar's card is the same */
 export const CARD_W = 248;
@@ -110,21 +118,30 @@ const groupSkin = (gi: number, first: boolean, last: boolean, paper: boolean) =>
   `${first ? `border-l ${paper ? 'border-borderSubtle' : 'border-borderMuted'} pl-3` : ''} ${last ? 'pr-3' : ''} ${gi % 2 === 1 ? (paper ? 'bg-ink/[0.02]' : 'bg-ink/[0.045]') : ''}`;
 const groupWash = (gi: number, paper: boolean) => (gi % 2 === 1 ? (paper ? 'bg-ink/[0.02]' : 'bg-ink/[0.045]') : '');
 
-const Cell = ({ value, leg, cap, mode, paper, gi, first, last, mirror, tight = false }: { value: number; leg: Leg; cap: number; mode: HeatMode; paper: boolean; gi: number; first: boolean; last: boolean; /** a row under 20px: no padding, the bar right under the figure */ tight?: boolean; /** with both legs drawn, the put's bar grows LEFT from the seam and the call's right */ mirror: 'left' | 'right' | null }) => {
+const Cell = ({ value, leg, cap, mode, paper, gi, first, last, mirror, tight = false, stacked = false }: { value: number; leg: Leg; cap: number; mode: HeatMode; paper: boolean; gi: number; first: boolean; last: boolean; /** a row under 20px: no padding */ tight?: boolean; /** a leg's column too narrow for the figure beside its bar (a phone, four names on a laptop): the figure over the bar, as before */ stacked?: boolean; /** with both legs drawn, the put's bar grows LEFT from its figure and the call's RIGHT, the two figures back to back at the seam */ mirror?: 'left' | 'right' | null }) => {
   const pct = Math.min(100, (Math.abs(value) / Math.max(1, cap)) * 100);
   return (
-    <td className={`px-2 ${tight ? 'py-0' : 'py-0.5'} align-middle ${mirror === 'right' ? 'text-left' : 'text-right'} ${groupSkin(gi, first, last, paper)}`} data-matrix-leg={leg} data-matrix-mirror={mirror ?? undefined}>
-      <span className={`block font-mono text-[11px] tnum leading-none ${leg === 'net' ? 'text-textPrimary font-semibold' : 'text-textPrimary'}`}>{fmtUsd(value)}</span>
-      {/* the bar's lane is the whole cell — the net fills its container (2026-10-12) */}
-      <span className={`${tight ? 'mt-px' : 'mt-0.5'} ml-auto flex h-[3px] w-full rounded-full bg-ink/[0.06] ${mirror === 'left' ? 'justify-end' : ''}`}>
-        {/* the width glides with the data, the ink with the Colours switch — the ladder's two clocks */}
-        <span className="block h-full shrink-0 rounded-full transition-[width,background-color] [transition-duration:700ms,450ms]" style={{ width: `${pct}%`, background: value === 0 ? 'transparent' : heatLadderColor(value, cap, mode, paper) }} />
-      </span>
+    <td className={`px-2 ${tight ? 'py-0' : 'py-0.5'} align-middle ${groupSkin(gi, first, last, paper)}`} data-matrix-leg={leg} data-matrix-mirror={mirror ?? undefined}>
+      {/* THE FIGURE AGAINST ITS BAR (the owner, 2026-10-13: "compact and tight grouped"): the figure in a fixed column
+          right after the strike, the bar growing from it — the number had sat at the lane's far edge, up to 500px from
+          a bar a few pixels long. With both legs the put's reads right to left: its bar, then its figure at the seam. */}
+      <div className={stacked ? '' : `flex items-center gap-1.5 ${mirror === 'left' ? 'flex-row-reverse' : ''}`}>
+        <span
+          className={`${stacked ? 'block' : 'shrink-0'} font-mono text-[11px] tnum leading-none whitespace-nowrap ${(stacked ? mirror === 'right' : mirror === 'left') ? 'text-left' : 'text-right'} ${leg === 'net' ? 'text-textPrimary font-semibold' : 'text-textPrimary'}`}
+          style={stacked ? undefined : { width: FIG_W }}
+        >
+          {fmtUsd(value)}
+        </span>
+        <span className={`${stacked ? `${tight ? 'mt-px' : 'mt-0.5'} w-full` : 'flex-1 min-w-0'} flex h-[3px] rounded-full bg-ink/[0.06] ${mirror === 'left' ? 'justify-end' : ''}`}>
+          {/* the width glides with the data, the ink with the Colours switch — the ladder's two clocks */}
+          <span className="block h-full shrink-0 rounded-full transition-[width,background-color] [transition-duration:700ms,450ms]" style={{ width: `${pct}%`, background: value === 0 ? 'transparent' : heatLadderColor(value, cap, mode, paper) }} />
+        </span>
+      </div>
     </td>
   );
 };
 
-const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrike, palette = 'house', selectedStrike, marks, onPointer, onSelectStrike, lead: leadProp, legs: legsPick = 'net' }: ExposureMatrixProps) => {
+const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrike, palette = 'house', selectedStrike, marks, onPointer, onSelectStrike, lead: leadProp, legs: legsPick = 'net', onNatural }: ExposureMatrixProps) => {
   const mode: HeatMode = palette === 'thermal' ? 'thermal-yellow' : HEAT_MODE;
   const LEGS = useMemo(() => legsOf(legsPick), [legsPick]);
   const paper = useResolvedTheme() === 'light';
@@ -341,6 +358,16 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
     ro.observe(reserve);
     return () => ro.disconnect();
   }, [reserve]);
+  const [boxW, setBoxW] = useState(0);
+  /* A LEG'S COLUMN AS DRAWN: the box (or the natural width, if less) past the strike column, shared by the legs; under the
+     figure, its gap and 40px of lane it stacks the figure over the bar instead (a phone, four names on a laptop) */
+  const legW = boxW > 0 ? (boxW - (strikeColW || 84)) / Math.max(1, shownGreeks.length * LEGS.length) : MATRIX_COL_W;
+  const stacked = legW < FIG_W + 6 + 40 + 24 + 1;
+  /* THE PANE'S NATURAL WIDTH, told to the host (2026-10-13): the strike column as measured and every leg at its widest */
+  const natural = strikeColW > 0 ? strikeColW + shownGreeks.length * LEGS.length * MATRIX_COL_W : 0;
+  useEffect(() => {
+    if (natural > 0) onNatural?.(natural);
+  }, [natural, onNatural]);
   const centredFor = useRef<string | null>(null);
   useEffect(() => {
     if (centredFor.current === surface.ticker) return;
@@ -361,9 +388,11 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
     const read = () => {
       const head = theadRef.current?.offsetHeight ?? 32;
       const spot = spotRef.current?.offsetHeight ?? 28;
-      const h = Math.floor((box.clientHeight - head - spot) / Math.max(1, rows.length)) - 1; // the row's 1px rule
+      /* the collapsed table counts each row's 1px rule inside its height — a pixel taken off for it left 40px under the last row */
+      const h = Math.floor((box.clientHeight - head - spot) / Math.max(1, rows.length));
       const next = Math.max(ROW_MIN, Math.min(ROW_H, h));
       setRowH(prev => (prev === next ? prev : next));
+      setBoxW(prev => (prev === box.clientWidth ? prev : box.clientWidth));
     };
     read();
     const ro = new ResizeObserver(read);
@@ -424,7 +453,7 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
         </td>
         {shownGreeks.map((g, gi) =>
           LEGS.map((leg, li) => (
-            <Cell key={`${g}-${leg}`} value={r.legs[g][leg]} leg={leg} cap={caps[g][leg]} mode={mode} paper={paper} gi={gi} first={li === 0} last={li === LEGS.length - 1} mirror={LEGS.length > 1 ? (leg === 'put' ? 'left' : 'right') : null} tight={rowH < 20} />
+            <Cell key={`${g}-${leg}`} value={r.legs[g][leg]} leg={leg} cap={caps[g][leg]} mode={mode} paper={paper} gi={gi} first={li === 0} last={li === LEGS.length - 1} mirror={LEGS.length > 1 ? (leg === 'put' ? 'left' : 'right') : null} tight={rowH < 20} stacked={stacked} />
           ))
         )}
       </tr>
@@ -452,7 +481,7 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
       data-exposure-matrix={surface.ticker}
       data-matrix-palette={palette}
     >
-      <table className="border-collapse" style={{ width: `min(100%, ${(strikeColW || 84) + shownGreeks.length * LEGS.length * LANE_MAX}px)`, minWidth: (strikeColW || 84) + shownGreeks.length * LEGS.length * 76, tableLayout: strikeColW ? 'fixed' : 'auto' }}>
+      <table className="border-collapse" style={{ width: '100%', minWidth: (strikeColW || 84) + shownGreeks.length * LEGS.length * (stacked ? 76 : MATRIX_COL_W - LANE_MAX + 8), tableLayout: strikeColW ? 'fixed' : 'auto' }}>
         {strikeColW > 0 && (
           <colgroup>
             <col style={{ width: strikeColW }} />
@@ -507,8 +536,10 @@ const ExposureMatrix = ({ surface, liveSpot, greeks, expiries, rings, hoverStrik
           <tr ref={spotRef} data-matrix-spot>
             {/* the rule under the net columns alone, the strike column's cell empty — the pill at the middle of the
                 nodes (Noah, 2026-10-12) */}
-            <td aria-hidden />
-            <td colSpan={cols - 1} className="px-2 py-1">
+            {/* …and across the whole pane when the legs are narrow: the price pill is wider than one stacked leg, and it ran
+                past the pane's edge (four names at 768, 2026-10-13) */}
+            {!stacked && <td aria-hidden />}
+            <td colSpan={stacked ? cols : cols - 1} className="px-2 py-1">
               <SpotRule ticker={surface.ticker} price={liveSpot} centre />
             </td>
           </tr>

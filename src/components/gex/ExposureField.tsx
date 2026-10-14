@@ -146,6 +146,17 @@ interface ExposureFieldProps {
       column through this (the Map hands the minute's snapshot); absent, the
       simulator's live read */
   snapshotFor?: (ticker: string) => MarketSnapshot;
+  /** Given, the names' panes PACK to their content (2026-10-13, the owner: "compact and tight grouped") and the field
+      tells the host how wide it would be at its widest — the panes' natural widths, or the band's named row if that is
+      wider; 0 while unmeasured or on the profile, which fills its room */
+  onNaturalWidth?: (px: number) => void;
+  /** Given (the Map, 2026-10-13), the band is drawn into this element — a strip of its own above the book and the day —
+      rather than across the top of the book: a band needs ~1,800px for its words, one name's pane 443, and inside the
+      box the band's width was the box's. Fullscreen draws it in place, as before. */
+  headSlot?: HTMLElement | null;
+  /** The host stands something beside the book (the Map's day box): pack the panes to their natural widths. Otherwise —
+      and always in fullscreen — they fill their room, so no width is left empty (2026-10-13) */
+  pack?: boolean;
 }
 
 /** The names beside the host's — three at most, so four side by side */
@@ -259,7 +270,7 @@ const SHOW_OPTIONS: DropdownOption<'now' | 'after'>[] = [
   { value: 'after', label: 'After the close', hint: "The same calendar once today's contracts have expired" },
 ];
 
-const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike, openRatio, onTicker, toolbar = 'desk', marks, lead, greeks: greeksProp, onGreeks, fresh = false, after, fullMode = 'portal', fullOpen, headFull = false, multi = false, selectedStrikeFor, onSelectStrikeFor, snapshotFor }: ExposureFieldProps) => {
+const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike, openRatio, onTicker, toolbar = 'desk', marks, lead, greeks: greeksProp, onGreeks, fresh = false, after, fullMode = 'portal', fullOpen, headFull = false, multi = false, selectedStrikeFor, onSelectStrikeFor, snapshotFor, onNaturalWidth, headSlot, pack = false }: ExposureFieldProps) => {
   const [ownPick, setOwnPick] = useState<string[]>(['gex']);
   const pick = greeksProp ?? ownPick;
   /* the page's theme: on paper the island and everything drawn in it wear the light set and the paper ramps */
@@ -406,6 +417,11 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      sum of the pieces' widths and their gaps against the band's room; over it, the two tidy rows. The pieces' widths are
      their own in either layout, so the answer holds still. */
   const [bandOver, setBandOver] = useState(false);
+  /* …AND WHAT THE NAMED ROW NEEDS, measured whenever the band is drawn with its words (2026-10-13): the box that packs to
+     its panes is never narrower than this, and a band at least this wide keeps its words on one row whatever the
+     fixed thresholds below say — they were measured for the widest band, five greeks and every door */
+  const [namedNeed, setNamedNeed] = useState(0);
+  const namedNow = useRef(false);
   /* a coarse pointer — a phone, a tablet — read once and on change (index.css's .hit is gated the same way) */
   const [coarsePointer, setCoarsePointer] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches);
   useEffect(() => {
@@ -430,6 +446,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
     need += Math.max(0, n - 1) * 8; /* gap-x-2 */
     const over = need > el.clientWidth - 24; /* px-3 each side */
     setBandOver(prev => (prev === over ? prev : over));
+    if (namedNow.current && need > 0) setNamedNeed(prev => (Math.abs(prev - need) < 2 ? prev : Math.ceil(need)));
   });
   /* THE STRIKES: each side of spot — the ledger's own presets, 20 by rest; a host may seed its own */
   const seed: number = halfProp ?? LEDGER_REST;
@@ -623,6 +640,20 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      grid — 308 remounts and two long tasks for one name leaving, the widths landing in five jumps. Declared, the
      ledgers hold their measure through it and take one read when it ends — the sidebar's rule, the desk's. */
   const islandRef = useRef<HTMLDivElement | null>(null);
+  /* THE PANES' NATURAL WIDTHS (2026-10-13, the owner: "all you did was add a bunch of space … i want it to look compact
+     and tight grouped"): each view tells the field how wide it is at its widest — the matrix its strike column and its
+     legs at their ceiling, the calendar its strike column and the wanted dates at CELL_MAX — keyed by name and view */
+  const [naturals, setNaturals] = useState<Record<string, number>>({});
+  const naturalHandles = useRef(new Map<string, (px: number) => void>());
+  const naturalFor = (ticker: string, v: LedgerView) => {
+    const k = `${ticker}|${v}`;
+    let f = naturalHandles.current.get(k);
+    if (!f) {
+      f = (px: number) => setNaturals(prev => (Math.abs((prev[k] ?? 0) - px) < 1 ? prev : { ...prev, [k]: Math.round(px) }));
+      naturalHandles.current.set(k, f);
+    }
+    return f;
+  };
   const removeName = (t: string) => {
     arrivingRef.current.delete(t);
     warmedRef.current.delete(t);
@@ -878,7 +909,8 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const tight = 1 + extraBooks.length >= TIGHT_AT;
   /* the band's mode by its measured width (see BAND_*_ROW_PX); the desk toolbar (Pulse) has no band and never
      measures, so its cards keep their names */
-  const bandMode: 'one' | 'bare' | 'tight' | 'two' = bandW === 0 || bandW >= BAND_ONE_ROW_PX ? 'one' : bandW >= BAND_BARE_ROW_PX ? 'bare' : bandW >= BAND_TIGHT_ROW_PX ? 'tight' : 'two';
+  const namedFits = toolbar === 'band' && namedNeed > 0 && bandW >= namedNeed + 24;
+  const bandMode: 'one' | 'bare' | 'tight' | 'two' = bandW === 0 || bandW >= BAND_ONE_ROW_PX || namedFits ? 'one' : bandW >= BAND_BARE_ROW_PX ? 'bare' : bandW >= BAND_TIGHT_ROW_PX ? 'tight' : 'two';
   /* TWO TIDY ROWS WITH THEIR WORDS when the pieces are over the one row's room (the re-audit's H1): bare picks were
      the price of staying on one row; a band that wraps anyway pays it for nothing. And under BAND_SCROLL_PX (a phone)
      the two rows scroll sideways with their words (H2) — a bare pick's name lives in a tooltip no thumb can hover. */
@@ -891,6 +923,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      their words they ran to four rows there, the read, the guide and the fullscreen door alone on the last */
   const doorsTightTwo = toolbar === 'band' && !overNamed && !bandScroll && bandMode === 'two' && bandW < BAND_DOORS_WORDS_PX;
   const doorsTight = (toolbar === 'band' && !overNamed && bandMode === 'tight') || doorsTightTwo;
+  namedNow.current = toolbar === 'band' && !stripsBare && !doorsTight && !bandScroll;
   const strips = (
     <>
       <DropdownSelect label="View" value={view} options={VIEWS_FOR[viewHost].map(v => VIEW_OPTION[v])} onChange={pickView} title="The matrix or the calendar" testId="ledger-view" bare={stripsBare} />
@@ -1177,7 +1210,17 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
      settle — the island's inner width shared by the columns staying — so each pane lays itself out for the
      destination at once and holds there through the glide (ExposureLedger reads it as `promisedWidth`) */
   const staying = allColumns.filter(c => !c.leaving).length;
-  const islandW = islandRef.current?.clientWidth ?? 0;
+  /* THE ISLAND PACKS TO ITS PANES (2026-10-13): as wide as the names standing need at their widest — the widest pane's
+     natural width each, its 1px rules and, side by side, its 4px margins and the island's 4px padding — and no wider;
+     the profile fills its room. A name not yet measured borrows the widest measured, so an arriving column never
+     throws the island open for a frame. */
+  const packs = !!onNaturalWidth && d.view !== 'profile';
+  const knownNaturals = allColumns.filter(c => !c.leaving).map(c => naturals[`${c.ticker}|${d.view}`]).filter((v): v is number => v > 0);
+  const paneNatural = knownNaturals.length ? Math.max(...knownNaturals) : 0;
+  const naturalW = packs && paneNatural > 0 ? staying * (paneNatural + 2 + (many ? 8 : 0)) + (many ? 8 : 0) : 0;
+  const islandMax = pack && !full ? naturalW : 0;
+  const islandRoom = islandRef.current?.parentElement?.clientWidth ?? islandRef.current?.clientWidth ?? 0;
+  const islandW = islandMax > 0 && islandRoom > 0 ? Math.min(islandMax, islandRoom) : islandRef.current?.clientWidth ?? 0;
   const tileW = islandW > 0 && staying > 0 ? Math.floor((islandW - (many ? 8 : 0)) / staying) : 0;
   /* …and the glide is declared the moment the columns change, AFTER the commit (so the promise is already in the
      DOM when the panes read it), never before: `beginGlide` runs its starters at once */
@@ -1211,9 +1254,17 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
     return () => cancelAnimationFrame(id);
   }, [snap]);
 
+  /* the band's named row is the floor — measured once it has been drawn with its words, the widest band's threshold until
+     then, so a box packing to one narrow pane never squeezes the band into its phone rows before it has been measured */
+  const headOut = toolbar === 'band' && !!headSlot && !full;
+  const hostNatural = naturalW > 0 ? (headOut ? naturalW : Math.max(naturalW, namedNeed > 0 ? namedNeed + 48 : BAND_ONE_ROW_PX)) + 2 : 0;
+  useEffect(() => {
+    onNaturalWidth?.(hostNatural);
+  }, [hostNatural, onNaturalWidth]);
+
   const body = (
     <div className="relative h-full min-h-0 flex flex-col">
-      {head}
+      {headOut && headSlot ? createPortal(head, headSlot) : head}
       {toolbar === 'band' && !noteSeen && (
         <div className="shrink-0 flex items-start gap-3 px-4 py-2 border-b border-borderSubtle/60 bg-silver/[0.04] text-[11px] text-textSecondary" data-map-note>
           <p className="min-w-0 flex-1 leading-relaxed">
@@ -1245,8 +1296,9 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
            the dark terminal keeps its black island to the digit */
         data-theme={paper ? 'light' : 'dark'}
         className={`relative flex-1 min-h-0 grid motion-reduce:transition-none ${many ? 'bg-canvas p-1' : paper ? 'bg-inset p-0' : 'bg-panel p-0'}`}
-        style={{ gridTemplateColumns: tracks, transition: snap ? 'none' : `grid-template-columns ${LEAVE_MS}ms ${EASE}, padding ${LEAVE_MS}ms ${EASE}, background-color ${LEAVE_MS}ms ${EASE}` }}
+        style={{ gridTemplateColumns: tracks, maxWidth: islandMax > 0 ? islandMax : undefined, transition: snap ? 'none' : `grid-template-columns ${LEAVE_MS}ms ${EASE}, padding ${LEAVE_MS}ms ${EASE}, background-color ${LEAVE_MS}ms ${EASE}` }}
         ref={islandRef}
+        data-field-packed={islandMax > 0 ? islandMax : undefined}
         data-field-island
         data-field-columns={1 + extraBooks.length}
       >
@@ -1428,9 +1480,9 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                   {d.view === 'profile' ? (
                     <ExposureProfileView surface={surfDrawn} expiries={shownFor(book.surface, d)} liveSpot={book.snapshot.spot} selectedStrike={kept} onSelectStrike={keep} paper={paper} />
                   ) : d.view === 'matrix' ? (
-                    <ExposureMatrix surface={surfDrawn} liveSpot={book.snapshot.spot} greeks={colGreeks} expiries={shownFor(book.surface, d)} rings={d.rings} hoverStrike={c.host ? hoverStrike : undefined} palette={palette} selectedStrike={kept} marks={c.host ? marks : undefined} onPointer={c.host ? onPointer : handlesFor(c.ticker).point} onSelectStrike={keep} lead={c.host ? leadGreek : undefined} legs={d.legs} />
+                    <ExposureMatrix onNatural={packs ? naturalFor(c.ticker, 'matrix') : undefined} surface={surfDrawn} liveSpot={book.snapshot.spot} greeks={colGreeks} expiries={shownFor(book.surface, d)} rings={d.rings} hoverStrike={c.host ? hoverStrike : undefined} palette={palette} selectedStrike={kept} marks={c.host ? marks : undefined} onPointer={c.host ? onPointer : handlesFor(c.ticker).point} onSelectStrike={keep} lead={c.host ? leadGreek : undefined} legs={d.legs} />
                   ) : (
-                    <ExposureLedger surface={surfDrawn} liveSpot={book.snapshot.spot} open={view === 'calendar' && !fresh ? openSurfaceOf(book.ticker) : null} focusOn={focusOn && view === 'calendar' && !fresh} greeks={colGreeks} expiries={same(`e:${c.ticker}`, windowFor(book.surface, d))} rings={d.rings} leg={d.legs === 'both' ? 'net' : d.legs} hoverStrike={c.host ? hoverStrike : undefined} palette={palette} afterBell={d.afterBell} selectedStrike={kept} marks={c.host ? marks : undefined} onPointer={c.host ? onPointer : handlesFor(c.ticker).point} onSelectStrike={keep} fitKey={c.ticker} onFit={reportFit} paper={paper} />
+                    <ExposureLedger wantCols={colGreeks.length * windowFor(book.surface, { ...d, greeks: colGreeks }).length} onNatural={packs ? naturalFor(c.ticker, 'calendar') : undefined} surface={surfDrawn} liveSpot={book.snapshot.spot} open={view === 'calendar' && !fresh ? openSurfaceOf(book.ticker) : null} focusOn={focusOn && view === 'calendar' && !fresh} greeks={colGreeks} expiries={same(`e:${c.ticker}`, windowFor(book.surface, d))} rings={d.rings} leg={d.legs === 'both' ? 'net' : d.legs} hoverStrike={c.host ? hoverStrike : undefined} palette={palette} afterBell={d.afterBell} selectedStrike={kept} marks={c.host ? marks : undefined} onPointer={c.host ? onPointer : handlesFor(c.ticker).point} onSelectStrike={keep} fitKey={c.ticker} onFit={reportFit} paper={paper} />
                   )}
                 </div>
                 {/* THE READ — this name's, glass over the right of its own book

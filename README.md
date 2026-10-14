@@ -28,7 +28,9 @@ where each vendor stands. `docs/data-feed.md` is the owner's page for it.
 The book by strike and expiry as a matrix, a calendar or a profile (dealer gamma across spot); a data door that says where
 the figures come from and how they are computed; the legs apart or together; the day box — the tape with the levels, the
 flip's path and a bell on each level, and the book's net gamma under it on the same clock; the trader's clock; how the
-levels held today, with the base rates of the sessions before; export as CSV or JSON. Every box folds and remembers it; the
+levels held today, with the base rates of the sessions before; export as CSV or JSON. The band sits in a strip of its own;
+the matrix prints each figure against its bar; on a wide screen the book packs to its names and the day box stands beside
+it at the same height, and wherever nothing fits beside it the book fills the row. Every box folds and remembers it; the
 facts stay in a strip once the head scrolls away; `/` keeps a typed strike; a phone gets jump links; the Map's colours
 live in Settings › Appearance. `reports/` and `research_notes/` (git-ignored) hold the competitive audit behind it.
 

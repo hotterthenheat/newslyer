@@ -14,11 +14,14 @@ import type { LedgerPalette } from '../components/gex/ColoursSwitch';
 */
 
 const KEY = 'slayer_ledger_palette';
+/* THE HOUSE RAMP BY DEFAULT (2026-10-13, the heatmap comparison: thermal's zero is a pale yellow, the brightest thing on
+   a dark page, so every quiet and $0 cell glowed; the house ramp's zero is the panel's own dark grey and its two poles
+   are colour-blind safe). Thermal stays one click away in Settings, and a thermal choice made there is kept. */
 const read = (): LedgerPalette => {
   try {
-    return localStorage.getItem(KEY) === 'house' ? 'house' : 'thermal';
+    return localStorage.getItem(KEY) === 'thermal' ? 'thermal' : 'house';
   } catch {
-    return 'thermal';
+    return 'house';
   }
 };
 let current: LedgerPalette = read();

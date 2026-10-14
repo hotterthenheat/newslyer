@@ -32,7 +32,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { bookMarket } from '../../data/bookMarket';
 import { sessionBars } from '../../data/levelview';
 import { fmtUsd } from '../../data/gex';
-import { CLOSE_MIN, OPEN_MIN, hhmm } from '../../data/ahead';
+import { CLOSE_MIN, hhmm } from '../../data/ahead';
+import { dayAxisFrom, dayHours } from '../../data/dayAxis';
 import { nyMinutes } from '../../core/nyTime';
 import { HEAT_MODE, heatLaneColor } from './heatmap';
 import { LONG_GAMMA, SHORT_GAMMA, alpha } from './paletteInk';
@@ -136,7 +137,9 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
   const mr = part ? (W > 0 && W < 520 ? MR_PART_OVER : MR_PART) : MR;
   const plotW = Math.max(10, W - ML - mr);
   const plotH = Math.max(10, H - MT - MB);
-  const xOfMin = (min: number) => ML + ((min - OPEN_MIN) / (CLOSE_MIN - OPEN_MIN)) * plotW;
+  /* the tape's clock, off the same bars (data/dayAxis.ts) */
+  const FROM = dayAxisFrom(bars[0]?.time);
+  const xOfMin = (min: number) => ML + ((min - FROM) / (CLOSE_MIN - FROM)) * plotW;
   const yOfNet = (v: number) => MT + plotH / 2 - (v / netMax) * (plotH / 2);
   const yOfSpot = (p: number) => (spotHi > spotLo ? MT + ((spotHi - p) / (spotHi - spotLo)) * plotH : MT + plotH / 2);
   const rowH = strikes.length ? plotH / strikes.length : 0;
@@ -154,7 +157,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    const colW = Math.max(1, plotW / (CLOSE_MIN - OPEN_MIN));
+    const colW = Math.max(1, plotW / (CLOSE_MIN - FROM));
     for (const m of minutes) {
       const x = xOfMin(m.min);
       strikes.forEach((k, i) => {
@@ -165,7 +168,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [face, minutes, strikes, maxAbs, W, H, paper]);
+  }, [face, minutes, strikes, maxAbs, W, H, paper, FROM]);
 
   /* the hovered minute (and row, on the surface) */
   const [hover, setHover] = useState<{ i: number; row: number | null } | null>(null);
@@ -173,7 +176,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
   const onMove = (clientX: number, clientY: number) => {
     const r = hostRef.current?.getBoundingClientRect();
     if (!r || !minutes.length) return setHover(null);
-    const min = OPEN_MIN + ((clientX - r.left - ML) / plotW) * (CLOSE_MIN - OPEN_MIN);
+    const min = FROM + ((clientX - r.left - ML) / plotW) * (CLOSE_MIN - FROM);
     let best = 0;
     for (let i = 1; i < minutes.length; i++) if (Math.abs(minutes[i].min - min) < Math.abs(minutes[best].min - min)) best = i;
     const row = face === 'heat' && rowH > 0 ? Math.max(0, Math.min(strikes.length - 1, Math.floor((clientY - r.top - MT) / rowH))) : null;
@@ -189,7 +192,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
   useEffect(() => () => setDayHover(null), []);
   const otherMin = part && hm == null && shared?.from === 'tape' ? shared.min : null;
   /* a narrow plot (a phone) holds four hours, not eight */
-  const hours = plotW < 480 ? [OPEN_MIN, 12 * 60, 14 * 60, CLOSE_MIN] : [OPEN_MIN, 10 * 60, 11 * 60, 12 * 60, 13 * 60, 14 * 60, 15 * 60, CLOSE_MIN];
+  const hours = dayHours(FROM, plotW < 480);
   const netPath = minutes.map((m, i) => `${i ? 'L' : 'M'}${xOfMin(m.min).toFixed(1)} ${yOfNet(m.net).toFixed(1)}`).join(' ');
   const netArea = (sign: 1 | -1) => (minutes.length ? `${minutes.map((m, i) => `${i ? 'L' : 'M'}${xOfMin(m.min).toFixed(1)} ${yOfNet(sign > 0 ? Math.max(0, m.net) : Math.min(0, m.net)).toFixed(1)}`).join(' ')} L${xOfMin(minutes[minutes.length - 1].min).toFixed(1)} ${yOfNet(0).toFixed(1)} L${xOfMin(minutes[0].min).toFixed(1)} ${yOfNet(0).toFixed(1)} Z` : '');
   const spotPath = minutes.filter(m => m.spot != null).map((m, i) => `${i ? 'L' : 'M'}${xOfMin(m.min).toFixed(1)} ${yOfSpot(m.spot!).toFixed(1)}`).join(' ');
@@ -218,7 +221,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
   };
 
   return (
-    <section className="relative flex flex-col min-w-0" data-through-day data-through-face={face} data-through-part={part || undefined}>
+    <section className={`relative flex flex-col min-w-0 ${part ? 'flex-1' : ''}`} data-through-day data-through-face={face} data-through-part={part || undefined}>
       <div className={part ? 'px-5 pt-2 pb-2 flex items-end gap-6 flex-wrap' : 'px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap'}>
         <div className={part ? 'flex items-center gap-3 flex-wrap' : 'min-w-0 flex-1'}>
           <div className="flex items-center gap-3 flex-wrap">
@@ -270,10 +273,10 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
           </dl>
         )}
       </div>
-      <div className="px-3 pb-3">
+      <div className={part ? 'px-3 pb-3 flex-1 flex flex-col' : 'px-3 pb-3'}>
         <div
           ref={hostRef}
-          className="relative h-[260px] rounded-md border border-borderSubtle/60 bg-inset outline-none"
+          className={`relative ${part ? 'flex-[1_1_260px] min-h-[170px]' : 'h-[260px]'} rounded-md border border-borderSubtle/60 bg-inset outline-none`}
           tabIndex={0}
           role="group"
           aria-label={`${ticker}'s book through the day — the arrow keys walk the minutes${face === 'heat' ? ' and the strikes, Enter keeps the strike' : ''}`}
@@ -291,7 +294,7 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
               {hours.map(t => (
                 <g key={t}>
                   <line x1={xOfMin(t)} x2={xOfMin(t)} y1={MT} y2={MT + plotH} stroke={RULE} />
-                  <text x={xOfMin(t)} y={H - 7} textAnchor={t === OPEN_MIN ? 'start' : t === CLOSE_MIN ? 'end' : 'middle'} fontFamily={MONO} fontSize={11} fill={INK_3}>
+                  <text x={xOfMin(t)} y={H - 7} textAnchor={t === FROM ? 'start' : t === CLOSE_MIN ? 'end' : 'middle'} fontFamily={MONO} fontSize={11} fill={INK_3}>
                     {hhmm(t)}
                   </text>
                 </g>
