@@ -7,9 +7,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { useFocus } from '../../context/FocusContext';
 import Simulator from '../../core/simulator';
 import DropdownSelect, { type DropdownOption } from '../../components/ui/DropdownSelect';
-import SessionClock from '../../components/ui/SessionClock';
 import ScrollHome from '../../components/layout/ScrollHome';
-import Term from '../../components/ui/Term';
 import { REGIME_WORDS, type GammaRegime } from '../../data/flipGauge';
 import { fmtDistance, impliedDaySigma, sessionAtr, type DistanceScales, type DistanceUnit } from '../../data/atr';
 import { setDistanceUnit, useDistanceUnit } from '../../data/distanceUnits';
@@ -71,7 +69,7 @@ const untilBell = (secondsToClose: number) => {
 };
 
 /** Which way dealers are hedging, in words — the same pair the Map's sentence uses */
-const DEALER_WORDS = { SHORT: 'amplifying moves', LONG: 'absorbing moves' } as const;
+const DEALER_WORDS = { SHORT: 'amplify', LONG: 'absorb' } as const;
 
 /** The desk's ruler: the unit every distance on Pinpoint is read in */
 const RULER_OPTIONS: DropdownOption<DistanceUnit>[] = [
@@ -81,16 +79,14 @@ const RULER_OPTIONS: DropdownOption<DistanceUnit>[] = [
   { value: 'σ', label: 'σ', hint: 'Expected one-day moves — how many the options price in' },
 ];
 
-/* A SCALE (the owner, 2026-10-14, after a walk through the page: "almost everything is the same size … the numbers a
-   trader came for are no bigger than their labels"): a fact's figure at 15px over its 11px name; the price, the one
-   figure every terminal shows big, at 22px (`hero`). */
-const Fact = ({ label, children, title, testId, hero = false }: { label: string; children: React.ReactNode; title?: string; testId?: string; hero?: boolean }) => (
-  <div className="min-w-0" data-shell-fact={testId}>
-    <dt className="text-[11px] text-textMuted whitespace-nowrap">{label}</dt>
-    <dd className={`font-mono tnum text-textPrimary whitespace-nowrap ${hero ? 'mt-px text-[22px] font-semibold leading-none' : 'mt-0.5 text-[15px] font-semibold leading-tight'}`} title={title}>
-      {children}
-    </dd>
-  </div>
+/* ONE LINE, THE TERMINAL'S (the owner, 2026-10-14, of five stat cards with sentences in them: "this is AI slop"): a fact
+   is its name in tracked capitals at the 11px floor and its figure beside it, the facts on one mono line with hairlines
+   between — the stuck strip's grammar, the chart strip's. The price, the figure every terminal shows large, at 18px. */
+const Fact = ({ label, children, title, testId, hero = false, word = false }: { label: string; children: React.ReactNode; title?: string; testId?: string; hero?: boolean; /** a word for a figure (absorb, untested) — small capitals, not a number's face */ word?: boolean }) => (
+  <span className="inline-flex items-baseline gap-2 whitespace-nowrap font-mono sm:pr-4 sm:[&:not(:first-child)]:border-l sm:[&:not(:first-child)]:border-borderSubtle sm:[&:not(:first-child)]:pl-4" data-shell-fact={testId} title={title}>
+    <span className="text-[11px] uppercase tracking-wider text-textMuted">{label}</span>
+    <span className={`tnum text-textPrimary ${hero ? 'text-[18px] font-semibold leading-none' : word ? 'text-[11px] font-semibold uppercase tracking-wider' : 'text-[13px] font-semibold'}`}>{children}</span>
+  </span>
 );
 
 const PinpointLayout = () => {
@@ -163,7 +159,6 @@ const PinpointLayout = () => {
   const flipAtSpot = flipDist !== null && gauge != null && flipDist < gauge.spot * 0.00005;
   /* Which page this is — its name, its icon and one line, from the registry the sidebar reads */
   const page = GEX_SUBPAGES.find(p => location.pathname.startsWith(p.path)) ?? GEX_SUBPAGES[0];
-  const PageIcon = page.icon;
 
   /* THE CLOCK TO THE CLOSE — New York time, re-read every 15s */
   const [clock, setClock] = useState(() => readSessionClock());
@@ -193,124 +188,102 @@ const PinpointLayout = () => {
       {/* THE FRAME OWNS THE SUBJECT AND THE PAGES (direction B, 2026-09-05): the
           sidebar carries the ticker and the Map · Ahead · … choice, so this head
           no longer repeats them. It names the page and reads the market. */}
-      <header ref={headRef} className="flex items-start gap-6 flex-wrap pb-3 border-b border-borderSubtle" data-shell>
-        {/* THE LINE IS NEVER CUT MID-WORD (the audit's H8, 2026-10-13): the column keeps room for it, so under ~1,200px the
-            facts wrap under the title instead of the title column shrinking to "The book by s…" */}
-        {/* …and no wider than its own words (2026-10-13, "i dont want any deadspace"): as a quarter of a wide head it held
-            ~150px of nothing, and the side beside it is where the facts, the Map's band and the cards need the room */}
-        {/* …AND NO WIDER THAN ITS WORDS AT ALL (the laptop head, 2026-10-14 — at 1440 the 560px column pushed the facts to
-            two rows and the cards under them: 136px of head): the column is its longest line, the one-liner allowed two
-            lines under 2xl, so the facts and the cards keep one row with the title */}
-        <div className="flex-none max-w-full 2xl:max-w-none" data-shell-title>
-          <div className="h-6 flex items-center gap-2.5 flex-wrap" data-shell-page>
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-borderSubtle text-textSecondary shrink-0" aria-hidden="true">
-              <PageIcon className="w-3.5 h-3.5" />
+      <header ref={headRef} className="flex items-center gap-x-5 gap-y-2 flex-wrap pb-2.5 border-b border-borderSubtle" data-shell>
+        {/* THE PAGE'S NAME, AND NOTHING ELSE AROUND IT (the owner, 2026-10-14): the icon in a box and the one-liner under the
+            name were the generic page head — the name alone, the line in its title; a kept strike and a replay stand beside it
+            as flat marks */}
+        <div className="flex-none max-w-full h-7 flex items-center gap-2.5 flex-wrap" data-shell-title data-shell-page>
+          <h1 className="text-[18px] font-semibold leading-none text-textPrimary" title={page.subtitle}>
+            {page.label}
+          </h1>
+          {focused != null && (
+            <span data-focus-chip className="inline-flex items-center gap-2 h-7 rounded px-2 font-mono text-[11px] uppercase tracking-wider bg-silver/[0.1] text-silver">
+              <span className="font-bold">Kept</span>
+              <span className="text-[12px] font-semibold tnum text-textPrimary">{fmtStrike(focused)}</span>
+              {dist != null && keptLead && (
+                <span className="tnum text-textSecondary normal-case" data-kept-lead={unit}>
+                  {keptLead}
+                </span>
+              )}
+              <button
+                /* the chart is Terrain (2026-09-30: Pulse's chart tile has no fullscreen of its own any more); the way back
+                   brings the reader here again (Noah, 2026-09-09) */
+                onClick={() => navigate('/terrain', { state: { chart: { ticker: activeTicker, focus: focused }, wayBack: location.pathname } })}
+                title="See this strike on the chart"
+                className="hit inline-flex items-center gap-1 rounded px-1 text-textSecondary hover:text-textPrimary hover:bg-ink/[0.06] transition-colors"
+              >
+                <span className="hidden 2xl:inline">Chart</span> <ArrowUpRight className="w-3 h-3" />
+              </button>
+              <button onClick={clearFocus} aria-label="Let go of the strike" className="hit p-0.5 rounded text-textMuted hover:text-textPrimary hover:bg-ink/[0.06] transition-colors">
+                <X className="w-3 h-3" />
+              </button>
             </span>
-            <h1 className="text-[18px] font-semibold leading-tight text-textPrimary">{page.label}</h1>
-            {focused != null && (
-              <span data-focus-chip className="inline-flex items-center gap-2 rounded-md border border-silver/40 bg-silver/[0.06] pl-2.5 pr-1 py-0.5 font-mono">
-                <span className="text-[11px] font-bold uppercase tracking-widest text-silver">Kept</span>
-                <span className="text-[12px] font-semibold tnum text-textPrimary">{fmtStrike(focused)}</span>
-                {dist != null && keptLead && (
-                  <span className="text-[11px] tnum text-textSecondary" data-kept-lead={unit}>
-                    {keptLead}
-                  </span>
-                )}
-                <button
-                  /* the chart is Terrain (2026-09-30: Pulse's chart tile has no fullscreen of its own any more); the way back
-                     brings the reader here again (Noah, 2026-09-09) */
-                  onClick={() => navigate('/terrain', { state: { chart: { ticker: activeTicker, focus: focused }, wayBack: location.pathname } })}
-                  title="See this strike on the chart"
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-ink/[0.06] transition-colors"
-                >
-                  <span className="hidden 2xl:inline">Chart</span> <ArrowUpRight className="w-3 h-3" />
-                </button>
-                <button onClick={clearFocus} aria-label="Let go of the strike" className="p-0.5 rounded text-textMuted hover:text-textPrimary hover:bg-ink/[0.06] transition-colors">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-            {replaying && (
-              <span data-replay-tag className="inline-flex items-center gap-1.5 rounded-md border border-silver/40 bg-silver/[0.06] px-2 py-0.5 font-mono text-[11px]" title="The boxes below are rewound to this minute; the facts on the right are live">
-                <span className="font-semibold text-silver">Replaying</span>
-                <span className="tnum text-textPrimary">{replaying}</span>
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-[12px] text-textMuted max-w-[240px] 2xl:max-w-none">{page.subtitle}</p>
+          )}
+          {replaying && (
+            <span data-replay-tag className="inline-flex items-center gap-1.5 h-7 rounded px-2 font-mono text-[11px] uppercase tracking-wider bg-silver/[0.12] text-silver" title="The boxes below are rewound to this minute; the facts on the right are live">
+              <span className="font-bold">Replaying</span>
+              <span className="tnum text-textPrimary normal-case">{replaying}</span>
+            </span>
+          )}
         </div>
 
-        {/* THE CARDS DROP FIRST (the re-audit's M1): this side shares the line with the title and wraps inside itself, so
-            the Levels and Ruler cards step under the facts before the facts step under the title */}
-        <div className="flex-[3_1_0%] min-w-[min(100%,480px)] flex items-center gap-x-4 2xl:gap-x-6 gap-y-2 flex-wrap" data-shell-side>
-          {/* THE FACTS, each named: which way dealers hedge, the flip and how far, how it held today, the clock */}
+        {/* THE FACTS ON ONE LINE, the cards at the end of it (flat doors, ui/flatDoor.ts); the Map's band takes the room
+            between when its words fit */}
+        {/* on a phone the facts take the next line whole, under the name */}
+        <div className="flex-[3_1_0%] min-w-0 max-sm:basis-full flex items-center gap-x-4 gap-y-2 flex-wrap" data-shell-side>
           {gauge && (
-            <dl className={`flex flex-wrap gap-x-4 2xl:gap-x-6 gap-y-2 ${replaying ? 'opacity-70' : ''}`} data-shell-facts data-shell-facts-live={replaying ? '' : undefined} title={replaying ? 'Live — the replay rewinds the boxes, not these facts' : undefined}>
-              {replaying && (
-                <div className="self-end">
-                  <span className="inline-flex h-5 items-center rounded-full border border-borderSubtle px-2 text-[11px] text-textMuted">live</span>
-                </div>
-              )}
-              {/* THE PRICE FIRST, AND BIG: the thing every terminal shows large, and the figure the levels are read against */}
+            <div className={`flex items-center flex-wrap gap-x-4 sm:gap-x-0 gap-y-1 ${replaying ? 'opacity-70' : ''}`} data-shell-facts data-shell-facts-live={replaying ? '' : undefined} title={replaying ? 'Live — the replay rewinds the boxes, not these facts' : undefined}>
               {spot != null && (
                 <Fact label={activeTicker} testId="price" hero>
                   {spot.toFixed(2)}
                   {change != null && (
-                    <span className={`ml-2 align-middle text-[12px] font-medium ${change > 0 ? 'text-bull' : change < 0 ? 'text-bear' : 'text-textMuted'}`} data-shell-change>
+                    <span className={`ml-2 text-[12px] font-medium ${change > 0 ? 'text-bull' : change < 0 ? 'text-bear' : 'text-textMuted'}`} data-shell-change>
                       {change > 0 ? '+' : ''}
                       {change.toFixed(2)}%
                     </span>
                   )}
                 </Fact>
               )}
+              {/* the facts are live while the boxes are rewound (the audit's M8) — said in one word, the replay's silver */}
+              {replaying && (
+                <span className="font-mono text-[11px] uppercase tracking-wider text-silver sm:pr-4 sm:border-l sm:border-borderSubtle sm:pl-4" data-shell-fact="live">
+                  live
+                </span>
+              )}
               {words && gauge.regime ? (
                 <>
-                  <Fact label="Dealers" title={words.blurb} testId="dealers">
+                  <Fact label="Flip" testId="flip" title="The gamma flip — above it dealer hedging absorbs moves, below it amplifies them">
+                    <span style={{ color: FLIP }}>{fmt(gauge.flip!)}</span>
+                    {/* the distance in the quiet ink, not red or green: those are the walls' and direction's (2026-10-14) */}
+                    {flipLead && <span className="ml-2 text-[11px] font-normal text-textMuted">{flipAtSpot ? 'at spot' : `${flipLead} ${gauge.distAbs! > 0 ? 'above' : 'below'}`}</span>}
+                  </Fact>
+                  <Fact label="Dealers" title={words.blurb} testId="dealers" word>
                     {/* the capsules' own pair — ember amplifies, glacier absorbs (paletteInk AMPLIFY/ABSORB) */}
                     <span style={{ color: gauge.regime === 'SHORT' ? AMPLIFY : ABSORB }}>{DEALER_WORDS[gauge.regime]}</span>
                   </Fact>
-                  <Fact label="Flip" testId="flip">
-                    <Term k="Gamma flip">
-                      <span className="font-semibold" style={{ color: FLIP }}>
-                        {fmt(gauge.flip!)}
-                      </span>
-                    </Term>
-                    {/* the distance in the quiet ink, not red or green: those are the walls' and direction's (2026-10-14) */}
-                    {flipLead && (
-                      <span className="text-[12px] font-normal text-textSecondary">
-                        {' '}
-                        · {flipAtSpot ? 'at spot' : `${flipLead} ${gauge.distAbs! > 0 ? 'above' : 'below'} spot`}
-                      </span>
-                    )}
-                  </Fact>
                   {flipRead && flipHeld && (
-                    <Fact label="Flip today" testId="crossed" title={flipRead.tests === 0 ? 'No bar has reached the flip yet today' : `${flipRead.tests} ${flipRead.tests === 1 ? 'bar' : 'bars'} reached the flip today; price closed through it ${flipRead.broke === 0 ? 'never' : `${flipRead.broke} ${flipRead.broke === 1 ? 'time' : 'times'}`} — the report's own count`}>
-                      {flipRead.tests === 0 ? <span className="text-textSecondary">{flipHeld}</span> : flipHeld}
+                    <Fact label="Flip today" testId="crossed" word={flipRead.tests === 0} title={flipRead.tests === 0 ? 'No bar has reached the flip yet today' : `${flipRead.tests} ${flipRead.tests === 1 ? 'bar' : 'bars'} reached the flip today; price closed through it ${flipRead.broke === 0 ? 'never' : `${flipRead.broke} ${flipRead.broke === 1 ? 'time' : 'times'}`} — the report's own count`}>
+                      {flipRead.tests === 0 ? <span className="text-textMuted">{flipHeld}</span> : flipHeld}
                     </Fact>
                   )}
                 </>
               ) : (
-                <Fact label="Flip" testId="flip">
-                  <span className="text-textSecondary">none — dealers lean one way at every strike</span>
+                <Fact label="Flip" testId="flip" word>
+                  <span className="text-textMuted">none</span>
                 </Fact>
               )}
-              <Fact label={open ? 'To the close' : 'Market'} title={clock.label} testId="close">
-                {/* The house clock icon, running: New York on its hands (Noah, 2026-09-09: "some spice… a moving icon clock") */}
-                <span className="inline-flex items-center gap-1.5">
-                  <SessionClock className="text-textMuted" />
-                  <span>{open ? untilBell(clock.secondsToClose) : clock.label.toLowerCase()}</span>
-                </span>
+              <Fact label={open ? 'Close' : 'Market'} title={clock.label} testId="close" word={!open}>
+                {open ? untilBell(clock.secondsToClose) : clock.label.toLowerCase()}
               </Fact>
-            </dl>
+            </div>
           )}
           {/* THE MAP'S BAND, WHEN THE ROW HAS ITS ROOM (2026-10-13, "i dont want any deadspace"): on a wide screen the head
               left ~1,400px empty between the facts and the cards, and the band's own strip the same between its picks and
               its doors; the Map draws its band here when its words fit, and in its own strip under the head when not */}
           <div id="pinpoint-head-band" className="empty:hidden min-w-0 flex-1 [&>[data-ledger-toolbar]]:border-0 [&>[data-ledger-toolbar]]:bg-transparent [&>[data-ledger-toolbar]]:p-0" data-shell-band />
-          {/* the cards' names from 2xl up; under it the icon says it and the title spells it (the laptop head) */}
-          <div className="ml-auto flex items-center gap-4 2xl:gap-6" data-shell-cards>
-            <DropdownSelect label="Levels" icon={Layers} labelFrom="2xl" value={levelsScope} options={LEVELS_OPTIONS} onChange={setLevelsScope} title={LEVELS_TITLE} testId="levels-scope" align="end" />
-            <DropdownSelect label="Ruler" icon={Ruler} labelFrom="2xl" value={unit} options={RULER_OPTIONS} onChange={setDistanceUnit} title="The unit every distance on Pinpoint is read in" testId="ruler" align="end" />
+          <div className="ml-auto flex items-center gap-1" data-shell-cards>
+            <DropdownSelect label="Levels" icon={Layers} flat value={levelsScope} options={LEVELS_OPTIONS} onChange={setLevelsScope} title={LEVELS_TITLE} testId="levels-scope" align="end" />
+            <DropdownSelect label="Ruler" icon={Ruler} flat value={unit} options={RULER_OPTIONS} onChange={setDistanceUnit} title="The unit every distance on Pinpoint is read in" testId="ruler" align="end" />
           </div>
         </div>
       </header>
@@ -329,7 +302,7 @@ const PinpointLayout = () => {
         >
           <span className="font-semibold text-textPrimary">{activeTicker}</span>
           {spot != null && <span className="tnum text-textPrimary">{spot.toFixed(2)}</span>}
-          {gauge?.regime && <span style={{ color: gauge.regime === 'SHORT' ? AMPLIFY : ABSORB }}>{DEALER_WORDS[gauge.regime]}</span>}
+          {gauge?.regime && <span style={{ color: gauge.regime === 'SHORT' ? AMPLIFY : ABSORB }}>dealers {DEALER_WORDS[gauge.regime]}</span>}
           {gauge?.flip != null && (
             <span className="text-textSecondary">
               flip <span className="font-semibold tnum" style={{ color: FLIP }}>{fmt(gauge.flip)}</span>

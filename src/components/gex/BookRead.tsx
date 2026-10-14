@@ -30,6 +30,7 @@
 ==================================================
 */
 
+import { FLAT_DOOR, FLAT_ON } from '../ui/flatDoor';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PanelRightClose, PanelRightOpen, X } from 'lucide-react';
 import { GREEK_LABEL } from '../../data/compare';
@@ -155,16 +156,20 @@ const Head = ({ children }: { children: ReactNode }) => (
 /** THE READ's door — beside the guide's on every book; lit while the card is up.
     `compact` = the icon alone, for a column's head beside other names (the
     words stay in the title); `name` says whose read the door opens. */
-export const ReadDoor = ({ open, onClick, compact = false, name, testId = 'data-ledger-read' }: { open: boolean; onClick: () => void; compact?: boolean; name?: string; testId?: string }) => (
+export const ReadDoor = ({ open, onClick, compact = false, name, testId = 'data-ledger-read', flat = false }: { open: boolean; onClick: () => void; compact?: boolean; name?: string; testId?: string; /** The house's flat control (ui/flatDoor.ts) — the band's */ flat?: boolean }) => (
   <button
     onClick={onClick}
     aria-pressed={open}
     aria-label={open ? `Close ${name ? `${name}'s` : 'the'} read` : `${name ? `${name}'s` : 'The'} read`}
     title={open ? `Close ${name ? `${name}'s` : 'the'} read (Esc)` : `${name ? `${name}'s` : "The book's"} read — the net, the levels, the heaviest strikes and what they did, the strike under the pointer, the move to the close`}
     /* sentence case, the cards' grammar (the audit's M3, 2026-10-13) */
-    className={`hit inline-flex items-center gap-1.5 h-7 rounded-md border font-mono text-[11px] transition-colors ${compact ? 'w-7 justify-center' : 'px-2.5'} ${
-      open ? 'border-silver/50 text-silver bg-silver/[0.08]' : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted'
-    }`}
+    className={
+      flat
+        ? `${FLAT_DOOR} ${compact ? 'w-7 justify-center px-0' : ''} ${open ? FLAT_ON : ''}`
+        : `hit inline-flex items-center gap-1.5 h-7 rounded-md border font-mono text-[11px] transition-colors ${compact ? 'w-7 justify-center' : 'px-2.5'} ${
+            open ? 'border-silver/50 text-silver bg-silver/[0.08]' : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted'
+          }`
+    }
     {...{ [testId]: name ?? '' }}
   >
     {open ? <PanelRightClose className="w-3.5 h-3.5" /> : <PanelRightOpen className="w-3.5 h-3.5" />}

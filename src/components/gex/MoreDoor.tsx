@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Database, Download, MoreHorizontal } from 'lucide-react';
 import { useAnchoredMenu } from '../ui/useAnchoredMenu';
+import { FLAT_DOOR } from '../ui/flatDoor';
 import useFocusTrap from '../ui/useFocusTrap';
 import { bookCsv, downloadText, levelsJson, stampForName } from '../../data/exportBook';
 import { readLevelsScope } from '../../data/levelsScope';
@@ -78,11 +79,11 @@ const MoreDoor = ({ surface, greeks, expiries, onData, compact = false }: Props)
         aria-haspopup="menu"
         aria-label="More"
         title="Where this book comes from · save it as a file"
-        className={`hit inline-flex items-center gap-1.5 h-7 rounded-md border bg-chip transition-colors font-mono select-none ${compact ? 'w-7 justify-center' : 'px-2.5'} ${open ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
+        className={`${FLAT_DOOR} ${compact ? 'w-7 justify-center px-0' : ''} ${open ? 'bg-ink/[0.06] text-textPrimary' : ''}`}
         data-ledger-more
       >
-        <MoreHorizontal className="w-3.5 h-3.5 text-textMuted" />
-        {!compact && <span className="text-[11px] text-textMuted">More</span>}
+        <MoreHorizontal className="w-3.5 h-3.5" />
+        {!compact && <span>More</span>}
       </button>
       {open &&
         placed &&

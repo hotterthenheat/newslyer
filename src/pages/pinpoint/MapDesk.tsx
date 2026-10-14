@@ -30,6 +30,7 @@
 ==================================================
 */
 
+import { FLAT_DOOR, FLAT_ON } from '../../components/ui/flatDoor';
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Play } from 'lucide-react';
 import Simulator from '../../core/simulator';
@@ -230,7 +231,7 @@ const MapDesk = () => {
       aria-pressed={!!replay}
       title={replay ? 'Back to live (Esc)' : `Replay ${marketOpen ? "today's" : 'the last'} session from its first bar — every box on the page reads the book as it stood`}
       /* sentence case, the cards' grammar since 2026-10-10 (the audit's M3) */
-      className={`hit inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border bg-chip font-mono text-[11px] transition-colors ${replay ? 'border-silver/50 text-silver' : 'border-borderSubtle hover:border-borderMuted text-textSecondary hover:text-textPrimary'}`}
+      className={`${FLAT_DOOR} ${replay ? FLAT_ON : ''}`}
       data-map-replay
     >
       <Play className="w-3 h-3" /> {replay ? 'Replaying' : 'Replay'}

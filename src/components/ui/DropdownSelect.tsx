@@ -21,6 +21,7 @@
 ==================================================
 */
 
+import { FLAT_DOOR, FLAT_OPEN } from './flatDoor';
 import { Fragment, useRef, type CSSProperties } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronDown, type LucideIcon } from 'lucide-react';
@@ -86,6 +87,8 @@ interface DropdownSelectProps<T extends string | number> {
   /** The name shown only from this breakpoint up — a tight head keeps the choice and its icon, the name in the title
       (the laptop head, 2026-10-14) */
   labelFrom?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  /** The house's flat control (ui/flatDoor.ts): tracked capitals, no edge — the Pinpoint head's and the Map band's */
+  flat?: boolean;
   /** The card WITHOUT its printed name — for a line that measured itself too short for four named cards (the Weigher's
       chain head on a laptop, 2026-09-20). The name stays in the tooltip, the aria-label and the open card's heading. */
   bare?: boolean;
@@ -96,7 +99,7 @@ export const CARD = 'z-[90] rounded-lg border border-borderSubtle bg-chip shadow
 
 const LABEL_FROM: Record<NonNullable<DropdownSelectProps<string>['labelFrom']>, string> = { sm: 'hidden sm:inline', md: 'hidden md:inline', lg: 'hidden lg:inline', xl: 'hidden xl:inline', '2xl': 'hidden 2xl:inline' };
 
-const DropdownSelect = <T extends string | number>({ label, value, options, onChange, title, align = 'start', icon: Icon, ink, testId, size = 'md', bare = false, labelFrom }: DropdownSelectProps<T>) => {
+const DropdownSelect = <T extends string | number>({ label, value, options, onChange, title, align = 'start', icon: Icon, ink, testId, size = 'md', bare = false, labelFrom, flat = false }: DropdownSelectProps<T>) => {
   const current = options.find(o => o.value === value);
   /* OPENED BY THE KEYS, THE CARD STARTS ON THE CHOICE (2026-10-10, the audit's PR-27): Radix puts the keys on the first
      row, so ↓ Enter on "Start with" at $25,000 picked $5,000. A card opened from the keys focuses the checked row; one
@@ -114,7 +117,11 @@ const DropdownSelect = <T extends string | number>({ label, value, options, onCh
           onKeyDown={() => (byKeys.current = true)}
           /* `hit`: a finger's 44 px on a touch screen. ON A PHONE THE CHOICE WRAPS, never "0DTE · …" (the audit's CO-19): the
              trigger grows a line rather than cutting its value */
-          className={`hit group inline-flex items-center gap-1.5 ${size === 'sm' ? 'h-6 px-2' : 'h-7 px-2.5'} max-sm:h-auto max-sm:py-1 ${size === 'sm' ? 'max-sm:min-h-6' : 'max-sm:min-h-7'} max-w-full rounded-md border border-borderSubtle bg-chip hover:border-borderMuted data-[state=open]:border-silver/50 transition-colors font-mono select-none text-left`}
+          className={
+            flat
+              ? `${FLAT_DOOR} ${FLAT_OPEN} group max-w-full text-left`
+              : `hit group inline-flex items-center gap-1.5 ${size === 'sm' ? 'h-6 px-2' : 'h-7 px-2.5'} max-sm:h-auto max-sm:py-1 ${size === 'sm' ? 'max-sm:min-h-6' : 'max-sm:min-h-7'} max-w-full rounded-md border border-borderSubtle bg-chip hover:border-borderMuted data-[state=open]:border-silver/50 transition-colors font-mono select-none text-left`
+          }
           style={ink ? ({ '--ink': ink } as CSSProperties) : undefined}
         >
           {Icon && (

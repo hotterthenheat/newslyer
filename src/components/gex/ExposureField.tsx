@@ -47,6 +47,7 @@ import GuideFocus, { GuideDoor } from '../ui/GuideFocus';
 import { undoable } from '../ui/undo';
 import LedgerGuide, { guideTitle } from './LedgerGuide';
 import { attachScrollMore } from '../ui/scrollMore';
+import { FLAT_DOOR } from '../ui/flatDoor';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Crosshair, Maximize2, Minimize2, Plus, X } from 'lucide-react';
@@ -1039,19 +1040,19 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const strips = (
     <>
       {divider}
-      <DropdownSelect label="View" value={view} options={VIEWS_FOR[viewHost].map(v => VIEW_OPTION[v])} onChange={pickView} title="The matrix, the calendar or the profile" testId="ledger-view" bare={stripsBare} />
+      <DropdownSelect label="View" value={view} options={VIEWS_FOR[viewHost].map(v => VIEW_OPTION[v])} onChange={pickView} title="The matrix, the calendar or the profile" testId="ledger-view" bare={stripsBare} flat={toolbar === 'band'} />
       {/* with names side by side the greek steps down to each column's head; the profile draws GEX alone (its foot says
           so), so the card steps aside there rather than read "All five" over a chart it does not govern (the re-audit's M2) */}
       {view !== 'profile' && (
         <Fold open={!many} gap={8} testId="data-band-greek">
-          <DropdownMulti label="Greek" values={pick} groups={GREEK_GROUPS} onChange={setPick} emptyWord="All" clearWord="Clear · all five" title="One, some, or all five" testId="ledger-greek" align="start" bare={stripsBare} />
+          <DropdownMulti label="Greek" values={pick} groups={GREEK_GROUPS} onChange={setPick} emptyWord="All" clearWord="Clear · all five" title="One, some, or all five" testId="ledger-greek" align="start" bare={stripsBare} flat={toolbar === 'band'} />
         </Fold>
       )}
       {/* the profile draws the net alone — the card steps aside there */}
-      {view !== 'profile' && <DropdownSelect label="Legs" value={legs} options={legsOptions(view === 'calendar')} onChange={setLegs} title="Which legs the cells carry" testId="ledger-legs" bare={stripsBare} />}
+      {view !== 'profile' && <DropdownSelect label="Legs" value={legs} options={legsOptions(view === 'calendar')} onChange={setLegs} title="Which legs the cells carry" testId="ledger-legs" bare={stripsBare} flat={toolbar === 'band'} />}
       {divider}
       {/* the trigger says the window DRAWN when the fit cuts the one chosen — "Today → Oct 16 · 4 of 7" (the audit's H4) */}
-      <ExpiryRangeCard label="Expiries" days={expiryDays} from={range.from} through={range.through} onChange={(from, through) => setRange({ from, through })} ceiling={ceiling} ceilingWhy={ceilingWhy} shortcuts={shortcuts} title="Which expiries the book reads" testId="ledger-expiries" note={fitNote} bare={stripsBare} cut={{ through: shownIdx[shownIdx.length - 1] ?? range.through, shown: shownIdx.length, wanted }} />
+      <ExpiryRangeCard label="Expiries" days={expiryDays} from={range.from} through={range.through} onChange={(from, through) => setRange({ from, through })} ceiling={ceiling} ceilingWhy={ceilingWhy} shortcuts={shortcuts} title="Which expiries the book reads" testId="ledger-expiries" note={fitNote} bare={stripsBare} flat={toolbar === 'band'} cut={{ through: shownIdx[shownIdx.length - 1] ?? range.through, shown: shownIdx.length, wanted }} />
       <DropdownSelect
         label="Strikes"
         value={rings}
@@ -1071,9 +1072,10 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
         title="How many strikes around spot"
         testId="ledger-strikes"
         bare={stripsBare}
+        flat={toolbar === 'band'}
       />
       {/* a face of its own, so "Now" alone on a bare band still says which card it is (the audit's L2) */}
-      <DropdownSelect label="Show" value={afterBell ? 'after' : 'now'} options={SHOW_OPTIONS} onChange={v => setAfterBell(v === 'after')} title="The book as it stands now, or as it will stand after today's expiries" testId="ledger-show" bare={stripsBare} />
+      <DropdownSelect label="Show" value={afterBell ? 'after' : 'now'} options={SHOW_OPTIONS} onChange={v => setAfterBell(v === 'after')} title="The book as it stands now, or as it will stand after today's expiries" testId="ledger-show" bare={stripsBare} flat={toolbar === 'band'} />
       {/* the colours switch left the band for Settings › Appearance (idea 10, 2026-10-13): a preference made once, not a
           read, and 150px of every row */}
     </>
@@ -1086,12 +1088,12 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       /* A QUIET CHIP WITH A MAGENTA MARK (the owner, 2026-10-14: "the loudest thing on the screen is the magenta Supreme
          pill, which is a secondary fact"): the chip is the band's, the dot is the supreme's — the one place magenta stands
          here, as it stands on the strike itself */
-      className="hit ml-auto inline-flex items-center gap-2 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted font-mono transition-colors"
+      className={toolbar === 'band' ? `${FLAT_DOOR} ml-auto gap-2` : 'hit ml-auto inline-flex items-center gap-2 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted font-mono transition-colors'}
       data-ledger-supreme={doorCompact('supreme') ? 'compact' : 'full'}
     >
       <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-supreme" />
       <span className="text-[11px] text-textMuted">Supreme</span>
-      <span className="text-[12px] font-semibold tnum text-textPrimary whitespace-nowrap">
+      <span className="text-[11px] font-semibold tnum text-textPrimary whitespace-nowrap">
         {fmtStrike(supreme.strike)}
         {/* tight: the strike alone — the date and the amount stay in the title */}
         {!doorCompact('supreme') && (
@@ -1107,17 +1109,17 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
     </button>
   );
   /* on the band every door wears the same edge — the guide and fullscreen had none (the owner, 2026-10-14) */
-  const guideButton = <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title={view === 'profile' ? 'What the curve means' : view === 'matrix' ? 'What the matrix means' : 'What the calendar means'} testId="ledger-guide" compact={doorCompact('guide')} size={toolbar === 'band' ? 'md' : 'sm'} className={toolbar === 'band' ? 'border border-borderSubtle bg-chip hover:border-borderMuted' : ''} />;
+  const guideButton = <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title={view === 'profile' ? 'What the curve means' : view === 'matrix' ? 'What the matrix means' : 'What the calendar means'} testId="ledger-guide" compact={doorCompact('guide')} size={toolbar === 'band' ? 'md' : 'sm'} className={toolbar === 'band' ? 'font-mono uppercase tracking-wider px-2' : ''} />;
   /* where the book comes from and the two exports, behind one door (MoreDoor.tsx) */
   const moreDoor = toolbar === 'band' ? <MoreDoor surface={scoped(surface, snapshot)} greeks={greeks} expiries={shownIdx} onData={() => setDataOpen(true)} compact={doorCompact('more')} /> : null;
   /* THE READ's door — beside the guide's; lit while the card is up. The band's opens the host's read */
-  const readDoor = <ReadDoor open={readOf(surface.ticker) === 'open'} onClick={() => toggleRead(surface.ticker)} compact={doorCompact('read')} />;
+  const readDoor = <ReadDoor open={readOf(surface.ticker) === 'open'} onClick={() => toggleRead(surface.ticker)} compact={doorCompact('read')} flat={toolbar === 'band'} />;
   const fullButton =
     headFull && !full ? null : (
       <button
         onClick={() => (full ? close() : setFull(true))}
         title={full ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
-        className={`hit shrink-0 inline-flex items-center justify-center rounded-md text-textMuted hover:text-textPrimary transition-colors ${toolbar === 'band' ? 'w-7 h-7 border border-borderSubtle bg-chip hover:border-borderMuted' : 'p-1.5 hover:bg-ink/[0.05]'}`}
+        className={`hit shrink-0 inline-flex items-center justify-center rounded text-textMuted hover:text-textPrimary hover:bg-ink/[0.05] transition-colors ${toolbar === 'band' ? 'w-7 h-7' : 'p-1.5'}`}
       >
         {full ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
       </button>
@@ -1125,7 +1127,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const backButton = full ? (
     <button
       onClick={close}
-      className="group inline-flex items-center gap-1.5 border border-borderSubtle hover:border-borderMuted rounded-md px-2.5 py-1 font-mono text-[11px] text-textSecondary hover:text-textPrimary transition-colors"
+      className={`${FLAT_DOOR} group`}
     >
       <ArrowLeft className="w-3 h-3 transition-transform duration-200 ease-out group-hover:-translate-x-0.5" /> Back
     </button>
@@ -1182,12 +1184,12 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
             aria-expanded={adding}
             disabled={names.length >= EXTRA_MAX}
             title={names.length >= EXTRA_MAX ? 'Four names at most — take one off to add another' : 'Show another name beside this one — up to four side by side'}
-            className={`hit inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border bg-chip transition-colors font-mono select-none disabled:opacity-50 ${adding ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
+            className={`${FLAT_DOOR} disabled:opacity-50 ${adding ? 'bg-ink/[0.06] text-textPrimary' : ''}`}
             data-ledger-add
           >
-            <Plus className="w-3 h-3 text-textMuted" />
-            {/* sentence case (the audit's M3); the count only once there is one — "Names 1" said nothing (L1) */}
-            <span className="text-[11px] text-textMuted">Names</span>
+            <Plus className="w-3 h-3" />
+            {/* the count only once there is one — "Names 1" said nothing (L1) */}
+            <span>Names</span>
             {names.length > 0 && <span className="text-[11px] font-semibold text-textPrimary tnum">{1 + names.length}</span>}
           </button>
           {adding &&

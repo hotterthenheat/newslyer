@@ -21,6 +21,7 @@
 ==================================================
 */
 
+import { FLAT_DOOR, FLAT_OPEN } from './flatDoor';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronDown } from 'lucide-react';
 import { CARD } from './DropdownSelect';
@@ -58,6 +59,8 @@ interface DropdownMultiProps {
   /** The card WITHOUT its printed name — for a line that measured itself too short for four named cards (the Weigher's
       chain head on a laptop, 2026-09-20). The name stays in the tooltip, the aria-label and the open card's heading. */
   bare?: boolean;
+  /** The house's flat control (ui/flatDoor.ts) */
+  flat?: boolean;
   /** The foot's clearing row, where the host's empty word is not "everything" (the Map's Greek card: "All five") */
   clearWord?: string;
 }
@@ -70,7 +73,7 @@ const summarise = (values: string[], groups: MultiGroup[], emptyWord: string): s
   return `${labels.slice(0, 2).join(', ')} +${labels.length - 2}`;
 };
 
-const DropdownMulti = ({ label, values, groups, onChange, title, emptyWord = 'Everything', align = 'end', testId, bare = false, tone, clearWord = 'Clear · show everything' }: DropdownMultiProps) => {
+const DropdownMulti = ({ label, values, groups, onChange, title, emptyWord = 'Everything', align = 'end', testId, bare = false, flat = false, tone, clearWord = 'Clear · show everything' }: DropdownMultiProps) => {
   const picked = new Set(values);
   const toggle = (v: string) => onChange(picked.has(v) ? values.filter(x => x !== v) : [...values, v]);
   const summary = summarise(values, groups, emptyWord);
@@ -84,7 +87,7 @@ const DropdownMulti = ({ label, values, groups, onChange, title, emptyWord = 'Ev
           data-picked={values.length}
           aria-label={`${label}: ${summary}`}
           title={bare ? label : undefined}
-          className="hit inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted data-[state=open]:border-silver/50 transition-colors font-mono select-none max-w-[260px]"
+          className={flat ? `${FLAT_DOOR} ${FLAT_OPEN} max-w-[260px]` : 'hit inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted data-[state=open]:border-silver/50 transition-colors font-mono select-none max-w-[260px]'}
         >
           {!bare && <span className="text-[11px] text-textMuted">{label}</span>}
           <span className={`text-[11px] font-semibold truncate ${values.length ? (tone === 'warn' ? 'text-warn' : tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-textPrimary') : 'text-textSecondary'}`} data-tone={values.length && tone ? tone : undefined}>{summary}</span>

@@ -20,14 +20,13 @@ const DayBox = ({ scope, children }: { scope?: ReactNode; children: ReactNode })
      kept their flex basis and the box ran 80px into the clock card at 1440×900 (2026-10-14) */
   return (
     <section className="relative flex-1 flex flex-col min-w-0 min-h-0" data-day-box data-day-open={open || undefined}>
-      <div className="px-5 pt-4 pb-1">
+      {/* the name alone (2026-10-14): what the box is, is in its guide and its parts' own titles */}
+      <div className="px-5 pt-3 pb-1">
         <div className="flex items-center gap-3 flex-wrap">
           <h3 className="text-[16px] font-semibold leading-tight text-textPrimary">The day</h3>
           {scope}
           <FoldDoor open={open} onToggle={toggle} what="the day" testId="day" />
         </div>
-        {/* one line (the owner, 2026-10-14): what the chips, the bells and the dotted lines do is in their own titles */}
-        <p className="mt-0.5 text-[11px] text-textMuted">Price with the book's levels on it, and the book's net gamma beneath, on one clock</p>
       </div>
       {open && children}
     </section>

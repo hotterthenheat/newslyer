@@ -31,6 +31,7 @@
 ==================================================
 */
 
+import { FLAT_DOOR, FLAT_OPEN } from './flatDoor';
 import { useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { DayPicker } from 'react-day-picker';
@@ -73,6 +74,8 @@ interface ExpiryRangeCardProps {
   testId?: string;
   /** The card WITHOUT its printed name — for a line that measured itself too short */
   bare?: boolean;
+  /** The house's flat control (ui/flatDoor.ts) */
+  flat?: boolean;
   /** WHAT THE HOST DRAWS when its fit cuts the window short (the audit's H4, 2026-10-13): the last expiry drawn and
       the count, so the trigger says "Today → Oct 16 · 4 of 7" rather than a window the grid under it does not draw */
   cut?: { through: number; shown: number; wanted: number };
@@ -80,7 +83,7 @@ interface ExpiryRangeCardProps {
 
 type Side = 'from' | 'through';
 
-const ExpiryRangeCard = ({ label = 'Expiries', days, from, through, onChange, ceiling, ceilingWhy, shortcuts, note, title, align = 'start', testId, bare = false, cut }: ExpiryRangeCardProps) => {
+const ExpiryRangeCard = ({ label = 'Expiries', days, from, through, onChange, ceiling, ceilingWhy, shortcuts, note, title, align = 'start', testId, bare = false, flat = false, cut }: ExpiryRangeCardProps) => {
   const [open, setOpen] = useState(false);
   const [side, setSide] = useState<Side>('through');
   const t = today();
@@ -139,7 +142,7 @@ const ExpiryRangeCard = ({ label = 'Expiries', days, from, through, onChange, ce
           aria-label={`${label}: ${words}${isCut ? ` · ${cut!.shown} of ${cut!.wanted} fit` : ''}`}
           title={note ?? (bare ? label : undefined)}
           data-expiry-note={note ? '' : undefined}
-          className="hit group inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted data-[state=open]:border-silver/50 transition-colors font-mono select-none"
+          className={flat ? `${FLAT_DOOR} ${FLAT_OPEN} group` : 'hit group inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-borderSubtle bg-chip hover:border-borderMuted data-[state=open]:border-silver/50 transition-colors font-mono select-none'}
         >
           <CalendarDays className="w-3 h-3 shrink-0 text-textMuted" aria-hidden="true" data-dropdown-icon />
           {!bare && <span className="text-[11px] text-textMuted">{label}</span>}
