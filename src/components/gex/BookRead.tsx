@@ -173,6 +173,7 @@ export const ReadDoor = ({ open, onClick, compact = false, name, testId = 'data-
 );
 
 const BookRead = ({ surface, snapshot, greek, mode = HEAT_MODE, expiries, afterBell, rings, selectedStrike, fill = false, closing = false, subscribePointed, onKeep, onClose }: BookReadProps) => {
+  const drawnStrikes = Math.min(rings, surface.strikes.filter(k => k >= surface.spot).length) + Math.min(rings, surface.strikes.filter(k => k < surface.spot).length);
   const [win, setWin] = useState('15m');
   const [pointed, setPointed] = useState<number | null>(null);
   const [recent, setRecent] = useState<number[]>([]);
@@ -497,7 +498,9 @@ const BookRead = ({ surface, snapshot, greek, mode = HEAT_MODE, expiries, afterB
 
       {/* THE FOOT */}
       <div className="shrink-0 flex items-center gap-3 px-3.5 h-7 border-t border-borderSubtle/60 font-mono text-[11px] uppercase tracking-widest text-textMuted">
-        <span>{surface.strikes.length} strikes · {shownIdx.length} {shownIdx.length === 1 ? 'expiry' : 'expiries'}</span>
+        {/* the strikes the grid beside it draws, not the whole book under it (the paying-user audit's L4: "60 strikes" under
+            a 40-row grid) */}
+        <span>{drawnStrikes} strikes · {shownIdx.length} {shownIdx.length === 1 ? 'expiry' : 'expiries'}</span>
         <span className="ml-auto inline-flex items-center gap-1.5">
           <span className={`w-1.5 h-1.5 rounded-full ${clock.phase === 'OPEN' || clock.phase === 'AUCTION' ? 'bg-select' : 'bg-textMuted'}`} aria-hidden />
           {clock.phase === 'OPEN' || clock.phase === 'AUCTION' ? 'live' : clock.label} · <span className="normal-case tracking-normal tnum" style={{ color: SILVER }}>{clock.etTime}</span>

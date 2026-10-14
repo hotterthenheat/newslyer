@@ -237,6 +237,22 @@ const BAND_SCROLL_PX = 700;
     read, how to read, fullscreen) measure ~912px; under this much band they go compact and the colours switch, which
     the bare picks' row cannot hold there either, leads their row — two rows on a 1024 desk, not four */
 const BAND_DOORS_WORDS_PX = 960;
+/** The band's doors whose words can go, the least read first — each to its icon, its words in its tooltip */
+type DoorKey = 'guide' | 'focus' | 'export' | 'data' | 'read' | 'supreme';
+const DOOR_ORDER: DoorKey[] = ['guide', 'focus', 'export', 'data', 'read', 'supreme'];
+const DOOR_SEL: Record<DoorKey, string> = {
+  guide: '[data-guide-door="ledger-guide"]',
+  focus: '[data-ledger-focus-door]',
+  export: '[data-ledger-export]',
+  data: '[data-ledger-data-door]',
+  read: '[data-ledger-read]',
+  supreme: '[data-ledger-supreme] [data-door-words]',
+};
+/** A band shape's named row: its width, and what each door's words cost */
+interface BandMeasure {
+  need: number;
+  savings: Partial<Record<DoorKey, number>>;
+}
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 const GREEK_LABEL: Record<Greek, string> = { gex: 'GEX', dex: 'DEX', vex: 'VEX', vanna: 'VANNA', charm: 'CHARM' };
 /*
@@ -426,7 +442,13 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   /* …AND WHAT THE NAMED ROW NEEDS, measured whenever the band is drawn with its words (2026-10-13): the box that packs to
      its panes is never narrower than this, and a band at least this wide keeps its words on one row whatever the
      fixed thresholds below say — they were measured for the widest band, five greeks and every door */
-  const [namedNeed, setNamedNeed] = useState(0);
+  /* …AND WHAT THE DOORS' WORDS COST (the paying-user audit, 2026-10-13: the calendar's band at 1920 was two rows, half
+     of each empty, for ~170px of door words): measured with the words on — each door's width over its 28px icon, the
+     supreme's figure — so a band a few doors' words over its room drops THOSE words, one door at a time, and stays one
+     row. Kept per shape of the band (the view, the names, the picks' words): a shape not yet measured is drawn named
+     once, before paint, and measured. */
+  const [measures, setMeasures] = useState<Record<string, BandMeasure>>({});
+  const shapeRef = useRef('');
   const namedNow = useRef(false);
   /* a coarse pointer — a phone, a tablet — read once and on change (index.css's .hit is gated the same way) */
   const [coarsePointer, setCoarsePointer] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches);
@@ -452,7 +474,21 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
     need += Math.max(0, n - 1) * 8; /* gap-x-2 */
     const over = need > el.clientWidth - 24; /* px-3 each side */
     setBandOver(prev => (prev === over ? prev : over));
-    if (namedNow.current && need > 0) setNamedNeed(prev => (Math.abs(prev - need) < 2 ? prev : Math.ceil(need)));
+    if (namedNow.current && need > 0) {
+      const savings: Partial<Record<DoorKey, number>> = {};
+      for (const k of DOOR_ORDER) {
+        const d = el.querySelector<HTMLElement>(DOOR_SEL[k]);
+        if (!d) continue;
+        const sv = k === 'supreme' ? d.offsetWidth + 4 : d.offsetWidth - 28;
+        if (sv > 0) savings[k] = Math.floor(sv);
+      }
+      const key = shapeRef.current;
+      setMeasures(prev => {
+        const old = prev[key];
+        if (old && Math.abs(old.need - need) < 2 && DOOR_ORDER.every(k => Math.abs((old.savings[k] ?? 0) - (savings[k] ?? 0)) < 2)) return prev;
+        return { ...prev, [key]: { need: Math.ceil(need), savings } };
+      });
+    }
   });
   /* THE STRIKES: each side of spot — the ledger's own presets, 20 by rest; a host may seed its own */
   const seed: number = halfProp ?? LEDGER_REST;
@@ -885,6 +921,9 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   }, [adding]);
 
   const supremeGreek: Greek = greeks[0] ?? 'gex';
+  /* the book's strikes either side of spot — the Strikes menu's counts */
+  const bookAbove = surface ? surface.strikes.filter(k => k >= surface.spot).length : WHOLE_BOOK;
+  const bookBelow = surface ? surface.strikes.filter(k => k < surface.spot).length : WHOLE_BOOK;
   if (!snapshot || !surface) {
     return (
       <div className="h-full min-h-[300px] grid place-items-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
@@ -936,21 +975,46 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const tight = 1 + extraBooks.length >= TIGHT_AT;
   /* the band's mode by its measured width (see BAND_*_ROW_PX); the desk toolbar (Pulse) has no band and never
      measures, so its cards keep their names */
+  /* the band's shape — what its named row's width depends on — and that shape's measure */
+  shapeRef.current = `${view}|${many ? extraBooks.length : 0}|${greeks.length}|${legs}|${range.from}-${range.through}|${afterBell ? 'a' : 'n'}|${fresh ? 'r' : ''}|${shownIdx.length}`;
+  const measured = measures[shapeRef.current];
+  const namedNeed = measured?.need ?? 0;
+  /* …and on a coarse pointer (a tablet) while the picks cannot be named on one row: a thumb cannot hover a bare pick's
+     tooltip, and at 682px (a tablet with the rail folded) the two tidy rows ran to four */
+  const bandScroll = toolbar === 'band' && bandW > 0 && (bandW < BAND_SCROLL_PX || (coarsePointer && bandW < BAND_NAMED_ROW_PX));
   const namedFits = toolbar === 'band' && namedNeed > 0 && bandW >= namedNeed + 24;
-  const bandMode: 'one' | 'bare' | 'tight' | 'two' = bandW === 0 || bandW >= BAND_ONE_ROW_PX || namedFits ? 'one' : bandW >= BAND_BARE_ROW_PX ? 'bare' : bandW >= BAND_TIGHT_ROW_PX ? 'tight' : 'two';
+  /* THE DOORS' WORDS GO ONE DOOR AT A TIME, the least read first, until the row fits — the picks keep theirs */
+  const compactDoors = new Set<DoorKey>();
+  let doorsFit = false;
+  if (toolbar === 'band' && measured && !namedFits && !bandScroll) {
+    const over = measured.need + 24 - bandW;
+    let saved = 0;
+    for (const k of DOOR_ORDER) {
+      if (saved >= over) break;
+      const sv = measured.savings[k] ?? 0;
+      if (sv > 0) {
+        compactDoors.add(k);
+        saved += sv;
+      }
+    }
+    doorsFit = saved >= over;
+  }
+  /* a shape not yet measured is drawn named — once, before paint (the measure runs in a layout effect) */
+  const measuring = toolbar === 'band' && bandW > 0 && !measured && !bandScroll;
+  const bandMode: 'one' | 'doors' | 'bare' | 'tight' | 'two' = bandW === 0 || namedFits || measuring ? 'one' : doorsFit ? 'doors' : bandW >= BAND_ONE_ROW_PX ? 'one' : bandW >= BAND_BARE_ROW_PX ? 'bare' : bandW >= BAND_TIGHT_ROW_PX ? 'tight' : 'two';
   /* TWO TIDY ROWS WITH THEIR WORDS when the pieces are over the one row's room (the re-audit's H1): bare picks were
      the price of staying on one row; a band that wraps anyway pays it for nothing. And under BAND_SCROLL_PX (a phone)
      the two rows scroll sideways with their words (H2) — a bare pick's name lives in a tooltip no thumb can hover. */
   const overNamed = bandOver && bandMode !== 'two';
-  /* …and on a coarse pointer (a tablet) while the picks cannot be named on one row: a thumb cannot hover a bare pick's
-     tooltip, and at 682px (a tablet with the rail folded) the two tidy rows ran to four */
-  const bandScroll = toolbar === 'band' && bandW > 0 && (bandW < BAND_SCROLL_PX || (coarsePointer && bandW < BAND_NAMED_ROW_PX));
   const stripsBare = toolbar === 'band' && !overNamed && !bandScroll && (bandMode === 'bare' || bandMode === 'tight' || (bandMode === 'two' && bandW < BAND_NAMED_ROW_PX));
   /* …and on the two rows under BAND_NAMED_ROW_PX (a 1024 desk, the picks already bare) the doors go compact too: with
      their words they ran to four rows there, the read, the guide and the fullscreen door alone on the last */
   const doorsTightTwo = toolbar === 'band' && !overNamed && !bandScroll && bandMode === 'two' && bandW < BAND_DOORS_WORDS_PX;
   const doorsTight = (toolbar === 'band' && !overNamed && bandMode === 'tight') || doorsTightTwo;
-  namedNow.current = toolbar === 'band' && !stripsBare && !doorsTight && !bandScroll;
+  /* one door's words: gone with every door's (tight), or with its own in 'doors' — which is never gated on `overNamed`:
+     that was read off the named two-row layout, and it would never leave it */
+  const doorCompact = (k: DoorKey) => doorsTight || (bandMode === 'doors' && compactDoors.has(k));
+  namedNow.current = toolbar === 'band' && !stripsBare && !doorsTight && !bandScroll && bandMode !== 'doors';
   const strips = (
     <>
       <DropdownSelect label="View" value={view} options={VIEWS_FOR[viewHost].map(v => VIEW_OPTION[v])} onChange={pickView} title="The matrix, the calendar or the profile" testId="ledger-view" bare={stripsBare} />
@@ -968,7 +1032,18 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       <DropdownSelect
         label="Strikes"
         value={rings}
-        options={LEDGER_WINDOWS.map(w => ({ value: w as number, label: `${w} each side`, hint: w === 30 ? `Every strike the chain has — ${w * 2 + 1} rows` : `${w * 2 + 1} rows — ${w} strikes above spot and ${w} below` }))}
+        /* THE COUNTS THE GRID DRAWS (the paying-user audit's L4/M6, 2026-10-13): the menu said 41 rows for twenty each side
+           and 61 for thirty while the grid drew 40 and 60 (spot sits between two strikes, not on a row), and The read
+           said 60 under a 40-row grid. Counted off the book itself — a vendor's chain can hold fewer — and the widest
+           window is named for what it is: the whole book */
+        options={LEDGER_WINDOWS.map(w => {
+          const up = Math.min(w, bookAbove);
+          const down = Math.min(w, bookBelow);
+          /* the trigger says "±20" (the band's one row at 1920 — the paying-user audit, 2026-10-13); the rows say it whole */
+          return w === WHOLE_BOOK
+            ? { value: w as number, label: 'All', hint: `Every strike the book holds — ${up + down} rows, ${up} above spot and ${down} below` }
+            : { value: w as number, label: `${w} each side`, short: `±${w}`, hint: `${up + down} rows — ${up} strikes above spot and ${down} below` };
+        })}
         onChange={setRings}
         title="How many strikes around spot"
         testId="ledger-strikes"
@@ -986,26 +1061,29 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       title={`The heaviest strike of the whole book by ${GREEK_LABEL[supremeGreek]} — the one the chart wears in magenta — most of it on ${supremeEx?.date ?? ''} · click to keep the strike`}
       /* the cards' 28px (it stood 32 on a 28px row), sentence case like them, and a button's hover edge (the audit's M2, M3, L10) */
       className="hit ml-auto inline-flex items-center gap-2.5 h-7 px-2.5 rounded-md border border-supreme/40 bg-supreme/[0.06] hover:bg-supreme/[0.12] hover:border-supreme/70 font-mono transition-colors"
-      data-ledger-supreme={doorsTight ? 'compact' : 'full'}
+      data-ledger-supreme={doorCompact('supreme') ? 'compact' : 'full'}
     >
       <span className="text-[11px] font-bold text-supreme">Supreme</span>
       <span className="text-[12px] font-semibold tnum text-textPrimary whitespace-nowrap">
         {fmtStrike(supreme.strike)}
         {/* tight: the strike alone — the date and the amount stay in the title */}
-        {!doorsTight && (
+        {!doorCompact('supreme') && (
           <>
             {' '}
-            <span className="text-textMuted font-normal">·</span> {supremeEx?.date ?? ''} <span className="text-textMuted font-normal">·</span> {fmtUsd(supreme.total)}
+            {/* the amount, not the date (the band's one row at 1920): the date is in the title and on the strike's card */}
+            <span data-door-words>
+              <span className="text-textMuted font-normal">·</span> {fmtUsd(supreme.total)}
+            </span>
           </>
         )}
       </span>
     </button>
   );
-  const guideButton = <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title={view === 'profile' ? 'What the curve means' : view === 'matrix' ? 'What the matrix means' : 'What the calendar means'} testId="ledger-guide" compact={doorsTight} size={toolbar === 'band' ? 'md' : 'sm'} />;
-  const dataDoor = <DataDoor ticker={surface.ticker} open={dataOpen} onClick={() => setDataOpen(v => !v)} compact={doorsTight} />;
-  const exportDoor = toolbar === 'band' ? <ExportDoor surface={scoped(surface, snapshot)} greeks={greeks} expiries={shownIdx} compact={doorsTight} /> : null;
+  const guideButton = <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title={view === 'profile' ? 'What the curve means' : view === 'matrix' ? 'What the matrix means' : 'What the calendar means'} testId="ledger-guide" compact={doorCompact('guide')} size={toolbar === 'band' ? 'md' : 'sm'} />;
+  const dataDoor = <DataDoor ticker={surface.ticker} open={dataOpen} onClick={() => setDataOpen(v => !v)} compact={doorCompact('data')} />;
+  const exportDoor = toolbar === 'band' ? <ExportDoor surface={scoped(surface, snapshot)} greeks={greeks} expiries={shownIdx} compact={doorCompact('export')} /> : null;
   /* THE READ's door — beside the guide's; lit while the card is up. The band's opens the host's read */
-  const readDoor = <ReadDoor open={readOf(surface.ticker) === 'open'} onClick={() => toggleRead(surface.ticker)} compact={doorsTight} />;
+  const readDoor = <ReadDoor open={readOf(surface.ticker) === 'open'} onClick={() => toggleRead(surface.ticker)} compact={doorCompact('read')} />;
   const fullButton =
     headFull && !full ? null : (
       <button
@@ -1078,11 +1156,12 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
       aria-pressed={focusOn}
       disabled={fresh}
       title={fresh ? 'Not while the replay runs' : focusOn ? 'Back to the whole board (Esc)' : 'Keep only the biggest moves since the open sharp — the badged nodes'}
-      className={`hit inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border bg-chip transition-colors font-mono select-none disabled:opacity-50 ${focusOn ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
+      aria-label="Biggest moves"
+      className={`hit inline-flex items-center gap-1.5 h-7 rounded-md border bg-chip transition-colors font-mono select-none disabled:opacity-50 ${doorCompact('focus') ? 'w-7 justify-center' : 'px-2.5'} ${focusOn ? 'border-silver/50' : 'border-borderSubtle hover:border-borderMuted'}`}
       data-ledger-focus-door={focusOn ? 'on' : 'off'}
     >
       <Crosshair className={`w-3 h-3 ${focusOn ? 'text-silver' : 'text-textMuted'}`} />
-      <span className={`text-[11px] ${focusOn ? 'text-textPrimary' : 'text-textMuted'}`}>Biggest moves</span>
+      {!doorCompact('focus') && <span className={`text-[11px] ${focusOn ? 'text-textPrimary' : 'text-textMuted'}`}>Biggest moves</span>}
     </button>
   );
   const namesDoor = multi && (

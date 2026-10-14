@@ -8,6 +8,7 @@
 import type { Candle, GexSnapshot, Indicators, MarketSnapshot, StrikeNode, TapeOrder, TickerConfig, TickerSymbol, TradePlan } from '../types/market';
 import { blackScholesGreeks } from './greeks';
 import { dayKey, stream } from './rng';
+import { nyParts, nySession } from './nyTime';
 import { lookup as universeLookup } from '../data/universe';
 import type { UniverseQuote } from '../types/compass';
 
@@ -301,6 +302,21 @@ const Simulator = (() => {
   }
   const seedJobs: Record<string, SeedJob> = {};
 
+  /* THE HISTORY ENDS AT A REAL CLOSE OUTSIDE THE SESSION (the paying-user audit, 2026-10-13): the walk always ended at
+     the wall clock, so a desk opened at 22:30 had a "today" of 16:13–22:42 — the replay walked an evening the trader's
+     clock (09:30–16:00) could not follow, and every box of the day drew it. Inside a weekday's cash session it still
+     ends now; outside it, on the last weekday's 15:59, so the last session is that day's 09:30–15:59 to the minute. */
+  function seedAnchorSec(nowMs: number): number {
+    let at = nowMs;
+    for (let k = 0; k < 8; k++) {
+      const { weekday } = nyParts(at);
+      const { open, close } = nySession(at);
+      if (weekday >= 1 && weekday <= 5 && nowMs >= open) return Math.floor(Math.min(nowMs, close - 60_000) / 1000);
+      at -= 86_400_000;
+    }
+    return Math.floor(nowMs / 1000);
+  }
+
   function beginSeed(sym: string): SeedJob {
     const cfg = TICKERS[sym];
     /* Late-seeded names join the CLOCK ALREADY RUNNING, not the wall clock:
@@ -311,7 +327,7 @@ const Simulator = (() => {
        2026-08-23: "the iwm one looks far behind"). Anchor to the newest bar
        of any ticker already seeded; wall clock only for the very first. */
     const ref = Object.values(candleHistory).find(b => b && b.length > 0);
-    const nowSec = ref ? ref[ref.length - 1].time : Math.floor(Date.now() / 1000);
+    const nowSec = ref ? ref[ref.length - 1].time : seedAnchorSec(Date.now());
     const alignedNow = nowSec - (nowSec % BAR_SECONDS);
     const overnightGap = 86400 - (SESSION_BARS - 1) * BAR_SECONDS;
     const totalSpanSec = SESSIONS * (SESSION_BARS - 1) * BAR_SECONDS + SESSIONS * overnightGap;

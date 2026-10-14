@@ -56,7 +56,11 @@ export function sessionCut(bars: readonly Candle[]): Candle[] {
   let start = bars.length - 1;
   while (start > 0 && bars[start].time - bars[start - 1].time <= SESSION_GAP_S) start--;
   const run = bars.slice(start);
-  const { open, close } = nySession(run[run.length - 1].time * 1000);
+  let { open, close } = nySession(run[run.length - 1].time * 1000);
+  /* the day of the newest bar, or the latest day before it that the run has cash-session bars on: the house book's
+     bars keep rolling after the close, and once they pass midnight the new day's window held none and the "session"
+     became the whole run, evening and night included */
+  for (let k = 0; k < 7 && !run.some(b => b.time >= open / 1000 && b.time < close / 1000); k++) ({ open, close } = nySession(open - 86_400_000));
   const lo = open / 1000;
   const hi = close / 1000;
   let a = 0;

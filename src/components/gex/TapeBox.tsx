@@ -35,12 +35,14 @@ import { readSessionClock } from '../../data/moc';
 import { YEAR_MINUTES } from '../../data/measure';
 import { CLOSE_MIN, hhmm } from '../../data/ahead';
 import { dayAxisFrom, dayAxisTo, dayHours } from '../../data/dayAxis';
+import { besideDot } from './besideDot';
 import { nyMinutes } from '../../core/nyTime';
 import { armLevel, removeAlert, useAlerts, type LevelName } from './alertStore';
 import { useLevelsScope } from '../../data/levelsScope';
 import { setDayHover, useDayHover } from '../../data/dayHover';
 import { CALL_WALL, FLIP, PUT_WALL, SUPREME, alpha } from './paletteInk';
 import type { Candle, MarketSnapshot } from '../../types/market';
+
 
 const SILVER = 'rgb(var(--silver))';
 const INK = 'rgb(var(--text-primary))';
@@ -455,7 +457,10 @@ const TapeBox = ({ snapshot, bars: barsProp, focus, onPick, scope, at, part = fa
               })}
             {/* the pointer's minute */}
             {hb && (
-              <div className="pointer-events-none absolute top-2 rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm" style={over || xOfMin(minOf(hb)) > ml + plotW / 2 ? { left: 8 } : { right: MR + 8 }} data-tape-card={hhmm(minOf(hb))}>
+              /* BESIDE THE POINT IT READS (the paying-user audit's M14, 2026-10-13): pinned to a top corner, the eye went to the
+                 corner and back for every minute; it stands at the dot now, right of it (left past the middle), above it
+                 unless the plot's head has no room. A phone's plot keeps the corner — there is no room beside anything. */
+              <div className="pointer-events-none absolute whitespace-nowrap rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm" style={over ? { left: 8, top: 8 } : besideDot(xOfMin(minOf(hb)), yOf(hb.close), xOfMin(minOf(hb)) > ml + plotW / 2)} data-tape-card={hhmm(minOf(hb))}>
                 <span className="font-semibold tnum text-textPrimary">{hhmm(minOf(hb))}</span>
                 <span className="ml-2 tnum text-textPrimary">{hb.close.toFixed(2)}</span>
                 <span className="ml-2 text-textMuted">{nearLevel(hb.close)}</span>

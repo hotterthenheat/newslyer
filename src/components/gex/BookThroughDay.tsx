@@ -34,6 +34,7 @@ import { sessionBars } from '../../data/levelview';
 import { fmtUsd } from '../../data/gex';
 import { hhmm } from '../../data/ahead';
 import { dayAxisFrom, dayAxisTo, dayHours } from '../../data/dayAxis';
+import { besideDot } from './besideDot';
 import { nyMinutes } from '../../core/nyTime';
 import { HEAT_MODE, heatLaneColor } from './heatmap';
 import { LONG_GAMMA, SHORT_GAMMA, alpha } from './paletteInk';
@@ -341,7 +342,12 @@ const BookThroughDay = ({ snapshot, bars: barsProp, focus, onPick, scope, part =
             </svg>
           )}
           {hm && (
-            <div className="pointer-events-none absolute top-2 rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm" style={xOfMin(hm.min) > ML + plotW / 2 ? { left: 8 } : { right: mr + 8 }} data-through-card={hhmm(hm.min)}>
+            /* beside the point it reads (components/gex/besideDot.ts): the net line's dot, or the hovered strike's row */
+            <div
+              className="pointer-events-none absolute whitespace-nowrap rounded-md border border-borderMuted bg-card/95 px-2.5 py-1.5 font-mono text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm"
+              style={W < 520 ? { left: 8, top: 8 } : besideDot(xOfMin(hm.min), face === 'net' ? yOfNet(hm.net) : hover?.row != null ? yOfRow(hover.row) + rowH / 2 : MT + plotH / 2, xOfMin(hm.min) > ML + plotW / 2)}
+              data-through-card={hhmm(hm.min)}
+            >
               <span className="font-semibold tnum text-textPrimary">{hhmm(hm.min)}</span>
               {face === 'net' ? (
                 <>
