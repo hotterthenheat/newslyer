@@ -1,0 +1,11 @@
+{
+ "skips": {
+  "no_exp_45d": 157,
+  "degenerate_strikes": 33,
+  "dead_quote": 16,
+  "exp_not_trading_day": 2
+ },
+ "n_trades": 8204,
+ "date_min": "2023-01-03",
+ "date_max": "2026-09-30"
+}
