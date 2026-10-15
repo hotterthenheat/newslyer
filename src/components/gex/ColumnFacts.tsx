@@ -93,9 +93,11 @@ const ColumnFacts = ({ ticker, snapshot, scope, width, fresh = false }: Props) =
   const dealersLabelW = flip != null ? ch('Dealers', 11, true) + 6 : 0;
   const dealersW = flip != null ? GROUP + ch(absorb ? 'absorb' : 'amplify', 11, true) : 0;
   const heldW = heldWords ? GROUP + ch('Flip today', 11, true) + 6 + ch(heldWords, 12) : 0;
-  const room = (width > 0 ? width : 9999) - 24 - 8;
+  const room = (width > 0 ? width : 9999) - 24 - 16;
   const base = priceW + flipW + dealersW;
-  const shed = base + changeW + distW + dealersLabelW + heldW <= room ? 0 : base + changeW + distW + dealersLabelW <= room ? 1 : base + changeW + distW <= room ? 2 : base + changeW <= room ? 3 : 4;
+  /* the last step: the dealers' word goes and the flip's figure wears its ink — ember amplifies, glacier absorbs */
+  const shed = base + changeW + distW + dealersLabelW + heldW <= room ? 0 : base + changeW + distW + dealersLabelW <= room ? 1 : base + changeW + distW <= room ? 2 : base + changeW <= room ? 3 : base <= room ? 4 : 5;
+  const regimeInk = flip == null ? undefined : absorb ? ABSORB : AMPLIFY;
 
   return (
     <div className="shrink-0 flex items-baseline gap-x-2.5 px-3 h-8 pt-2 border-b border-borderSubtle/60 font-mono whitespace-nowrap overflow-hidden" data-field-column-facts={ticker} data-facts-shed={shed || undefined}>
@@ -110,12 +112,12 @@ const ColumnFacts = ({ ticker, snapshot, scope, width, fresh = false }: Props) =
       )}
       <span className={`inline-flex items-baseline gap-1.5 ${SEP}`} title="The gamma flip — above it dealer hedging absorbs moves, below it amplifies them">
         <span className="text-[11px] uppercase tracking-wider text-textMuted">Flip</span>
-        <span className="text-[12px] font-semibold tnum" style={{ color: flip != null ? FLIP : undefined }}>
+        <span className="text-[12px] font-semibold tnum" style={{ color: flip != null ? (shed >= 5 ? regimeInk : FLIP) : undefined }}>
           {flip != null ? fmt(flip) : 'none'}
         </span>
         {flip != null && shed < 3 && lead && <span className="text-[11px] tnum text-textMuted">{atSpot ? 'at spot' : `${lead} ${away! > 0 ? 'above' : 'below'}`}</span>}
       </span>
-      {flip != null && (
+      {flip != null && shed < 5 && (
         <span className={`inline-flex items-baseline gap-1.5 ${SEP}`} title={absorb ? 'Price above the flip — dealer hedging absorbs a move' : 'Price below the flip — dealer hedging amplifies a move'}>
           {shed < 2 && <span className="text-[11px] uppercase tracking-wider text-textMuted">Dealers</span>}
           <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: absorb ? ABSORB : AMPLIFY }}>

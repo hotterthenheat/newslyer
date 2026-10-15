@@ -167,6 +167,18 @@ const phaseAt = (min: number) => PHASES.find(p => min >= p.from && min < p.to) ?
    into "The turn". Since the paying-user audit (M3) the desk wears the one-word names too; the full ones are in the card. */
 const SHORT_NAME: Record<string, string> = { open: 'Open', morning: 'Morning', lunch: 'Lunch', charm: 'Charm', turn: 'Turn', auction: 'Close' };
 const PRESSURE_WORDS = { absorbs: 'absorbs moves', amplifies: 'amplifies moves' } as const;
+/* WHAT A BLOCK'S INK SAYS (2026-10-14): the hedging's own pair, the matrix's legend — ember where it amplifies a move,
+   glacier where it absorbs one; the morning, which leans with the flip, in the page's ink. The weight is its depth. */
+const PRESSURE_INK = { absorbs: GLACIER, amplifies: EMBER } as const;
+
+/* A FACT ON THE HEAD'S LINE — its name in tracked capitals, its figure beside it, a hairline before the next (the page
+   head's grammar, PinpointLayout's Fact) */
+const ClockFact = ({ label, children }: { label: string; children: ReactNode }) => (
+  <span className="inline-flex items-baseline gap-2 whitespace-nowrap pr-3 [&:not(:first-child)]:border-l [&:not(:first-child)]:border-borderSubtle [&:not(:first-child)]:pl-3">
+    <span className="text-[11px] uppercase tracking-wider text-textMuted">{label}</span>
+    <span className="text-[13px] font-semibold text-textPrimary">{children}</span>
+  </span>
+);
 
 /** What the reader has kept: one block, or one whole phase */
 type Pin = { kind: 'block'; i: number } | { kind: 'phase'; key: string } | null;
@@ -309,6 +321,9 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
   const shownPhase = shownMin != null ? phaseAt(shownMin) : null;
   const cardPct = shownBlock != null ? ((shownBlock + 0.5) / blocks) * 100 : 0;
   const cardOnRight = shownBlock != null ? shownBlock < blocks * 0.6 : true;
+  /* the card opens under the strip, or over it where the screen ends first (2026-10-14: the box is short now, and its
+     card under a strip near the screen's foot opened off it) — read only while a block is shown */
+  const cardAbove = shownBlock != null && typeof window !== 'undefined' && (stripRef.current?.getBoundingClientRect().bottom ?? 0) + 150 > window.innerHeight;
 
   const line = keptBlock != null
     ? `${hhmm(OPEN_MIN + keptBlock * blockMin)}, ${phaseAt(OPEN_MIN + keptBlock * blockMin).name.toLowerCase()} — ${phaseAt(OPEN_MIN + keptBlock * blockMin).words(facts)}.`
@@ -325,62 +340,70 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
       <GuideFocus open={guideOpen} onClose={() => setGuideOpen(false)} title="How to read the clock" testId="clock-guide" viewport>
         <ClockGuide nowBlock={guideNow} line={line} bellShare={facts.bellShare} pin={facts.pin} supreme={facts.supreme} charmStrike={facts.charmStrike} />
       </GuideFocus>
-      {/* the title block keeps 300px, so beside the report on a wide desk (580px of box) the facts step under it rather
-          than the title's row breaking word by word */}
-      <div className="px-5 pt-4 pb-3 flex items-start gap-6 flex-wrap">
-        <div className="min-w-[min(100%,300px)] flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h3 className="text-[16px] font-semibold leading-tight text-textPrimary">The trader's clock</h3>
-            {scope}
-            <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the strip and the phases mean" testId="clock-guide" />
-            <FoldDoor open={open} onToggle={toggleOpen} what="the clock" testId="clock" />
-          </div>
-          <p className="mt-0.5 text-[11px] text-textMuted">New York · 09:30 to 16:00</p>
-        </div>
-        <dl className="grid grid-cols-3 gap-x-6">
+      {/* THE HEAD IN THE HOUSE'S GRAMMAR (2026-10-14, the owner: the clock was "AI slop" — a subtitle, three stat cards with
+          their labels over their values, a paragraph under a wall of identical bars): the name, its scope and its doors, then
+          the facts on one mono line, tracked capitals for their names and the figures beside them. On the box beside the
+          report the facts take the line under the name. */}
+      <div className="px-5 pt-4 pb-3 flex items-center gap-x-3 gap-y-2 flex-wrap">
+        <h3 className="text-[16px] font-semibold leading-tight text-textPrimary">The trader's clock</h3>
+        {scope}
+        <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the strip and the phases mean" testId="clock-guide" />
+        <FoldDoor open={open} onToggle={toggleOpen} what="the clock" testId="clock" />
+        <div className="ml-auto flex items-baseline flex-wrap gap-y-1 font-mono" data-clock-facts>
           {lookingAt ? (
-            <div className="col-span-2">
-              <dt className="text-[11px] text-textMuted">Looking at</dt>
-              <dd className="mt-0.5 flex items-baseline gap-3 whitespace-nowrap" data-clock-looking>
-                <span className="font-mono text-[14px] tnum" style={{ color: SILVER }}>
-                  {lookingAt}
-                </span>
-                <button onClick={() => setPin(null)} className="text-[11px] font-medium text-textMuted hover:text-textPrimary transition-colors" data-back-to-now>
-                  Back to now
-                </button>
-              </dd>
-            </div>
+            <ClockFact label="Looking at">
+              <span className="tnum" style={{ color: SILVER }} data-clock-looking>
+                {lookingAt}
+              </span>
+              <button onClick={() => setPin(null)} className="hit ml-3 text-[11px] font-medium uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors" data-back-to-now>
+                Back to now
+              </button>
+            </ClockFact>
           ) : (
             <>
-              <div>
-                <dt className="text-[11px] text-textMuted">Now</dt>
-                <dd className="mt-0.5 font-mono text-[14px] tnum text-textPrimary whitespace-nowrap" data-clock-now>
-                  {inSession && current ? `${hhmm(nowMin)} · ${current.name.toLowerCase()}` : clock.label}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[11px] text-textMuted">Next</dt>
-                <dd className="mt-0.5 font-mono text-[14px] tnum text-textPrimary whitespace-nowrap">{next ? `${next.name.toLowerCase()} in ${next.from - nowMin}m` : inSession ? 'the close' : `${PHASES[0].name.toLowerCase()} at 09:30`}</dd>
-              </div>
+              <ClockFact label="Now">
+                <span data-clock-now>
+                  {inSession && current ? (
+                    <>
+                      <span className="tnum">{hhmm(nowMin)}</span> <span className="font-normal text-textSecondary">{SHORT_NAME[current.key].toLowerCase()}</span>
+                    </>
+                  ) : (
+                    <span className="font-normal text-textSecondary">{clock.label.toLowerCase()}</span>
+                  )}
+                </span>
+              </ClockFact>
+              <ClockFact label="Next">
+                {next ? (
+                  <>
+                    <span className="font-normal text-textSecondary">{SHORT_NAME[next.key].toLowerCase()}</span> <span className="tnum">{next.from - nowMin}m</span>
+                  </>
+                ) : inSession ? (
+                  <span className="font-normal text-textSecondary">the close</span>
+                ) : (
+                  <>
+                    <span className="font-normal text-textSecondary">open</span> <span className="tnum">09:30</span>
+                  </>
+                )}
+              </ClockFact>
             </>
           )}
-          <div>
-            <dt className="text-[11px] text-textMuted">Expires at the close</dt>
-            {/* in the page's ink, not magenta — magenta is the supreme's marker alone (2026-10-14) */}
-            <dd className="mt-0.5 font-mono text-[14px] tnum text-textPrimary whitespace-nowrap" data-clock-bell>
-              {facts.bellShare != null ? `${facts.bellShare}% of today's gamma` : '—'}
-            </dd>
-          </div>
-        </dl>
+          {/* in the page's ink, not magenta — magenta is the supreme's marker alone (2026-10-14) */}
+          <ClockFact label="Expires at the close">
+            <span className="tnum" data-clock-bell>
+              {facts.bellShare != null ? `${facts.bellShare}%` : '—'}
+            </span>
+            {facts.bellShare != null && <span className="ml-1.5 font-normal text-textSecondary">of gamma</span>}
+          </ClockFact>
+        </div>
       </div>
 
       {open && (
-      <div className="px-5 pb-4 flex-1 flex flex-col" ref={stripRef}>
+      <div className="px-5 pb-4 flex flex-col" ref={stripRef}>
         {/* THE PHASES — named above the strip on ONE row. Each name sits at its
             phase's start, except the last two: the turn is twenty minutes wide
             and the close ten, so the turn's name ends at 15:50 and the close's
             starts there — the same line, no overlap. */}
-        <div className={`relative ${twoRows ? 'h-10' : 'h-5'}`} data-clock-phases>
+        <div className={`relative ${narrow ? 'h-9' : 'h-[18px]'}`} data-clock-phases>
           {PHASES.map((p, i) => {
             const active = current?.key === p.key;
             const kept = keptPhase?.key === p.key || (keptBlock != null && phaseAt(OPEN_MIN + keptBlock * blockMin).key === p.key);
@@ -398,7 +421,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
                    phone's strip from its own start, so the phone pass of 2026-09-13 hid it) */
                 /* ONE WORD EACH, AND THE CLOSE ON THE EDGE AT EVERY WIDTH (the paying-user audit's M3, 2026-10-13): "The close"
                    from its own start ran 4px past a 1440 desk's box; on one row the turn stands just left of it */
-                className={`hit absolute text-[11px] font-medium whitespace-nowrap transition-colors ${nameCls} ${twoRows && i % 2 === 1 ? 'top-5' : 'top-0'} ${last ? '!left-auto !right-0 !translate-x-0' : ''} ${turn && !twoRows ? '!left-auto !right-[44px] !translate-x-0' : ''}`}
+                className={`hit absolute font-mono text-[11px] font-semibold uppercase tracking-wider whitespace-nowrap ${nameCls} ${narrow && i % 2 === 1 ? 'top-[18px]' : 'top-0'} ${last ? '!left-auto !right-0 !translate-x-0' : ''} ${turn && !narrow ? '!left-auto !right-[52px] !translate-x-0' : ''}`}
                 style={{
                   left: `${pct(turn ? p.to : p.from)}%`,
                   transform: turn ? 'translateX(calc(-100% - 6px))' : last ? 'translateX(2px)' : undefined,
@@ -415,11 +438,11 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
         {/* THE STRIP — 78 five-minute blocks; shade = the phase's weight, silver = now */}
         {/* BESIDE THE REPORT (from 1,880px) the box is as tall as the report, and the strip takes the height the box has
             over its words (2026-10-13, "i dont want any deadspace") — 22px when the box is its own height */}
-        <div className="relative flex-1 flex flex-col" onPointerLeave={() => setHover(null)}>
+        <div className="relative flex flex-col" onPointerLeave={() => setHover(null)}>
           {/* a narrow strip is the thumb's height (44px) — the blocks are the targets, and 10px wide is all the width a quarter
               hour gets on a phone; the height is ours to give */}
           <div
-            className={`flex-1 flex gap-[2px] ${narrow ? 'min-h-11' : 'min-h-[22px]'}`}
+            className={`flex gap-[2px] ${narrow ? 'h-11' : 'h-7'}`}
             data-clock-strip
             data-block-minutes={blockMin}
             role="group"
@@ -445,7 +468,8 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
               const soft = !!pin && !inFocus;
               /* The phase you are in sits a touch brighter than its weight alone;
                  the block under the pointer, or a kept one, brighter still */
-              const alpha = Math.min(0.8, 0.1 + p.weight * 0.3 + (inCurrent ? 0.08 : 0) + (hovered ? 0.3 : 0) + (!hovered && pin && inFocus ? 0.15 : 0));
+              const depth = Math.min(0.95, 0.3 + p.weight * 0.45 + (inCurrent ? 0.08 : 0) + (hovered ? 0.25 : 0) + (!hovered && pin && inFocus ? 0.15 : 0));
+              const wash = p.pressure ? alpha(PRESSURE_INK[p.pressure], depth) : `rgb(var(--text-primary) / ${(depth * 0.55).toFixed(3)})`;
               const boundary = i > 0 && phaseAt(min - blockMin).key !== p.key;
               const dim = hover != null && !hovered;
               return (
@@ -464,8 +488,8 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
                   className={`flex-1 min-w-0 rounded-[2px] ${boundary ? 'ml-[3px]' : ''}`}
                   style={{
                     /* the ink's wash — light on the dark terminal, near-black on paper (the white washes were "so bright") */
-                    background: isNow ? LIVE : `rgb(var(--text-primary) / ${alpha})`,
-                    opacity: soft ? 0.3 : dim ? 0.55 : future ? 0.6 : 1,
+                    background: isNow ? LIVE : wash,
+                    opacity: soft ? 0.3 : dim ? 0.55 : future ? 0.45 : 1,
                     filter: soft ? 'blur(1.2px)' : undefined,
                     boxShadow: isNow ? `0 0 0 1px ${LIVE}` : undefined,
                   }}
@@ -496,7 +520,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
               /* UNDER THE STRIP, over the sentence that says the same (the audit's M7, 2026-10-13): risen above the strip, a card
                  for a block in the right half covered the box's own facts (Now · Next · Expires). On a narrow strip it is the
                  strip's own width — beside the block it ran off a phone's edge (the re-audit). */
-              style={narrow ? { top: 'calc(100% + 4px)' } : { left: `${cardPct}%`, top: 'calc(100% + 4px)', transform: cardOnRight ? 'translateX(12px)' : 'translateX(calc(-100% - 12px))' }}
+              style={{ ...(cardAbove ? { bottom: 'calc(100% + 22px)' } : { top: 'calc(100% + 4px)' }), ...(narrow ? {} : { left: `${cardPct}%`, transform: cardOnRight ? 'translateX(12px)' : 'translateX(calc(-100% - 12px))' }) }}
             >
               <div className="flex items-baseline gap-2">
                 <span className="font-mono text-[12px] font-semibold tnum" style={{ color: keptBlock === shownBlock ? SILVER : undefined }}>
@@ -509,11 +533,7 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
               </div>
               <p className="mt-1 text-[11px] leading-snug text-textSecondary">{shownPhase.words(facts)}.</p>
               {shownPhase.pressure && (
-                <span
-                  className="mt-1.5 inline-flex items-center h-5 px-2 rounded-full text-[11px] font-medium"
-                  data-pressure={shownPhase.pressure}
-                  style={{ color: shownPhase.pressure === 'absorbs' ? GLACIER : EMBER, background: alpha(shownPhase.pressure === 'absorbs' ? GLACIER : EMBER, 0.1) }}
-                >
+                <span className="mt-1 block font-mono text-[11px] font-semibold uppercase tracking-wider" data-pressure={shownPhase.pressure} style={{ color: PRESSURE_INK[shownPhase.pressure] }}>
                   {PRESSURE_WORDS[shownPhase.pressure]}
                 </span>
               )}
@@ -522,10 +542,8 @@ const TraderClock = ({ snapshot, scope, at }: { snapshot: MarketSnapshot; scope?
           )}
         </div>
 
-        {/* THE SENTENCE for what you are looking at, else the phase you are in */}
-        <p className="mt-2 text-[12px] leading-relaxed text-textSecondary" data-clock-line>
-          {line}
-        </p>
+        {/* no sentence under the strip (2026-10-14): what the phase you are in does today is the card's, on the block under
+            the pointer, and the guide's — the box's own line is the head's facts */}
       </div>
       )}
     </section>

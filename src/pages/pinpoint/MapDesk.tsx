@@ -528,7 +528,8 @@ const MapDesk = () => {
       {/* THE CLOCK BESIDE THE REPORT from 1,880px (idea 4, 2026-10-13): both ran the full width for a 178px strip and
           370px of rows; side by side a big monitor's page is a screen shorter. `contents` below that, so the flex column
           above still lays them out one under the other. */}
-      <div className="contents min-[1880px]:grid min-[1880px]:grid-cols-[580px_minmax(0,1fr)] min-[1880px]:gap-4 min-[1880px]:items-stretch" data-map-wide-row>
+      {/* each its own height (2026-10-14): stretched to the report, the clock box stood 100px empty inside its border */}
+      <div className="contents min-[1880px]:grid min-[1880px]:grid-cols-[580px_minmax(0,1fr)] min-[1880px]:gap-4 min-[1880px]:items-start" data-map-wide-row>
       <div ref={dayRef} id="map-clock" {...settle(4)} className={`flex flex-col border border-borderSubtle rounded-md bg-panel max-sm:scroll-mt-24 sm:scroll-mt-12 ${settle(4).className}`} data-day data-scope-ticker={dayTicker} data-on-screen={dayOn}>
         <Deferred index={1} frames={22} fallback={<DayInner />} className="flex-1 flex flex-col">
           <TraderClock snapshot={daySnap ?? scan} scope={chipFor('day', dayTicker)} at={playing && dayTicker === ticker ? replayMinute(framePos, range) : undefined} />

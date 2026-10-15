@@ -40,7 +40,7 @@ import FoldDoor from './FoldDoor';
 import { useBoxFold } from '../../data/boxFold';
 import { buildLevelRead, sessionBars } from '../../data/levelview';
 import { nyClock } from '../../core/nyTime';
-import { RECORD_LEVELS, RECORD_WORDS, baseRates, levelTicks, sessionRecords, type Tick } from '../../data/levelRecord';
+import { baseRates, levelTicks, sessionRecords, type RecordLevel, type Tick } from '../../data/levelRecord';
 import { useLevelsScope } from '../../data/levelsScope';
 import { bookMarket } from '../../data/bookMarket';
 import { CALL_WALL, FLIP, PUT_WALL, SUPREME } from './paletteInk';
@@ -72,19 +72,23 @@ interface Row {
   broke: number;
   last: string | null;
   trend: string;
+  /** the trend as the table prints it: the figure first, the word after it */
+  trendFig: string;
+  trendWord: string;
   grade: { words: string; tone: 'good' | 'bad' | 'quiet' };
+  /** which of the base rates speaks for this row — the first of its names that has one (the pin has none) */
+  rate: RecordLevel | null;
 }
 
-const TONE: Record<Row['grade']['tone'], string> = {
-  good: 'bg-bull/10 text-bull border-bull/20',
-  bad: 'bg-bear/10 text-bear border-bear/20',
-  quiet: 'bg-ink/[0.05] text-textSecondary border-borderSubtle',
-};
+/* which base rate a row's name reads (data/levelRecord.ts RecordLevel) */
+const RATE_OF: Record<string, RecordLevel | undefined> = { call: 'callWall', put: 'putWall', flip: 'flip', supreme: 'supreme' };
 
 // ---- the strip ----------------------------------------------------------------
 
 const SW = 600;
-const SH = 40; /* tall enough for price's path around the level (the paying-user audit's H4) — the row is ~80px anyway */
+/* 28px since the report became one table (2026-10-14): a 40px row holds it, with price's path around the level still
+   readable (the paying-user audit's H4) */
+const SH = 28;
 
 const SessionStrip = ({ row, bars }: { row: Row; bars: readonly Candle[] }) => {
   const ref = useRef<SVGSVGElement>(null);
@@ -152,6 +156,10 @@ const SessionStrip = ({ row, bars }: { row: Row; bars: readonly Candle[] }) => {
   );
 };
 
+/* THE TABLE'S COLUMNS — the head row and every level row share them. On a phone: the level (its strike beside it), the
+   three counts and the last touch; the strip, the trend and the base rate are the desk's. */
+const GRID = 'grid gap-x-4 px-5 grid-cols-[minmax(0,1fr)_36px_36px_40px_48px] lg:grid-cols-[minmax(150px,1.1fr)_64px_minmax(180px,2fr)_40px_40px_44px_48px_minmax(120px,1fr)_92px]';
+
 // ---- the section ----------------------------------------------------------------
 
 /** `scope`: the host's chip saying which name's levels these are */
@@ -173,9 +181,11 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
       const pct = read?.changePct ?? null;
       const size = pct == null ? '' : Math.abs(pct) >= 300 ? ` · ${(1 + pct / 100).toFixed(0)}× the open` : ` ${pct > 0 ? '+' : ''}${pct.toFixed(0)}%`;
       const trend = !read || read.trend === 'FLAT' ? 'flat since the open' : read.trend === 'NEW' ? 'new since the open' : `${read.trend === 'BUILDING' ? 'growing' : 'shrinking'}${size}`;
+      const trendFig = !read || read.trend === 'FLAT' || read.trend === 'NEW' || pct == null ? '' : Math.abs(pct) >= 300 ? `${(1 + pct / 100).toFixed(0)}×` : `${pct > 0 ? '+' : '−'}${Math.abs(pct).toFixed(0)}%`;
+      const trendWord = !read || read.trend === 'FLAT' ? 'flat' : read.trend === 'NEW' ? 'new today' : read.trend === 'BUILDING' ? 'growing' : 'shrinking';
       const grade: Row['grade'] =
         tests === 0 ? { words: 'untested', tone: 'quiet' } : broke === 0 ? { words: `held every test`, tone: 'good' } : held === 0 ? { words: 'broke every test', tone: 'bad' } : { words: `broke ${broke} of ${tests}`, tone: broke * 2 >= tests ? 'bad' : 'quiet' };
-      return { key, label, ink, labels: [{ label, ink }], price, side, ticks, tests, held, broke, last: read?.lastTouch ?? null, trend, grade };
+      return { key, label, ink, labels: [{ label, ink }], price, side, ticks, tests, held, broke, last: read?.lastTouch ?? null, trend, trendFig, trendWord, grade, rate: RATE_OF[key] ?? null };
     };
     const spot = levels.spot;
     const out: Row[] = [
@@ -195,6 +205,7 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
       const last = merged[merged.length - 1];
       if (last && Math.abs(last.price - r.price) < 1e-9 && last.side === r.side) {
         last.labels.push({ label: r.label, ink: r.ink });
+        last.rate = last.rate ?? r.rate;
         last.key = `${last.key}+${r.key}`;
         last.label = `${last.label} · ${r.label}`;
       } else merged.push(r);
@@ -207,8 +218,6 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
 
   const first = bars[0]?.time;
   const last = bars[bars.length - 1]?.time;
-  /* the levels, counted before the merge — "3 levels" read as two missing (the re-audit's L11) */
-  const levelCount = rows.reduce((n, r) => n + r.labels.length, 0);
   /* The guide as a focus over the whole box (the house pattern, 2026-09-06) */
   const [guideOpen, setGuideOpen] = useState(false);
   /* the box folds to its head, remembered (data/boxFold.ts) */
@@ -219,98 +228,95 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { sn
       <GuideFocus open={guideOpen} onClose={() => setGuideOpen(false)} title="How to read the report" testId="report-guide" viewport>
         <ReportGuide rows={rows.map(r => ({ label: r.label, price: r.price, tests: r.tests, held: r.held, broke: r.broke, grade: r.grade.words, trend: r.trend }))} bars={bars.length} from={first != null ? hhmm(first) : null} />
       </GuideFocus>
-      <div className="px-5 pt-4 pb-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h3 className="text-[16px] font-semibold leading-tight text-textPrimary">How the levels held today</h3>
-          {scope}
-          <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the rows, the strips and the ticks mean" testId="report-guide" />
-          <FoldDoor open={open} onToggle={toggleOpen} what="the report" testId="report" />
-        </div>
-        {/* one line (the owner, 2026-10-14: "too much small grey text"); what a test and a break are is the guide's */}
-        <p className="mt-0.5 text-[11px] text-textMuted">
-          Every test of today's levels{levelsScope === 'ALL' ? ', off every listed date' : ''}{first != null && last != null ? ` · ${hhmm(first)} to ${hhmm(last)}` : ''}
-        </p>
-        {/* THE BASE RATES AS THE BOX'S OWN FACTS (the re-audit's M8): a labelled figure each, not a sentence that said
-            "held its first test" four times over two lines */}
-        {rates.sessions > 0 && (
-          <div className="mt-1.5" title="Each session's levels are read off the first book kept that morning, never a later one — no look-ahead; the rule for a test and a break is this report's" data-base-rates={rates.sessions}>
-            {/* the lead says what the figures are, once; the facts carry the figures (the re-audit's M6: "held its first
-                test" four times over was the sentence's fault, and it had come back as four labels) */}
-            <p className="text-[11px] text-textMuted">
-              Before today · how often a level's first test held, over {rates.sessions} {rates.sessions === 1 ? 'session' : 'sessions'}
-            </p>
-            <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 max-lg:grid max-lg:grid-cols-2 max-lg:gap-x-4">
-              {RECORD_LEVELS.filter(k => rates.levels[k].tested > 0).map(k => (
-                <div key={k} className="flex items-baseline gap-1.5" data-base-rate={k}>
-                  <dt className="text-[11px] text-textMuted">{RECORD_WORDS[k].charAt(0).toUpperCase() + RECORD_WORDS[k].slice(1)}</dt>
-                  <dd className="font-mono text-[12px] tnum text-textPrimary">
-                    {rates.levels[k].heldFirst} of {rates.levels[k].tested}
-                  </dd>
-                </div>
-              ))}
-              {rates.insideMove.n > 0 && (
-                <div className="flex items-baseline gap-1.5 max-lg:col-span-2" data-base-rate="close">
-                  <dt className="text-[11px] text-textMuted">Close inside one expected move</dt>
-                  <dd className="font-mono text-[12px] tnum text-textPrimary">
-                    {rates.insideMove.inside} of {rates.insideMove.n}
-                  </dd>
-                </div>
-              )}
-            </dl>
-          </div>
+      {/* THE HEAD: the name, its scope, its doors, and the one base rate that is not a row's (2026-10-14, the owner: the
+          report was "AI slop" — a subtitle, a sentence over four labelled figures, a pill restating every row's counts, and
+          five labels printed over again on each row). What a test and a break are, and how the rates are graded, is the
+          guide's. */}
+      <div className="px-5 pt-4 pb-3 flex items-center gap-x-3 gap-y-2 flex-wrap">
+        <h3 className="text-[16px] font-semibold leading-tight text-textPrimary">How the levels held today</h3>
+        {scope}
+        <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the rows, the strips and the ticks mean" testId="report-guide" />
+        <FoldDoor open={open} onToggle={toggleOpen} what="the report" testId="report" />
+        {rates.insideMove.n > 0 && (
+          <span
+            className="ml-auto inline-flex items-baseline gap-2 font-mono whitespace-nowrap"
+            title={`How many of the ${rates.insideMove.n} sessions before today closed inside the one move their options priced at the open`}
+            data-base-rate="close"
+            data-base-rates={rates.sessions}
+          >
+            <span className="text-[11px] uppercase tracking-wider text-textMuted">Closed inside the expected move</span>
+            <span className="text-[13px] font-semibold tnum text-textPrimary">
+              {rates.insideMove.inside} of {rates.insideMove.n}
+            </span>
+          </span>
         )}
       </div>
       {open && (
-      <ul className="flex flex-col" data-level-rows>
-        {rows.map(r => {
-          const isFocus = focus != null && Math.abs(focus - r.price) < 1e-9;
-          const facts: { k: string; v: string; cls?: string }[] = [
-            { k: 'Tests', v: String(r.tests) },
-            { k: 'Held', v: String(r.held), cls: r.held > 0 ? 'text-bull' : undefined },
-            { k: 'Broke', v: String(r.broke), cls: r.broke > 0 ? 'text-bear' : undefined },
-            { k: 'Last touched', v: r.last ?? '—' },
-            { k: 'Gamma since the open', v: r.trend },
-          ];
-          return (
-            <li key={r.key} className={`border-t border-borderSubtle/50 ${isFocus ? 'bg-silver/[0.04]' : ''}`} data-level={r.key}>
-              {/* One column on a phone (the phone pass, 2026-09-13): the level, its strip, its facts under each other */}
-              <div className="grid grid-cols-[200px_minmax(0,1fr)_auto] items-center gap-6 px-5 py-3 max-lg:grid-cols-1 max-lg:gap-3">
-                {/* on a phone the name, the price and the chip share one line (the re-audit's M6): a 232px row became ~180 */}
-                <button onClick={() => onPick(r.price)} className="hit text-left min-w-0 group max-lg:flex max-lg:flex-wrap max-lg:items-center max-lg:gap-x-3 max-lg:gap-y-1" title={`${r.label} ${fmtStrike(r.price)} — click to make this the strike`} data-level-pick>
-                  <span className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] font-semibold" data-level-labels={r.labels.length}>
-                    {r.labels.map((l, i) => (
-                      <span key={l.label} style={{ color: l.ink }}>
-                        {i > 0 && <span className="font-normal text-textMuted">· </span>}
-                        {l.label}
-                      </span>
-                    ))}
+        <div className="font-mono" role="table" aria-label="Today's levels and how each held" data-level-rows>
+          {/* THE COLUMNS, NAMED ONCE (the matrix's own head): a row per level under them */}
+          <div className={`${GRID} h-8 items-center border-t border-borderSubtle/60 text-[11px] uppercase tracking-wider text-textMuted`} role="row">
+            <span role="columnheader">Level</span>
+            <span role="columnheader" className="max-lg:hidden text-right">Strike</span>
+            <span role="columnheader" className="max-lg:hidden">
+              Session <span className="normal-case tracking-normal tnum">{first != null ? `${hhmm(first)} → ${last != null ? hhmm(last) : 'now'}` : ''}</span>
+            </span>
+            <span role="columnheader" className="text-right">Tests</span>
+            <span role="columnheader" className="text-right">Held</span>
+            <span role="columnheader" className="text-right">Broke</span>
+            <span role="columnheader" className="text-right">Last</span>
+            <span role="columnheader" className="max-lg:hidden">Gamma since open</span>
+            <span role="columnheader" className="max-lg:hidden text-right whitespace-nowrap" title={rates.sessions > 0 ? `How often the level's first test held, over the ${rates.sessions} sessions before today — each read off its own open, never a later book` : 'No sessions before today on hand'}>
+              Before today
+            </span>
+          </div>
+          {rows.map(r => {
+            const isFocus = focus != null && Math.abs(focus - r.price) < 1e-9;
+            const rate = r.rate && rates.levels[r.rate].tested > 0 ? rates.levels[r.rate] : null;
+            return (
+              <div key={r.key} role="row" className={`border-t border-borderSubtle/40 ${isFocus ? 'bg-silver/[0.05]' : ''}`} data-level={r.key}>
+                {/* THE WHOLE ROW KEEPS THE STRIKE (the audit: only the name did, and the row read as the target) */}
+                <button
+                  type="button"
+                  onClick={() => onPick(r.price)}
+                  className={`${GRID} w-full min-h-10 py-1.5 items-center text-left hover:bg-ink/[0.03] transition-colors group`}
+                  title={`${r.label} ${fmtStrike(r.price)} — ${r.grade.words} · click to keep the strike`}
+                  aria-pressed={isFocus}
+                  data-level-pick
+                >
+                  <span className="min-w-0 flex items-baseline gap-x-2 flex-wrap" role="cell">
+                    <span className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] font-semibold uppercase tracking-wider" data-level-labels={r.labels.length}>
+                      {r.labels.map((l, i) => (
+                        <span key={l.label} style={{ color: l.ink }}>
+                          {i > 0 && <span className="font-normal text-textMuted">· </span>}
+                          {l.label}
+                        </span>
+                      ))}
+                    </span>
+                    {/* on a phone the strike rides beside the name; on the desk it has its own column */}
+                    <span className={`lg:hidden text-[13px] font-semibold tnum ${isFocus ? 'text-silver' : 'text-textPrimary'}`}>{fmtStrike(r.price)}</span>
                   </span>
-                  <span className={`block max-lg:inline-block font-mono text-[18px] font-semibold tnum leading-tight ${isFocus ? 'text-silver' : 'text-textPrimary group-hover:text-silver'} transition-colors`}>{fmtStrike(r.price)}</span>
-                  <span className={`mt-1 max-lg:mt-0 inline-flex items-center h-5 px-2 rounded-full border text-[11px] font-medium ${TONE[r.grade.tone]}`} data-grade>
-                    {r.grade.words}
+                  <span role="cell" className={`max-lg:hidden text-right text-[13px] font-semibold tnum ${isFocus ? 'text-silver' : 'text-textPrimary group-hover:text-silver'}`}>
+                    {fmtStrike(r.price)}
+                  </span>
+                  <span role="cell" className="max-lg:hidden min-w-0">
+                    <SessionStrip row={r} bars={bars} />
+                  </span>
+                  <span role="cell" className="text-right text-[12px] tnum text-textPrimary">{r.tests}</span>
+                  <span role="cell" className={`text-right text-[12px] tnum ${r.held > 0 ? 'text-bull' : 'text-textMuted'}`}>{r.held}</span>
+                  <span role="cell" className={`text-right text-[12px] tnum ${r.broke > 0 ? 'text-bear' : 'text-textMuted'}`}>{r.broke}</span>
+                  <span role="cell" className={`text-right text-[12px] tnum ${r.last ? 'text-textPrimary' : 'text-textMuted'}`}>{r.last ?? '—'}</span>
+                  <span role="cell" className="max-lg:hidden min-w-0 whitespace-nowrap text-[12px]">
+                    {r.trendFig && <span className="tnum font-semibold text-textPrimary mr-1.5">{r.trendFig}</span>}
+                    <span className="text-textSecondary">{r.trendWord}</span>
+                  </span>
+                  <span role="cell" className={`max-lg:hidden text-right text-[12px] tnum ${rate ? 'text-textPrimary' : 'text-textMuted'}`} data-base-rate={r.rate ?? undefined}>
+                    {rate ? `${rate.heldFirst} of ${rate.tested}` : '—'}
                   </span>
                 </button>
-                <div className="min-w-0">
-                  <SessionStrip row={r} bars={bars} />
-                  <div className="flex justify-between font-mono text-[11px] tnum text-textMuted px-1 -mt-0.5">
-                    <span>{first != null ? hhmm(first) : ''}</span>
-                    <span>now</span>
-                  </div>
-                </div>
-                {/* Fixed tracks, so every row's strip ends on the same line whatever the words in the last fact */}
-                <dl className="grid grid-cols-[52px_52px_52px_88px_172px] gap-x-5 max-lg:grid-cols-3 max-lg:gap-x-4 max-lg:gap-y-2">
-                  {facts.map(f => (
-                    <div key={f.k} className="min-w-0">
-                      <dt className="text-[11px] text-textMuted whitespace-nowrap">{f.k}</dt>
-                      <dd className={`mt-0.5 font-mono text-[12px] tnum whitespace-nowrap ${f.cls ?? 'text-textPrimary'}`}>{f.v}</dd>
-                    </div>
-                  ))}
-                </dl>
               </div>
-            </li>
-          );
-        })}
-      </ul>
+            );
+          })}
+        </div>
       )}
     </section>
   );
