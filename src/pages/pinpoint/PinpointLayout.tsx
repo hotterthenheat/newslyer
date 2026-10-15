@@ -160,6 +160,12 @@ const PinpointLayout = () => {
   const flipAtSpot = flipDist !== null && gauge != null && flipDist < gauge.spot * 0.00005;
   /* Which page this is — its name, its icon and one line, from the registry the sidebar reads */
   const page = GEX_SUBPAGES.find(p => location.pathname.startsWith(p.path)) ?? GEX_SUBPAGES[0];
+  /* THE MAP'S FACTS ARE ITS COLUMNS' (the owner, 2026-10-14: "what if i have 3 or 4 names up? makes no sense to have this
+     up"): the Map's book can hold four names, and the head printed one's price, flip and dealers over all of them — each
+     column carries its own now (gex/ColumnFacts.tsx), so the head here is the page's name, a kept strike, a replay and
+     the two cards, and the strip that repeated the facts on a scroll stands down with them. Every other Pinpoint page is
+     one name's, and keeps its head. */
+  const onMap = location.pathname.startsWith('/pinpoint/map');
 
   /* THE CLOCK TO THE CLOSE — New York time, re-read every 15s */
   const [clock, setClock] = useState(() => readSessionClock());
@@ -234,7 +240,7 @@ const PinpointLayout = () => {
             between when its words fit */}
         {/* on a phone the facts take the next line whole, under the name */}
         <div className="flex-[3_1_0%] min-w-0 max-sm:basis-full flex items-center gap-x-4 gap-y-2 flex-wrap" data-shell-side>
-          {gauge && (
+          {gauge && !onMap && (
             <div className={`flex items-center flex-wrap gap-x-4 sm:gap-x-0 gap-y-1 ${replaying ? 'opacity-70' : ''}`} data-shell-facts data-shell-facts-live={replaying ? '' : undefined} title={replaying ? 'Live — the replay rewinds the boxes, not these facts' : undefined}>
               {spot != null && (
                 <Fact label={activeTicker} testId="price" hero>
@@ -297,43 +303,45 @@ const PinpointLayout = () => {
       {/* -mt-4: a box of no height is still a child of the column, and the column's 16px gap fell on both sides of it —
           32px between the head and the page (the paying-user audit's M1). Not on a phone: the jump links stick there,
           and two stuck rows ate a fifth of the screen (M7). Opaque: the capsules showed through the 95% ground. */}
-      <div className="hidden sm:block sticky top-0 z-30 h-0 -mt-4" data-shell-stuck={stuck ? '' : undefined}>
-        <div
-          className={`absolute inset-x-0 top-0 h-9 flex items-center gap-x-5 overflow-hidden whitespace-nowrap border-b border-borderSubtle bg-panel px-3 font-mono text-[11px] ${stuck ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-          aria-hidden={!stuck}
-          data-shell-strip
-        >
-          <span className="font-semibold text-textPrimary">{activeTicker}</span>
-          {spot != null && <span className="tnum text-textPrimary">{spot.toFixed(2)}</span>}
-          {gauge?.regime && <span style={{ color: gauge.regime === 'SHORT' ? AMPLIFY : ABSORB }}>dealers {DEALER_WORDS[gauge.regime]}</span>}
-          {gauge?.flip != null && (
-            <span className="text-textSecondary">
-              flip <span className="font-semibold tnum" style={{ color: FLIP }}>{fmt(gauge.flip)}</span>
-              {flipLead && (flipAtSpot ? ' · at spot' : ` · ${flipLead} ${gauge.distAbs! > 0 ? 'above' : 'below'} spot`)}
-              {flipRead && flipRead.tests > 0 && ` · ${flipHeld}`}
-            </span>
-          )}
-          {walls && (
-            <span className="text-textSecondary" data-strip-walls>
-              put wall <span className="font-semibold tnum" style={{ color: PUT_WALL }}>{fmtStrike(walls.putWall)}</span>
-              {' · '}call wall <span className="font-semibold tnum" style={{ color: CALL_WALL }}>{fmtStrike(walls.callWall)}</span>
-              {Number.isFinite(walls.supreme) && walls.supreme > 0 && (
-                <>
-                  {' · '}supreme <span className="font-semibold tnum" style={{ color: SUPREME }}>{fmtStrike(walls.supreme)}</span>
-                </>
-              )}
-            </span>
-          )}
-          <span className="text-textSecondary">{open ? `${untilBell(clock.secondsToClose)} to the close` : clock.label.toLowerCase()}</span>
-          {focused != null && (
-            <span className="text-silver">
-              kept {fmtStrike(focused)}
-              {keptLead ? ` · ${keptLead}` : ''}
-            </span>
-          )}
-          {replaying && <span className="text-silver">replaying {replaying}</span>}
+      {!onMap && (
+        <div className="hidden sm:block sticky top-0 z-30 h-0 -mt-4" data-shell-stuck={stuck ? '' : undefined}>
+          <div
+            className={`absolute inset-x-0 top-0 h-9 flex items-center gap-x-5 overflow-hidden whitespace-nowrap border-b border-borderSubtle bg-panel px-3 font-mono text-[11px] ${stuck ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            aria-hidden={!stuck}
+            data-shell-strip
+          >
+            <span className="font-semibold text-textPrimary">{activeTicker}</span>
+            {spot != null && <span className="tnum text-textPrimary">{spot.toFixed(2)}</span>}
+            {gauge?.regime && <span style={{ color: gauge.regime === 'SHORT' ? AMPLIFY : ABSORB }}>dealers {DEALER_WORDS[gauge.regime]}</span>}
+            {gauge?.flip != null && (
+              <span className="text-textSecondary">
+                flip <span className="font-semibold tnum" style={{ color: FLIP }}>{fmt(gauge.flip)}</span>
+                {flipLead && (flipAtSpot ? ' · at spot' : ` · ${flipLead} ${gauge.distAbs! > 0 ? 'above' : 'below'} spot`)}
+                {flipRead && flipRead.tests > 0 && ` · ${flipHeld}`}
+              </span>
+            )}
+            {walls && (
+              <span className="text-textSecondary" data-strip-walls>
+                put wall <span className="font-semibold tnum" style={{ color: PUT_WALL }}>{fmtStrike(walls.putWall)}</span>
+                {' · '}call wall <span className="font-semibold tnum" style={{ color: CALL_WALL }}>{fmtStrike(walls.callWall)}</span>
+                {Number.isFinite(walls.supreme) && walls.supreme > 0 && (
+                  <>
+                    {' · '}supreme <span className="font-semibold tnum" style={{ color: SUPREME }}>{fmtStrike(walls.supreme)}</span>
+                  </>
+                )}
+              </span>
+            )}
+            <span className="text-textSecondary">{open ? `${untilBell(clock.secondsToClose)} to the close` : clock.label.toLowerCase()}</span>
+            {focused != null && (
+              <span className="text-silver">
+                kept {fmtStrike(focused)}
+                {keptLead ? ` · ${keptLead}` : ''}
+              </span>
+            )}
+            {replaying && <span className="text-silver">replaying {replaying}</span>}
+          </div>
         </div>
-      </div>
+      )}
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div

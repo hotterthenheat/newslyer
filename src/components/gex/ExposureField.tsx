@@ -49,7 +49,6 @@ import LedgerGuide, { guideTitle } from './LedgerGuide';
 import { attachScrollMore } from '../ui/scrollMore';
 import { FLAT_DOOR, FLAT_ON } from '../ui/flatDoor';
 import { createPortal } from 'react-dom';
-import { motion } from 'framer-motion';
 import { ArrowLeft, Crosshair, Maximize2, Minimize2, Plus, X } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import TickerLookup from '../ui/TickerLookup';
@@ -65,12 +64,12 @@ import { useFadeClose } from '../ui/useFadeClose';
 import { fmtUsd } from '../../data/gex';
 import { STRIKE_WINDOWS, type StrikeWindow } from '../../data/exposure';
 import { useLevelsScope } from '../../data/levelsScope';
+import ColumnFacts from './ColumnFacts';
 import { roomLevels } from '../../data/roomLevels';
 import { useLedgerPalette } from '../../data/ledgerPalette';
 import MoreDoor from './MoreDoor';
 import { buildExposureSurface, CALENDAR_DTES, GREEKS, type ExposureSurface, type Greek } from '../../data/exposureSurface';
 import { snapshotAtOpen } from '../../data/levelview';
-import { beginGlide } from '../../core/glide';
 import { HEAT_MODE, heatCellStyle, heatRampColorFor } from './heatmap';
 import type { MarketSnapshot } from '../../types/market';
 import { VIEWS_FOR, readLedgerView, writeLedgerView, type LedgerView } from './ledgerView';
@@ -127,8 +126,6 @@ interface ExposureFieldProps {
   /** A bar across the top of the book, under the band — the Map's replay transport (2026-10-13: in the band it widened the
       band and the page under it jumped 34px) */
   above?: ReactNode;
-  /** THE BOX'S GRIP (the Map, 2026-10-14 — ui/BoxGrip.tsx): drawn first on the band, the handle the book box is moved by */
-  grip?: ReactNode;
   /** THE FULLSCREEN'S SHAPE (Noah, 2026-09-10: "i really love the full screen
       transition on the two books on one ruler … make that the same for the
       heatmap and ladder"): 'move' = the ruler's own — THIS BOX glides to the
@@ -301,7 +298,7 @@ const SHOW_OPTIONS: DropdownOption<'now' | 'after'>[] = [
   { value: 'after', label: 'After the close', hint: "The same calendar once today's contracts have expired" },
 ];
 
-const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike, openRatio, onTicker, toolbar = 'desk', marks, lead, greeks: greeksProp, onGreeks, fresh = false, after, fullMode = 'portal', fullOpen, headFull = false, multi = false, selectedStrikeFor, onSelectStrikeFor, snapshotFor, onNaturalWidth, onBandNeed, headSlot, pack = false, above, grip }: ExposureFieldProps) => {
+const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike, openRatio, onTicker, toolbar = 'desk', marks, lead, greeks: greeksProp, onGreeks, fresh = false, after, fullMode = 'portal', fullOpen, headFull = false, multi = false, selectedStrikeFor, onSelectStrikeFor, snapshotFor, onNaturalWidth, onBandNeed, headSlot, pack = false, above }: ExposureFieldProps) => {
   const [ownPick, setOwnPick] = useState<string[]>(['gex']);
   const pick = greeksProp ?? ownPick;
   /* the page's theme: on paper the island and everything drawn in it wear the light set and the paper ramps */
@@ -822,10 +819,11 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
     const namesChanged = namesSeen.current !== names;
     namesSeen.current = names;
     for (const t of names) {
-      /* cold, OR JUST ARRIVED (2026-10-12): a skeleton until warmed — a known name's book is ~50ms to build, and
-         built in the click's own task it held the glide's first frames (a 104ms task, the widths in seven jumps);
-         built on the timer below, after the glide, it lands at rest and the column fades in as a cold one does */
-      if (!Simulator.TICKERS[t] || arrivingRef.current.has(t)) {
+      /* COLD ONLY WHEN IT HAS TO BE (the owner, 2026-10-14: the motion when a name is added "is very harsh"): a name
+         whose history is already walked builds its book in the click (~50ms) and stands whole in the first frame — no
+         skeleton pulsing in a sliver of a column, no figures popping in after it. A name never walked (a free-entry
+         ticker, or one the boot hasn't reached) stands as its skeleton while it seeds, as before. */
+      if (!Simulator.TICKERS[t] || (arrivingRef.current.has(t) && !Simulator.isSeeded(t))) {
         if (!warmedRef.current.has(t)) {
           out.push({ ticker: t, book: null });
           continue;
@@ -1249,7 +1247,6 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const head = toolbar === 'band' ? (
     bandRows === 'one' ? (
       <div ref={bandRef} className="shrink-0 flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-1.5 border-b border-borderSubtle/60 bg-panel" data-ledger-toolbar data-ledger-toolbar-rows="one" data-ledger-toolbar-mode={bandMode}>
-        {!full && grip}
         {backButton}
         {leadFold}
         {strips}
@@ -1260,7 +1257,6 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
          thumb's box (.hit, index.css) needs the row itself to be the box */
       <div ref={bandRef} className={`shrink-0 flex flex-col px-3 border-b border-borderSubtle/60 bg-panel ${bandScroll ? 'gap-y-0 py-0' : 'gap-y-1.5 py-1.5'}`} data-ledger-toolbar data-ledger-toolbar-rows="two" data-ledger-toolbar-mode={bandMode} data-ledger-toolbar-scroll={bandScroll ? '' : undefined}>
         <div className={`flex items-center gap-x-2 gap-y-1.5 ${bandScroll ? 'flex-nowrap overflow-x-auto scroll-row [&>*]:shrink-0 py-2' : 'flex-wrap'}`} data-ledger-toolbar-row="picks">
-          {!full && grip}
           {backButton}
           {leadFold}
           {strips}
@@ -1335,14 +1331,10 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const islandRoomNow = islandRef.current?.parentElement?.clientWidth ?? 0;
   const carousel = islandRoomNow > 0 && islandRoomNow < 640 && allColumns.filter(c => !c.leaving).length > 1;
   const targetTracks = Array.from({ length: TRACKS }, (_, i) => (i < allColumns.length && !allColumns[i].leaving ? (carousel ? 'calc(100% - 8px)' : '1fr') : carousel ? '0px' : '0fr')).join(' ');
-  const [tracks, setTracks] = useState(targetTracks);
-  /* THE RE-SLOT IS A SNAP, NOT A GLIDE (2026-10-12, Noah's video: the middle name gone, "one of the collapsed
-     calendars does a resize quickly which shows that black figure then goes back to normal"): when a column that
-     has finished leaving is dropped from the DOM, the columns after it move one slot left — the same widths in
-     the next tracks over — and a transition between the two track lists animated that shift, collapsing the
-     column after the gap to nothing and growing it back. That change lands at once, with no transition for the
-     frame it lands in, so nothing is seen to move. */
-  const [snap, setSnap] = useState(false);
+  /* THE TRACKS ARE THE COLUMNS, AT ONCE (the owner, 2026-10-14): a name added or taken off moved the tracks a frame
+     after the columns, with a glide that held every pane's measure for 80ms — the new column stood 2px wide for a frame,
+     then the widths landed in steps. The tracks are now the columns' own, in the same commit, and nothing glides. */
+  const tracks = targetTracks;
   /* THE PROMISE (2026-10-12, with the columns' glide): every column says the width it will have when the tracks
      settle — the island's inner width shared by the columns staying — so each pane lays itself out for the
      destination at once and holds there through the glide (ExposureLedger reads it as `promisedWidth`) */
@@ -1358,39 +1350,18 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
   const naturalW = packs && paneNatural > 0 ? staying * (paneNatural + 2 + (many ? 8 : 0)) + (many ? 8 : 0) : 0;
   const islandMax = pack && !full ? naturalW : 0;
   const islandRoom = islandRef.current?.parentElement?.clientWidth ?? islandRef.current?.clientWidth ?? 0;
+  /* THE ROOM AS IT IS AFTER THE COMMIT (2026-10-14): the island's room is read in render, off the DOM the last commit
+     left — a name added made the host widen the book in the same commit, and the panes were drawn one frame at the old
+     room's share (204px each) before they took the new one. Re-read before paint, re-rendered at once if it moved. */
+  const roomSeen = useRef(0);
+  roomSeen.current = islandRoom;
+  const [, reroom] = useState(0);
+  useLayoutEffect(() => {
+    const now = islandRef.current?.parentElement?.clientWidth ?? islandRef.current?.clientWidth ?? 0;
+    if (now !== roomSeen.current) reroom(n => n + 1);
+  });
   const islandW = islandMax > 0 && islandRoom > 0 ? Math.min(islandMax, islandRoom) : islandRef.current?.clientWidth ?? 0;
   const tileW = carousel ? Math.max(0, islandW - 16) : islandW > 0 && staying > 0 ? Math.floor((islandW - (many ? 8 : 0)) / staying) : 0;
-  /* …and the glide is declared the moment the columns change, AFTER the commit (so the promise is already in the
-     DOM when the panes read it), never before: `beginGlide` runs its starters at once */
-  const columnsKey = allColumns.map(c => `${c.ticker}:${c.leaving ? 0 : 1}`).join(' ');
-  const columnsSeen = useRef(allColumns.map(c => ({ t: c.ticker, leaving: c.leaving })));
-  useLayoutEffect(() => {
-    const prev = columnsSeen.current;
-    const now = allColumns.map(c => ({ t: c.ticker, leaving: c.leaving }));
-    columnsSeen.current = now;
-    if (tracks === targetTracks) return;
-    /* a re-slot: a column that was leaving is gone and nothing else changed — snap the tracks in this same
-       commit, before paint, with the transition off for the frame; no glide, nothing moves */
-    const reslot = prev.some(p => p.leaving && !now.some(n => n.t === p.t)) && now.every(n => prev.some(p => p.t === n.t && p.leaving === n.leaving));
-    if (reslot) {
-      setSnap(true);
-      setTracks(targetTracks);
-      return;
-    }
-    /* a glide: declared now, after the commit (the promise is in the DOM for the panes to read); the tracks move
-       one frame later, once every pane has re-fit */
-    beginGlide(LEAVE_MS + 80, 'snap');
-    const id = requestAnimationFrame(() => setTracks(targetTracks));
-    return () => cancelAnimationFrame(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnsKey, targetTracks, tracks]);
-  /* the transition comes back a frame after a snap — in an effect of its own, so the tracks' change (which re-runs
-     the effect above and its cleanup) cannot cancel the restore; cancelled, the island never glided again */
-  useEffect(() => {
-    if (!snap) return;
-    const id = requestAnimationFrame(() => setSnap(false));
-    return () => cancelAnimationFrame(id);
-  }, [snap]);
 
   /* the band's named row is the floor — measured once it has been drawn with its words, the widest band's threshold until
      then, so a box packing to one narrow pane never squeezes the band into its phone rows before it has been measured */
@@ -1399,7 +1370,8 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
     if (namedNeed > 0) onBandNeed?.(namedNeed);
   }, [namedNeed, onBandNeed]);
   const hostNatural = naturalW > 0 ? (headOut ? naturalW : Math.max(naturalW, namedNeed > 0 ? namedNeed + 48 : BAND_ONE_ROW_PX)) + 2 : 0;
-  useEffect(() => {
+  /* told before paint (a layout effect): the Map sizes the book and decides where the day box stands in the same frame */
+  useLayoutEffect(() => {
     onNaturalWidth?.(hostNatural);
   }, [hostNatural, onNaturalWidth]);
 
@@ -1438,7 +1410,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
            the dark terminal keeps its black island to the digit */
         data-theme={paper ? 'light' : 'dark'}
         className={`relative flex-1 min-h-0 grid motion-reduce:transition-none ${many ? 'bg-canvas p-1' : paper ? 'bg-inset p-0' : 'bg-panel p-0'}`}
-        style={{ gridTemplateColumns: tracks, maxWidth: islandMax > 0 ? islandMax : undefined, ...(carousel ? { overflowX: 'auto', scrollSnapType: 'x mandatory', overscrollBehaviorX: 'contain' } : null), transition: snap ? 'none' : `grid-template-columns ${LEAVE_MS}ms ${EASE}, padding ${LEAVE_MS}ms ${EASE}, background-color ${LEAVE_MS}ms ${EASE}` }}
+        style={{ gridTemplateColumns: tracks, maxWidth: islandMax > 0 ? islandMax : undefined, ...(carousel ? { overflowX: 'auto', scrollSnapType: 'x mandatory', overscrollBehaviorX: 'contain' } : null) }}
         ref={islandRef}
         data-field-packed={islandMax > 0 ? islandMax : undefined}
         data-field-island
@@ -1619,42 +1591,10 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
                     {removeDoor}
                   </div>
                 </div>
-                {/* EACH NAME'S OWN FACTS OVER ITS OWN COLUMN (the owner, 2026-10-14: "if i have 4 names up i have the 1st
-                    ones info on the top"): the page's head is the room's name alone, so a name beside it carries its
-                    price, its flip and its dealers here — the head's grammar, one size down — and the host's column
-                    too, so four names read four ways alike */}
-                {(() => {
-                  const sp = book.snapshot.spot;
-                  const ch = book.snapshot.changePercent ?? 0;
-                  const lv = roomLevels(book.snapshot, levelsScope);
-                  const fl = lv && lv.flip != null && Number.isFinite(lv.flip) ? lv.flip : null;
-                  const absorb = fl != null && sp >= fl;
-                  return (
-                    <div className="flex items-center gap-x-3 px-3 h-7 border-b border-borderSubtle/60 font-mono whitespace-nowrap overflow-hidden" data-field-column-facts={c.ticker}>
-                      <span className="text-[13px] font-semibold tnum text-textPrimary">{sp.toFixed(2)}</span>
-                      <span className={`text-[11px] tnum ${ch >= 0 ? 'text-bull' : 'text-bear'}`}>
-                        {ch >= 0 ? '+' : ''}
-                        {ch.toFixed(2)}%
-                      </span>
-                      <span className="inline-flex items-baseline gap-1.5 border-l border-borderSubtle pl-3">
-                        <span className="text-[11px] uppercase tracking-wider text-textMuted">Flip</span>
-                        <span className="text-[11px] font-semibold tnum text-textPrimary">{fl != null ? fmtStrike(fl) : '—'}</span>
-                        {fl != null && !tight && (
-                          <span className="text-[11px] tnum text-textMuted">
-                            ${Math.abs(fl - sp).toFixed(2)} {fl >= sp ? 'above' : 'below'}
-                          </span>
-                        )}
-                      </span>
-                      <span className="inline-flex items-baseline gap-1.5 border-l border-borderSubtle pl-3">
-                        <span className="text-[11px] uppercase tracking-wider text-textMuted">Dealers</span>
-                        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: fl == null ? undefined : absorb ? ABSORB : AMPLIFY }}>
-                          {fl == null ? '—' : absorb ? 'absorb' : 'amplify'}
-                        </span>
-                      </span>
-                    </div>
-                  );
-                })()}
               </Fold>
+              {/* EACH NAME'S OWN FACTS OVER ITS OWN COLUMN, one name or four (the owner, 2026-10-14: the head printed the
+                  room's name alone above a book of four) — ColumnFacts.tsx */}
+              <ColumnFacts ticker={c.ticker} snapshot={book.snapshot} scope={levelsScope} width={tileW} fresh={fresh} />
               <div className="relative flex-1 min-h-0" data-ledger-body={c.ticker}>
                 {/* the arriving view fades in — opacity only, the way a box of figures is allowed to */}
                 {/* the shape on screen: out on the old, in on the new (the soft swap above) */}
@@ -1753,14 +1693,12 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
     </div>
   );
 
-  /* THE SAME BOX, MOVED (the ruler's own, Compare.tsx): one motion.div wears
-     the page's shape or the viewport's, and the layout animation glides it
-     between the two — the head, the grid and the ladder never remount */
+  /* THE SAME BOX, MOVED (the ruler's own, Compare.tsx): one box wears the page's shape or the viewport's — the head, the
+     grid and the ladder never remount. No layout animation since 2026-10-14 (the owner: no motion between states): a
+     layout box painted one frame at its old size whenever the book's width changed, a name added among them */
   if (fullMode === 'move') {
     return (
-      <motion.div
-        layout
-        transition={{ layout: { duration: 0 } }}
+      <div
         /* THE GROUND IS THE PAGE'S when full (Noah, 2026-09-10: "the background
            becomes more ashy/gray when we full screen the ladder") — the box's
            panel grey over a whole screen read as a wash; the canvas black is
@@ -1769,7 +1707,7 @@ const ExposureField = ({ snapshot, half: halfProp, hoverStrike, selectedStrike, 
         data-ledger-full={full || undefined}
       >
         <div className="flex-1 min-h-0 overflow-hidden">{body}</div>
-      </motion.div>
+      </div>
     );
   }
 

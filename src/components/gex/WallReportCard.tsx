@@ -155,9 +155,7 @@ const SessionStrip = ({ row, bars }: { row: Row; bars: readonly Candle[] }) => {
 // ---- the section ----------------------------------------------------------------
 
 /** `scope`: the host's chip saying which name's levels these are */
-const WallReportCard = ({ snapshot, focus, onPick, scope, grip, bars: barsProp }: { snapshot: MarketSnapshot; focus: number | null; onPick: (price: number) => void; scope?: ReactNode;
-  /** the handle the box is moved by (ui/BoxGrip.tsx) */
-  grip?: ReactNode; /** The day so far, handed in — the Map's replay reads the bars up to its position (2026-09-08) */ bars?: readonly Candle[] }) => {
+const WallReportCard = ({ snapshot, focus, onPick, scope, bars: barsProp }: { snapshot: MarketSnapshot; focus: number | null; onPick: (price: number) => void; scope?: ReactNode; /** The day so far, handed in — the Map's replay reads the bars up to its position (2026-09-08) */ bars?: readonly Candle[] }) => {
   const bars = useMemo(() => barsProp ?? sessionBars(snapshot.ticker) ?? [], [snapshot, barsProp]);
   /* the levels off today's contracts or every date — the desk's one choice (data/levelsScope.ts) */
   const levelsScope = useLevelsScope();
@@ -223,7 +221,6 @@ const WallReportCard = ({ snapshot, focus, onPick, scope, grip, bars: barsProp }
       </GuideFocus>
       <div className="px-5 pt-4 pb-3">
         <div className="flex items-center gap-3 flex-wrap">
-          {grip}
           <h3 className="text-[16px] font-semibold leading-tight text-textPrimary">How the levels held today</h3>
           {scope}
           <GuideDoor open={guideOpen} onClick={() => setGuideOpen(v => !v)} title="What the rows, the strips and the ticks mean" testId="report-guide" />

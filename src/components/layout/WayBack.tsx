@@ -69,7 +69,8 @@ const useClearOfFacts = (left: number | null, path: string): boolean => {
   useEffect(() => {
     if (left == null) return;
     const check = () => {
-      const facts = document.querySelector<HTMLElement>('main [data-shell-facts]');
+      /* the facts, or on the Map (whose facts are its columns') the band where it stands in the head */
+      const facts = document.querySelector<HTMLElement>('main [data-shell-facts]') ?? document.querySelector<HTMLElement>('main [data-shell-band] [data-ledger-toolbar]');
       if (!facts) return setLow(false);
       const r = facts.getBoundingClientRect();
       /* the pill: about 150px wide, 12–44px from the top */

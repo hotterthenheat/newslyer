@@ -104,6 +104,8 @@ const ROW_MIN = 24;
    under the book, fullscreen) the table fills its pane and the tracks take the room. The logic is untouched: the
    same rows, caps, inks and levels; only how a cell is drawn. */
 export const MATRIX_COL_W = 120;
+/** The narrowest a leg's column is drawn: "−$93.2M" at 12px and the cell's padding */
+const LEG_MIN = 80;
 /* THE CARD (the owner, 2026-10-13: "the side panel thing is so damn big"): four rows, one line under them, and wide
    enough that "Open interest · 18,709 contracts" prints whole — the calendar's card is the same */
 /* a bit smaller than it was (the owner, 2026-10-14) */
@@ -149,9 +151,21 @@ const Cell = ({ value, leg, cap, mode, paper, gi, first, last, rowH = ROW_H, hea
 
 const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, rings, hoverStrike, palette = 'house', selectedStrike, marks, onPointer, onSelectStrike, lead: leadProp, legs: legsPick = 'net', onNatural }: ExposureMatrixProps) => {
   const mode: HeatMode = palette === 'thermal' ? 'thermal-yellow' : HEAT_MODE;
-  const LEGS = useMemo(() => legsOf(legsPick), [legsPick]);
   const paper = useResolvedTheme() === 'light';
   const shownGreeks = useMemo(() => GREEKS.filter(g => greeks.includes(g)), [greeks]);
+  /* the pane's width and its strike column's, measured below — declared here, the legs read them */
+  const [strikeColW, setStrikeColW] = useState(0);
+  const [boxW, setBoxW] = useState(0);
+  /* THE LEGS PICKED, AND THE LEGS THAT FIT (2026-10-14, four names on a 1440 laptop: the Net column was cut off past a
+     277px pane): put, call and net need LEG_MIN a column; a pane narrower than that for all three shows the net they add
+     to — the matrix's own one-leg head says so ("GEX · net") — and takes all three back the moment it has the room. The
+     pane's natural width is always the picked legs', so a host packing the panes never holds one at the narrow width. */
+  const PICKED = useMemo(() => legsOf(legsPick), [legsPick]);
+  const LEGS = useMemo<Leg[]>(() => {
+    if (PICKED.length < 3 || boxW <= 0) return PICKED;
+    const per = (boxW - (strikeColW || 84)) / (Math.max(1, shownGreeks.length) * PICKED.length);
+    return per < LEG_MIN ? ['net'] : PICKED;
+  }, [PICKED, boxW, strikeColW, shownGreeks.length]);
   const lead: Greek = leadProp && shownGreeks.includes(leadProp) ? leadProp : shownGreeks[0] ?? 'gex';
   const cols = 1 + shownGreeks.length * LEGS.length;
   /* THE EXPIRIES DRAWN — the host's list, so every view sums the same book */
@@ -392,7 +406,6 @@ const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, ring
      its cells say, so a figure growing from "$464.8M" to "-$1.1B" nudged every column half a pixel a step. The
      table is laid out FIXED: the strike column at the width of its widest possible row (measured off the reserve
      in its head), the legs sharing the rest equally. */
-  const [strikeColW, setStrikeColW] = useState(0);
   const [reserve, setReserve] = useState<HTMLSpanElement | null>(null);
   const [strikeWord, setStrikeWord] = useState<HTMLSpanElement | null>(null);
   useLayoutEffect(() => {
@@ -407,19 +420,20 @@ const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, ring
     ro.observe(reserve);
     return () => ro.disconnect();
   }, [reserve, strikeWord]);
-  const [boxW, setBoxW] = useState(0);
   /* A LEG'S COLUMN AS DRAWN: the box (or the natural width, if less) past the strike column, shared by the legs; under the
      figure, its gap and 40px of lane it stacks the figure over the bar instead (a phone, four names on a laptop) */
   const legW = boxW > 0 ? (boxW - (strikeColW || 84)) / Math.max(1, shownGreeks.length * LEGS.length) : MATRIX_COL_W;
   /* a column too narrow for its unit on the head (four names on a laptop): the greek alone there */
   const stacked = legW < 96;
   /* THE PANE'S NATURAL WIDTH, told to the host (2026-10-13): the strike column as measured and every leg at its widest */
-  const natural = strikeColW > 0 ? strikeColW + shownGreeks.length * LEGS.length * MATRIX_COL_W : 0;
-  useEffect(() => {
+  const natural = strikeColW > 0 ? strikeColW + shownGreeks.length * PICKED.length * MATRIX_COL_W : 0;
+  /* both before paint (2026-10-14): a pane added beside the others reports its width and centres its rows on the price in
+     the frame it first stands in, never a frame later */
+  useLayoutEffect(() => {
     if (natural > 0) onNatural?.(natural);
   }, [natural, onNatural]);
   const centredFor = useRef<string | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (centredFor.current === surface.ticker) return;
     centredFor.current = surface.ticker;
     const row = spotRef.current;
@@ -544,7 +558,7 @@ const ExposureMatrix = ({ surface, liveSpot, live = true, greeks, expiries, ring
       data-exposure-matrix={surface.ticker}
       data-matrix-palette={palette}
     >
-      <table className="border-collapse" style={{ width: '100%', minWidth: (strikeColW || 84) + shownGreeks.length * LEGS.length * 96, tableLayout: strikeColW ? 'fixed' : 'auto' }}>
+      <table className="border-collapse" style={{ width: '100%', minWidth: (strikeColW || 84) + shownGreeks.length * LEGS.length * LEG_MIN, tableLayout: strikeColW ? 'fixed' : 'auto' }}>
         {strikeColW > 0 && (
           <colgroup>
             <col style={{ width: strikeColW }} />

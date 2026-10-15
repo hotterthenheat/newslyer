@@ -461,7 +461,7 @@ const ExposureLedger = ({ surface, liveSpot, live = true, open = null, focusOn =
   /* THE PANE'S NATURAL WIDTH, told to the host (2026-10-13): the strike column as measured, the wanted columns at
      CELL_MAX, the grid's 4px of right padding */
   const natural = strikeW > 0 ? strikeW + Math.max(cols, wantCols ?? 0) * CELL_MAX + 4 : 0;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (natural > 0) onNatural?.(natural);
   }, [natural, onNatural]);
   /* the floor is 10px, not 9 (the partner, 2026-09-14: the figures "difficult to see") — a 20px
